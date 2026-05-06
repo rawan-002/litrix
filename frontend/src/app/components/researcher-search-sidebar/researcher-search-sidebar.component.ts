@@ -94,16 +94,20 @@ export class ResearcherSearchSidebarComponent {
       switchMap(q => {
         if (!q || q.length < 2) {
           this.loading.set(false);
-          return of({ count: 0, results: [], next: null, previous: null });
+          return of({ results: [] });
         }
         this.loading.set(true);
         return this.api.searchResearchers(q);
       }),
     ),
-    { initialValue: { count: 0, results: [], next: null, previous: null } }
+    { initialValue: { results: [] } }
   );
 
-  readonly resultsList = computed(() => this.results().results);
+  readonly resultsList = computed(() => {
+    const r = this.results();
+    this.loading.set(false);
+    return r.results || [];
+  });
 
   onQueryChange(q: string) {
     this.query$.next(q);

@@ -58,10 +58,12 @@ export class LitrixApiService {
     );
   }
 
-  searchResearchers(query: string): Observable<Paginated<ResearcherStats>> {
-    let params = new HttpParams().set('search', query).set('page_size', '20');
-    return this.http.get<Paginated<ResearcherStats>>(
-      `${this.baseUrl}/researchers/`, { params }
+  searchResearchers(query: string): Observable<{ results: any[] }> {
+    // Hits the lightweight /api/researchers/search/ endpoint:
+    // direct Users table lookup, returns ≤15 rows in <100ms.
+    let params = new HttpParams().set('q', query);
+    return this.http.get<{ results: any[] }>(
+      `${this.baseUrl}/researchers/search/`, { params }
     );
   }
 

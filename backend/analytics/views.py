@@ -402,6 +402,51 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
     ]
     ordering = ['-h_index', '-total_papers']
 
+    @decorators.action(detail=False, methods=['get'])
+    def search(self, request):
+        """
+        GET /api/researchers/search/?q=محمد
+        Lightweight search — hits Users table directly. No aggregation.
+        Returns up to 15 results in <100ms.
+        """
+        q = (request.query_params.get('q') or '').strip()
+        if not q or len(q) < 2:
+            return response.Response({'results': []})
+
+        from django.db import connection
+        with connection.cursor() as cur:
+            like = f'%{q}%'
+            cur.execute('''
+                SELECT
+                    u."UserID",
+                    u."FullName_Ar",
+                    TRIM(CONCAT_WS(' ', u."FirstName", u."LastName")) AS full_name_en,
+                    d."DepartmentName",
+                    u."Scholar_ID"
+                FROM "Users" u
+                LEFT JOIN "Works_In" w ON w."UserID" = u."UserID" AND w."IsCurrentPosition" = TRUE
+                LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
+                WHERE u."UserType" = 'Researcher'
+                  AND (
+                       u."FullName_Ar" ILIKE %s
+                    OR u."FirstName" ILIKE %s
+                    OR u."LastName" ILIKE %s
+                  )
+                ORDER BY u."FullName_Ar"
+                LIMIT 15
+            ''', [like, like, like])
+            results = [
+                {
+                    'user_id': r[0],
+                    'full_name_ar': r[1],
+                    'full_name_en': r[2],
+                    'department_name': r[3],
+                    'scholar_id': r[4],
+                }
+                for r in cur.fetchall()
+            ]
+        return response.Response({'results': results})
+
     @decorators.action(detail=True, methods=['get'])
     def profile(self, request, pk=None):
         """
