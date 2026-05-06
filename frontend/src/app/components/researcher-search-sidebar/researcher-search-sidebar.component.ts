@@ -5,7 +5,7 @@ import { Component, inject, signal, computed, HostListener } from '@angular/core
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { debounceTime, distinctUntilChanged, switchMap, of, Subject } from 'rxjs';
+import { debounceTime, distinctUntilChanged, switchMap, of, Subject, tap } from 'rxjs';
 import { toSignal } from '@angular/core/rxjs-interop';
 
 import { LitrixApiService } from '../../services/litrix-api.service';
@@ -97,17 +97,18 @@ export class ResearcherSearchSidebarComponent {
           return of({ results: [] });
         }
         this.loading.set(true);
-        return this.api.searchResearchers(q);
+        return this.api.searchResearchers(q).pipe(
+          // tap runs as a side-effect AFTER the API responds — turning
+          // off the spinner here is safe (not in a reactive computation).
+          tap(() => this.loading.set(false)),
+        );
       }),
     ),
     { initialValue: { results: [] } }
   );
 
-  readonly resultsList = computed(() => {
-    const r = this.results();
-    this.loading.set(false);
-    return r.results || [];
-  });
+  // Pure read — no side effects. Angular's NG0600 rule satisfied.
+  readonly resultsList = computed(() => this.results().results || []);
 
   onQueryChange(q: string) {
     this.query$.next(q);
