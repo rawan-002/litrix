@@ -99,6 +99,19 @@ export class ResearcherProfileComponent implements OnInit {
     this.error.set(null);
     this.api.getResearcherProfile(userId).subscribe({
       next: payload => {
+        // Normalize: backend sometimes returns CitationsByYear as a JSON
+        // string (when going through certain views) rather than an
+        // object. Parse defensively so the keyvalue pipe never crashes.
+        if (payload?.papers) {
+          payload.papers = payload.papers.map(p => {
+            let cby: any = p.citations_by_year;
+            if (typeof cby === 'string') {
+              try { cby = JSON.parse(cby); } catch { cby = null; }
+            }
+            if (cby && typeof cby !== 'object') cby = null;
+            return { ...p, citations_by_year: cby };
+          });
+        }
         this.data.set(payload);
         this.loading.set(false);
       },
