@@ -37,32 +37,45 @@ export class ResearcherProfileComponent implements OnInit {
   // Paper detail modal
   readonly selectedPaper = signal<ProfilePaper | null>(null);
 
-  // Pagination for the papers list. Show this many papers max initially;
-  // each "Load More" click bumps it by LOAD_BATCH.
+  // Pagination
   readonly LOAD_BATCH = 15;
   readonly visibleCount = signal<number>(15);
 
-  // Derived: papers grouped by year (newest first), respecting visibleCount.
-  // We slice the FULL ordered list, then re-group, so the slice still
-  // shows the most-recent papers across all years.
-  readonly papersByYear = computed(() => {
-    const allPapers = this.data()?.papers ?? [];
-    const visible = allPapers.slice(0, this.visibleCount());
-    const groups = new Map<number, ProfilePaper[]>();
-    for (const p of visible) {
-      const y = p.pub_year ?? 0;
-      if (!groups.has(y)) groups.set(y, []);
-      groups.get(y)!.push(p);
+  // Sorting controls (Google Scholar-style toggleable arrows)
+  readonly sortField = signal<'year' | 'citations'>('year');
+  readonly sortDir   = signal<'asc' | 'desc'>('desc');
+
+  setSort(field: 'year' | 'citations') {
+    if (this.sortField() === field) {
+      this.sortDir.update(d => d === 'desc' ? 'asc' : 'desc');
+    } else {
+      this.sortField.set(field);
+      this.sortDir.set('desc');
     }
-    const sortedYears = Array.from(groups.keys()).sort((a, b) => b - a);
-    return sortedYears.map(y => ({
-      year: y || null,
-      papers: groups.get(y)!,
-    }));
+    this.visibleCount.set(this.LOAD_BATCH);
+  }
+
+  // Sort the full papers list according to the user's chosen field+direction.
+  readonly sortedPapers = computed(() => {
+    const all = [...(this.data()?.papers ?? [])];
+    const field = this.sortField();
+    const dir = this.sortDir();
+    const mult = dir === 'desc' ? -1 : 1;
+    all.sort((a, b) => {
+      const av = field === 'year' ? (a.pub_year ?? 0) : (a.citations ?? 0);
+      const bv = field === 'year' ? (b.pub_year ?? 0) : (b.citations ?? 0);
+      return (av - bv) * mult;
+    });
+    return all;
   });
 
+  // Visible slice respecting Load More state
+  readonly visiblePapers = computed(() =>
+    this.sortedPapers().slice(0, this.visibleCount())
+  );
+
   readonly hasMore = computed(() =>
-    (this.data()?.papers?.length ?? 0) > this.visibleCount()
+    this.sortedPapers().length > this.visibleCount()
   );
 
   loadMore() {

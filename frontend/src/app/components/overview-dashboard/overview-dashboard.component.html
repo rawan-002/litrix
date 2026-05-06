@@ -191,7 +191,9 @@
                         <ul class="space-y-3">
                           @for (p of papersForLimited(dept.department_id, 'Journal'); track p.paper_id) {
                             <li class="bg-white rounded p-3 shadow-card">
-                              <div class="text-sm font-medium text-ink-700 line-clamp-2">{{ p.title }}</div>
+                              <button (click)="openPaper(p)"
+                                      class="text-sm font-medium text-ink-700 line-clamp-2
+                                             text-left hover:text-accent transition-colors cursor-pointer">{{ p.title }}</button>
                               @if (p.authors_ar) {
                                 <div class="text-xs text-ink-500 mt-1" dir="rtl">{{ p.authors_ar }}</div>
                               }
@@ -227,7 +229,9 @@
                         <ul class="space-y-3">
                           @for (p of papersForLimited(dept.department_id, 'Conference'); track p.paper_id) {
                             <li class="bg-white rounded p-3 shadow-card">
-                              <div class="text-sm font-medium text-ink-700 line-clamp-2">{{ p.title }}</div>
+                              <button (click)="openPaper(p)"
+                                      class="text-sm font-medium text-ink-700 line-clamp-2
+                                             text-left hover:text-accent transition-colors cursor-pointer">{{ p.title }}</button>
                               @if (p.authors_ar) {
                                 <div class="text-xs text-ink-500 mt-1" dir="rtl">{{ p.authors_ar }}</div>
                               }
@@ -368,6 +372,110 @@
           </svg>
           Export
         </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Paper detail modal -->
+@if (selectedPaper(); as p) {
+  <div (click)="closePaper()"
+       class="fixed inset-0 bg-black/40 backdrop-blur-sm z-30
+              flex items-center justify-center p-6">
+    <div (click)="$event.stopPropagation()"
+         class="bg-white rounded-2xl shadow-hover max-w-3xl w-full
+                max-h-[85vh] overflow-y-auto">
+      <div class="px-7 pt-6 pb-4 border-b border-ink-100 sticky top-0 bg-white">
+        <div class="flex items-start justify-between gap-4">
+          <h3 class="text-xl font-semibold text-ink-900 leading-snug flex-1">
+            {{ p.title }}
+          </h3>
+          <button (click)="closePaper()"
+                  class="text-ink-400 hover:text-ink-700 transition-colors"
+                  aria-label="Close">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 mt-3 text-xs">
+          @if (p.pub_year) {
+            <span class="text-ink-700 font-medium">{{ p.pub_year }}</span>
+          }
+          @if (p.journal_name) {
+            <span class="text-ink-400">·</span>
+            <span class="text-ink-600">{{ p.journal_name }}</span>
+          }
+          @if (p.quartile) {
+            <span class="px-1.5 py-0.5 rounded bg-ink-900 text-white text-[10px]">
+              {{ p.quartile }}
+            </span>
+          }
+          @if (p.impact_factor) {
+            <span class="text-ink-500">IF {{ p.impact_factor }}</span>
+          }
+          @if (p.venue_type) {
+            <span class="text-ink-400">·</span>
+            <span class="text-ink-500">{{ p.venue_type }}</span>
+          }
+          @if (p.indexing) {
+            <span class="text-ink-400">·</span>
+            <span class="text-ink-500">{{ p.indexing }}</span>
+          }
+        </div>
+      </div>
+      <div class="px-7 py-5 space-y-5">
+        <div class="grid grid-cols-3 gap-3">
+          <div class="bg-ink-100/60 rounded-apple p-4">
+            <div class="text-[11px] text-ink-500 uppercase tracking-wide">Citations</div>
+            <div class="text-2xl font-bold text-ink-900 mt-1">{{ fmt(p.citations) }}</div>
+          </div>
+          <div class="bg-ink-100/60 rounded-apple p-4">
+            <div class="text-[11px] text-ink-500 uppercase tracking-wide">Source</div>
+            <div class="text-base font-semibold text-ink-900 mt-1">{{ p.source || '—' }}</div>
+          </div>
+          <div class="bg-ink-100/60 rounded-apple p-4">
+            <div class="text-[11px] text-ink-500 uppercase tracking-wide">Department</div>
+            <div class="text-base font-semibold text-ink-900 mt-1" dir="rtl">{{ p.department_name || '—' }}</div>
+          </div>
+        </div>
+
+        @if (p.authors_ar) {
+          <div>
+            <h4 class="text-xs uppercase tracking-wide text-ink-500 font-medium mb-1">
+              Authors (Al-Baha)
+            </h4>
+            <div class="text-sm text-ink-700" dir="rtl">{{ p.authors_ar }}</div>
+          </div>
+        }
+
+        @if (p.doi) {
+          <div>
+            <h4 class="text-xs uppercase tracking-wide text-ink-500 font-medium mb-1">DOI</h4>
+            <a [href]="'https://doi.org/' + p.doi" target="_blank"
+               class="text-sm text-accent hover:text-accent-hover
+                      font-mono break-all underline-offset-2 hover:underline">
+              {{ p.doi }}
+            </a>
+          </div>
+        }
+
+        <div class="pt-2 flex gap-2 flex-wrap">
+          @if (p.doi) {
+            <a [href]="'https://doi.org/' + p.doi" target="_blank"
+               class="text-xs px-4 py-2 rounded-full bg-ink-900 text-white
+                      hover:bg-ink-700 transition-colors">
+              Open Paper
+            </a>
+          }
+          <a [href]="'https://scholar.google.com/scholar?q=' + encodeURIComponent(p.title)"
+             target="_blank"
+             class="text-xs px-4 py-2 rounded-full bg-white border border-ink-200
+                    text-ink-700 hover:bg-ink-100 transition-colors">
+            Search on Scholar
+          </a>
+        </div>
       </div>
     </div>
   </div>

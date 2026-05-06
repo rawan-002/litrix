@@ -131,29 +131,50 @@
       </section>
     }
 
-    <!-- Papers list grouped by year -->
-    <section class="space-y-6">
-      <div class="flex items-baseline justify-between">
+    <!-- Papers list with sort controls -->
+    <section class="space-y-4">
+      <div class="flex items-center justify-between flex-wrap gap-3">
         <h2 class="text-lg font-semibold text-ink-900">
           Publications ({{ d.papers.length }})
         </h2>
+
+        <!-- Sort controls: Year / Citations with toggle direction arrows -->
+        <div class="flex items-center gap-1 bg-ink-100 rounded-full p-1">
+          <button (click)="setSort('year')"
+                  class="text-xs font-medium px-3 py-1.5 rounded-full
+                         flex items-center gap-1 transition-colors"
+                  [class.bg-white]="sortField() === 'year'"
+                  [class.shadow-card]="sortField() === 'year'"
+                  [class.text-ink-700]="sortField() === 'year'"
+                  [class.text-ink-500]="sortField() !== 'year'">
+            Year
+            @if (sortField() === 'year') {
+              <span class="text-[10px]">{{ sortDir() === 'desc' ? '↓' : '↑' }}</span>
+            }
+          </button>
+          <button (click)="setSort('citations')"
+                  class="text-xs font-medium px-3 py-1.5 rounded-full
+                         flex items-center gap-1 transition-colors"
+                  [class.bg-white]="sortField() === 'citations'"
+                  [class.shadow-card]="sortField() === 'citations'"
+                  [class.text-ink-700]="sortField() === 'citations'"
+                  [class.text-ink-500]="sortField() !== 'citations'">
+            Citations
+            @if (sortField() === 'citations') {
+              <span class="text-[10px]">{{ sortDir() === 'desc' ? '↓' : '↑' }}</span>
+            }
+          </button>
+        </div>
       </div>
 
-      <p class="text-xs text-ink-400 -mt-3">
+      <p class="text-xs text-ink-400">
         Click a title to view full details
       </p>
 
-      @for (group of papersByYear(); track group.year) {
-        <div class="bg-white rounded-2xl border border-ink-100 overflow-hidden">
-          <div class="px-6 py-3 bg-ink-100/50 border-b border-ink-100
-                      flex items-center justify-between">
-            <div class="text-sm font-semibold text-ink-700">
-              {{ group.year || 'Unknown year' }}
-            </div>
-            <div class="text-xs text-ink-500">{{ group.papers.length }} papers</div>
-          </div>
-          <ul class="divide-y divide-ink-100">
-            @for (p of group.papers; track p.paper_id) {
+      <!-- Flat list (no year grouping) -->
+      <div class="bg-white rounded-2xl border border-ink-100 overflow-hidden">
+        <ul class="divide-y divide-ink-100">
+          @for (p of visiblePapers(); track p.paper_id) {
               <li class="px-6 py-4 hover:bg-ink-100 transition-colors">
                 <div class="flex items-start justify-between gap-4">
                   <div class="flex-1 min-w-0">
@@ -164,6 +185,10 @@
                       {{ p.title }}
                     </button>
                     <div class="flex flex-wrap items-center gap-2 mt-2 text-xs">
+                      @if (p.pub_year) {
+                        <span class="text-ink-700 font-medium">{{ p.pub_year }}</span>
+                        <span class="text-ink-400">·</span>
+                      }
                       @if (p.journal_name) {
                         <span class="text-ink-600">{{ p.journal_name }}</span>
                       }
@@ -214,7 +239,6 @@
             }
           </ul>
         </div>
-      }
 
       <!-- Load more button -->
       @if (hasMore()) {

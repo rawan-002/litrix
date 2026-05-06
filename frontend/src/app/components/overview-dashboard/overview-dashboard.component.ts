@@ -88,6 +88,17 @@ export class OverviewDashboardComponent implements OnInit {
     );
   }
 
+  // Paper detail modal — accepts any paper-like shape (PaperDetail or
+  // TopPaper). The modal template only reads optional fields safely.
+  readonly selectedPaper = signal<any | null>(null);
+
+  openPaper(p: any) { this.selectedPaper.set(p); }
+  closePaper()      { this.selectedPaper.set(null); }
+
+  encodeURIComponent(s: string | null | undefined): string {
+    return s ? window.encodeURIComponent(s) : '';
+  }
+
   papersFor(deptId: number, venueType: 'Journal' | 'Conference'): PaperDetail[] {
     const papers = this.yearlyData()?.papers ?? [];
     return papers.filter(p =>
