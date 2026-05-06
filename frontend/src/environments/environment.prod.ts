@@ -7,5 +7,5 @@
  */
 export const environment = {
   production: true,
-  apiBaseUrl: 'https://YOUR-BACKEND-DOMAIN.onrender.com/api',
+  apiBaseUrl: 'https://litrix-api.onrender.com/api',
 };
