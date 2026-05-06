@@ -1,9 +1,8 @@
 /**
- * Root App Shell — fixed top bar with logo + search.
+ * Root App Shell — collapsible right sidebar.
  *
- * Note: this is the ACTUAL root component (bootstrapped by main.ts).
- * The class name is `App` (not `AppComponent`) for compatibility with
- * the existing Angular CLI scaffold.
+ * The sidebar can be toggled open/closed via a small handle button.
+ * State persists in localStorage so it stays open/closed across reloads.
  */
 import { Component, signal } from '@angular/core';
 import { RouterOutlet, RouterLink } from '@angular/router';
@@ -19,4 +18,18 @@ import { ResearcherSearchSidebarComponent } from
 })
 export class App {
   protected readonly title = signal('frontend');
+  // Persist sidebar state across reloads.
+  protected readonly sidebarOpen = signal<boolean>(
+    typeof localStorage !== 'undefined'
+      ? localStorage.getItem('litrix.sidebarOpen') !== 'false'
+      : true
+  );
+
+  toggleSidebar() {
+    const next = !this.sidebarOpen();
+    this.sidebarOpen.set(next);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('litrix.sidebarOpen', String(next));
+    }
+  }
 }

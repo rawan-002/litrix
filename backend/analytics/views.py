@@ -561,25 +561,31 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
             }
 
             # Per-year citations: merge JSONB across all his papers.
-            # We unfold each CitationsByYear into rows then sum by year.
-            cur.execute('''
-                SELECT
-                    yr.year::int            AS year,
-                    SUM(yr.cnt::int)        AS citations
-                FROM "ResearchPaper" rp
-                JOIN "Authors" a ON a."PaperID" = rp."PaperID"
-                CROSS JOIN LATERAL jsonb_each_text(
-                    COALESCE(rp."CitationsByYear", '{}'::jsonb)
-                ) AS yr(year, cnt)
-                WHERE a."UserID" = %s
-                  AND yr.year ~ '^[0-9]+$'
-                GROUP BY yr.year
-                ORDER BY yr.year
-            ''', [pk])
-            citations_by_year = [
-                {'year': r[0], 'citations': r[1]}
-                for r in cur.fetchall()
-            ]
+            # Safe-casts protect against non-numeric values in the JSONB.
+            try:
+                cur.execute('''
+                    SELECT
+                        yr.year::int AS year,
+                        SUM(CASE WHEN yr.cnt ~ '^[0-9]+$'
+                                 THEN yr.cnt::int
+                                 ELSE 0 END) AS citations
+                    FROM "ResearchPaper" rp
+                    JOIN "Authors" a ON a."PaperID" = rp."PaperID"
+                    CROSS JOIN LATERAL jsonb_each_text(
+                        COALESCE(rp."CitationsByYear", '{}'::jsonb)
+                    ) AS yr(year, cnt)
+                    WHERE a."UserID" = %s
+                      AND yr.year ~ '^[0-9]+$'
+                    GROUP BY yr.year
+                    ORDER BY yr.year
+                ''', [pk])
+                citations_by_year = [
+                    {'year': r[0], 'citations': r[1]}
+                    for r in cur.fetchall()
+                ]
+            except Exception:
+                # If JSONB has bad data, fall back to empty rather than 500
+                citations_by_year = []
 
             # Papers list with full metadata
             cur.execute('''

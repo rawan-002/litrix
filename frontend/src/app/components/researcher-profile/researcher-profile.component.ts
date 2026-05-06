@@ -14,7 +14,7 @@
  */
 import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { LitrixApiService } from '../../services/litrix-api.service';
 import {
   ResearcherProfilePayload, ProfilePaper,
@@ -23,7 +23,7 @@ import {
 @Component({
   selector: 'app-researcher-profile',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, RouterLink],
   templateUrl: './researcher-profile.component.html',
 })
 export class ResearcherProfileComponent implements OnInit {
@@ -55,7 +55,8 @@ export class ResearcherProfileComponent implements OnInit {
     const cby = this.data()?.citations_by_year ?? [];
     if (!cby.length) return null;
     const max = Math.max(...cby.map(c => c.citations), 1);
-    const W = 600, H = 160, padding = { top: 10, right: 10, bottom: 30, left: 35 };
+    // Compact chart — about 1/3 the visual weight of the previous size
+    const W = 500, H = 110, padding = { top: 8, right: 8, bottom: 22, left: 30 };
     const innerW = W - padding.left - padding.right;
     const innerH = H - padding.top - padding.bottom;
     const barW = innerW / cby.length * 0.65;

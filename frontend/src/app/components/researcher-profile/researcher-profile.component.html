@@ -1,4 +1,14 @@
 <div class="min-h-screen bg-ink-100 px-8 py-10 max-w-6xl mx-auto">
+  <!-- Back to dashboard -->
+  <a routerLink="/" class="inline-flex items-center gap-1.5 mb-6
+                            text-sm text-ink-500 hover:text-ink-900 transition-colors">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M15 19l-7-7 7-7" />
+    </svg>
+    Back to Dashboard
+  </a>
+
   @if (loading()) {
     <div class="text-center text-ink-400 py-20">
       <div class="text-sm">Loading...</div>
@@ -70,12 +80,12 @@
       </div>
     </div>
 
-    <!-- Citations per year chart -->
+    <!-- Citations per year chart — compact -->
     @if (chart(); as c) {
-      <section class="bg-white rounded-2xl p-6 border border-ink-100 mb-10">
-        <div class="flex items-baseline justify-between mb-5">
-          <h2 class="text-lg font-semibold text-ink-900">Citations per Year</h2>
-          <div class="text-xs text-ink-500">citations received per year</div>
+      <section class="bg-white rounded-2xl p-4 border border-ink-100 mb-8 max-w-2xl">
+        <div class="flex items-baseline justify-between mb-3">
+          <h2 class="text-sm font-semibold text-ink-900">Citations per Year</h2>
+          <div class="text-[10px] text-ink-500">received each year</div>
         </div>
         <svg [attr.viewBox]="'0 0 ' + c.W + ' ' + c.H"
              class="w-full h-auto" preserveAspectRatio="xMidYMid meet">
