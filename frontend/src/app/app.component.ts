@@ -1,14 +1,10 @@
 /**
- * Root App Shell — layout with right sidebar.
+ * Root App Shell — fixed top bar (header).
  *
- * Layout strategy (RTL Arabic):
- *   - dir="rtl" on the wrapper → text flows right-to-left
- *   - flex (default flex-row) in RTL → first child is on the RIGHT
- *   - So <aside> first → sidebar on right ✓
- *   - <main> second → main content on left ✓
- *
- * No `flex-row-reverse` needed; that would actually flip the order
- * back (RTL + reverse = LTR effectively).
+ * Design rationale:
+ *   - Top bar is always visible and doesn't compete with main content
+ *     for horizontal space (good for tables, charts, dashboards).
+ *   - Apple-style: thin, minimal, with backdrop blur.
  */
 import { Component } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
@@ -20,18 +16,17 @@ import { ResearcherSearchSidebarComponent } from
   standalone: true,
   imports: [RouterOutlet, ResearcherSearchSidebarComponent],
   template: `
-    <div class="min-h-screen flex" dir="rtl">
-      <!-- Right sidebar (search + future tools).
-           Uses ink-* (project palette) for consistency with the rest
-           of the dashboard. Border-l + white bg makes it pop against
-           the body's ink-100 backdrop. -->
-      <aside class="w-80 shrink-0 border-l border-ink-200 bg-white
-                    sticky top-0 h-screen overflow-y-auto">
+    <div dir="rtl" class="min-h-screen">
+      <!-- Fixed top bar with logo + search -->
+      <header class="fixed top-0 inset-x-0 h-16 z-20
+                     bg-white/80 backdrop-blur-md
+                     border-b border-ink-200
+                     flex items-center px-6 gap-6">
         <app-researcher-search-sidebar />
-      </aside>
+      </header>
 
-      <!-- Main scrollable area -->
-      <main class="flex-1 min-w-0">
+      <!-- Main content offset by header height -->
+      <main class="pt-16 min-h-screen">
         <router-outlet />
       </main>
     </div>

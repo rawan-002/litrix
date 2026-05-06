@@ -1,13 +1,15 @@
 /**
- * Researcher Search Sidebar.
+ * Top-bar Researcher Search.
  *
- * Why debounced search (300ms): avoid hammering the API on every
- * keystroke. 300ms is the human "intentional pause" threshold.
+ * Layout:
+ *   [Litrix Logo]    [🔍 Search input]    [دروب داون النتائج]
  *
- * Uses the project's ink-* color palette (defined in tailwind.config.js)
- * for visual consistency with the rest of the dashboard.
+ * Why a dropdown for results (not a panel):
+ *   - Top bar is thin (~64px), no room for a long results list inline
+ *   - Dropdown auto-positions below the input, closes on selection
+ *   - Apple-style: results appear with subtle shadow, fade in
  */
-import { Component, inject, signal, computed } from '@angular/core';
+import { Component, inject, signal, computed, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -22,89 +24,87 @@ import { ResearcherStats } from '../../models/litrix.models';
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
   template: `
-    <div class="p-5">
-      <!-- Header -->
-      <div class="mb-6">
-        <h2 class="text-xs uppercase tracking-widest text-ink-400 font-medium">
-          البحث
-        </h2>
-        <p class="text-lg font-semibold text-ink-700 mt-1">
-          عن الباحثين
-        </p>
-      </div>
+    <!-- Logo / title -->
+    <a routerLink="/" class="text-base font-semibold text-ink-900 hover:text-accent
+                              transition-colors whitespace-nowrap">
+      Litrix
+    </a>
 
-      <!-- Search input -->
-      <div class="relative mb-4">
-        <input
-          type="text"
-          [(ngModel)]="query"
-          (ngModelChange)="onQueryChange($event)"
-          placeholder="ابحث بالاسم..."
-          class="w-full px-4 py-2.5 pr-10 text-sm
-                 bg-ink-50 border border-ink-200 rounded-apple
-                 placeholder:text-ink-400
-                 focus:outline-none focus:ring-2 focus:ring-accent/20
-                 focus:border-accent transition-all"
-        />
-        <svg class="absolute right-3 top-3 w-4 h-4 text-ink-400" fill="none"
-             stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
-        </svg>
-      </div>
+    <span class="text-ink-300">|</span>
 
-      <!-- Results -->
-      @if (loading()) {
-        <div class="text-xs text-ink-400 text-center py-6">
-          جاري البحث...
-        </div>
-      } @else if (query.length === 0) {
-        <div class="text-xs text-ink-400 text-center py-6 leading-relaxed">
-          اكتبي اسم باحث لعرض ملفه الكامل،<br/>
-          ابحاثه، وتحليل citations لكل سنة
-        </div>
-      } @else if (resultsList().length === 0) {
-        <div class="text-xs text-ink-500 text-center py-6">
-          ما لقينا أحد بهذا الاسم
-        </div>
-      } @else {
-        <ul class="space-y-1.5">
-          @for (r of resultsList(); track r.user_id) {
-            <li>
-              <button
-                (click)="select(r)"
-                class="w-full text-right px-3 py-2.5 rounded-apple
-                       hover:bg-ink-50 hover:shadow-card
-                       border border-transparent hover:border-ink-200
-                       transition-all group">
-                <div class="text-sm font-medium text-ink-700
-                            group-hover:text-ink-900 line-clamp-1">
-                  {{ r.full_name_ar || r.full_name_en }}
-                </div>
-                <div class="flex items-center gap-2 mt-0.5">
-                  <span class="text-[10px] text-ink-500">
-                    {{ r.department_name || '—' }}
-                  </span>
-                  <span class="text-[10px] text-ink-300">·</span>
-                  <span class="text-[10px] text-ink-500">
-                    {{ r.total_papers }} ابحاث
-                  </span>
-                </div>
-              </button>
-            </li>
+    <span class="text-xs text-ink-400 hidden md:inline">
+      College of Computing & IT — Al-Baha University
+    </span>
+
+    <!-- Spacer pushes search to the left side (in RTL = visual end) -->
+    <div class="flex-1"></div>
+
+    <!-- Search input + dropdown -->
+    <div class="relative w-80">
+      <input
+        type="text"
+        [(ngModel)]="query"
+        (ngModelChange)="onQueryChange($event)"
+        (focus)="showResults.set(true)"
+        placeholder="ابحث عن باحث..."
+        class="w-full px-4 py-2 pr-10 text-sm
+               bg-ink-50 border border-ink-200 rounded-full
+               placeholder:text-ink-400
+               focus:outline-none focus:ring-2 focus:ring-accent/20
+               focus:border-accent transition-all"
+      />
+      <svg class="absolute right-3 top-2.5 w-4 h-4 text-ink-400" fill="none"
+           stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
+      </svg>
+
+      <!-- Dropdown panel -->
+      @if (showResults() && query.length > 0) {
+        <div class="absolute top-full mt-2 right-0 w-96
+                    bg-white border border-ink-200 rounded-apple shadow-hover
+                    max-h-96 overflow-y-auto z-30">
+          @if (loading()) {
+            <div class="text-xs text-ink-400 text-center py-6">
+              جاري البحث...
+            </div>
+          } @else if (resultsList().length === 0) {
+            <div class="text-xs text-ink-500 text-center py-6">
+              ما لقينا أحد بهذا الاسم
+            </div>
+          } @else {
+            <ul class="py-2">
+              @for (r of resultsList(); track r.user_id) {
+                <li>
+                  <button
+                    (click)="select(r)"
+                    class="w-full text-right px-4 py-2.5
+                           hover:bg-ink-50 transition-colors group">
+                    <div class="text-sm font-medium text-ink-700
+                                group-hover:text-ink-900 line-clamp-1">
+                      {{ r.full_name_ar || r.full_name_en }}
+                    </div>
+                    <div class="flex items-center gap-2 mt-0.5">
+                      <span class="text-[10px] text-ink-500">
+                        {{ r.department_name || '—' }}
+                      </span>
+                      <span class="text-[10px] text-ink-300">·</span>
+                      <span class="text-[10px] text-ink-500">
+                        {{ r.total_papers }} ابحاث
+                      </span>
+                    </div>
+                  </button>
+                </li>
+              }
+            </ul>
           }
-        </ul>
+        </div>
       }
-
-      <!-- Footer link to overview -->
-      <div class="mt-8 pt-5 border-t border-ink-200">
-        <a routerLink="/" class="block text-xs text-ink-500 hover:text-ink-700
-                                  transition-colors text-center">
-          ← العودة إلى لوحة التحكم
-        </a>
-      </div>
     </div>
   `,
+  host: {
+    'class': 'flex items-center gap-3 w-full',
+  },
 })
 export class ResearcherSearchSidebarComponent {
   private readonly api = inject(LitrixApiService);
@@ -113,6 +113,7 @@ export class ResearcherSearchSidebarComponent {
   query = '';
   private readonly query$ = new Subject<string>();
   readonly loading = signal<boolean>(false);
+  readonly showResults = signal<boolean>(false);
 
   readonly results = toSignal(
     this.query$.pipe(
@@ -134,12 +135,23 @@ export class ResearcherSearchSidebarComponent {
 
   onQueryChange(q: string) {
     this.query$.next(q);
+    this.showResults.set(true);
     if (q.length >= 2) this.loading.set(true);
     else this.loading.set(false);
   }
 
   select(r: ResearcherStats) {
+    this.query = '';
+    this.showResults.set(false);
     this.router.navigate(['/researcher', r.user_id]);
-    this.loading.set(false);
+  }
+
+  // Close dropdown when clicking outside
+  @HostListener('document:click', ['$event'])
+  onDocClick(ev: MouseEvent) {
+    const target = ev.target as HTMLElement;
+    if (!target.closest('app-researcher-search-sidebar')) {
+      this.showResults.set(false);
+    }
   }
 }

@@ -332,8 +332,8 @@ def export_excel(request):
                 cur.execute('''
                     SELECT
                         department_name, title,
-                        authors_ar,             -- clean Arabic names
-                        all_authors_combined,   -- all authors, no affiliations
+                        authors_ar,        -- Al-Baha researchers (Arabic)
+                        all_authors_en,    -- ALL authors (English)
                         journal_name, quartile, impact_factor, indexing,
                         citations, doi
                     FROM v_paper_details
@@ -357,8 +357,8 @@ def export_excel(request):
                 cur.execute('''
                     SELECT
                         department_name, title,
-                        authors_ar,             -- clean Arabic names
-                        all_authors_combined,   -- all authors, no affiliations
+                        authors_ar,        -- Al-Baha researchers (Arabic)
+                        all_authors_en,    -- ALL authors (English)
                         journal_name, indexing, citations, doi
                     FROM v_paper_details
                     WHERE pub_year = %s AND venue_type = 'Conference'
