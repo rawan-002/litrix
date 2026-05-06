@@ -59,11 +59,15 @@ export class LitrixApiService {
   }
 
   searchResearchers(query: string): Observable<{ results: any[] }> {
-    // Hits the lightweight /api/researchers/search/ endpoint:
-    // direct Users table lookup, returns ≤15 rows in <100ms.
     let params = new HttpParams().set('q', query);
     return this.http.get<{ results: any[] }>(
       `${this.baseUrl}/researchers/search/`, { params }
+    );
+  }
+
+  getAllResearchers(): Observable<{ results: any[] }> {
+    return this.http.get<{ results: any[] }>(
+      `${this.baseUrl}/researchers/all/`
     );
   }
 

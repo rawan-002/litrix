@@ -86,19 +86,18 @@ def export_excel(request):
     # Apple-style KPI overview sheet — first sheet so it opens by default.
     # Mirrors the dashboard cards: Researchers / Publications / Citations / h-index.
     if 'summary' in sheets or 'departments' in sheets or 'researchers' in sheets:
-        ws_overview = wb.create_sheet('نظرة عامة', 0)
+        ws_overview = wb.create_sheet('Overview', 0)
         big_value_font = Font(bold=True, size=28, color='1D1D1F')
         label_font = Font(bold=True, size=11, color='86868B')
         sublabel_font = Font(size=10, color='86868B')
         title_font = Font(bold=True, size=18, color='1D1D1F')
         bg_fill = PatternFill('solid', fgColor='FAFAFA')
 
-        # Title row
-        ws_overview['A1'] = 'Litrix — نظرة عامة'
+        ws_overview['A1'] = 'Litrix — Research Analytics Overview'
         ws_overview['A1'].font = title_font
         ws_overview.row_dimensions[1].height = 36
-        years_label = '، '.join(str(y) for y in sorted(years))
-        ws_overview['A2'] = f'خلال {("السنتين" if len(years) == 2 else "السنوات")}: {years_label}'
+        years_label = ', '.join(str(y) for y in sorted(years))
+        ws_overview['A2'] = f'Window: {years_label}'
         ws_overview['A2'].font = sublabel_font
 
         # KPI computation — same per-year semantics as the dashboard.
@@ -137,7 +136,7 @@ def export_excel(request):
         cards = [
             ('Researchers',  str(r_total),                f'{r_active} active'),
             ('Publications', f'{p_total:,}',              f'{p_q1} in Q1 journals'),
-            ('Citations',    f'{c_total:,}',              f'خلال {years_label}'),
+            ('Citations',    f'{c_total:,}',              f'received in {years_label}'),
             ('h-index',      str(avg_h or 0),             'avg h-index'),
         ]
         for idx, (label, value, sub) in enumerate(cards):
@@ -323,7 +322,7 @@ def export_excel(request):
             #   2. All authors combined (Arabic + foreign, no affiliations)
             ws.append([
                 'Department', 'Title',
-                'باحثو جامعة الباحة', 'كل المؤلفين',
+                'Al-Baha Researchers', 'All Authors (raw)',
                 'Journal', 'Quartile', 'IF', 'Indexing',
                 'Citations', 'DOI'
             ])
@@ -349,7 +348,7 @@ def export_excel(request):
             ws = wb.create_sheet(f'Conferences {year}')
             ws.append([
                 'Department', 'Title',
-                'باحثو جامعة الباحة', 'كل المؤلفين',
+                'Al-Baha Researchers', 'All Authors (raw)',
                 'Conference', 'Indexing', 'Citations', 'DOI'
             ])
             style_header(ws, 8)
@@ -401,6 +400,40 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
         'q1_papers', 'last_pub_year',
     ]
     ordering = ['-h_index', '-total_papers']
+
+    @decorators.action(detail=False, methods=['get'])
+    def all(self, request):
+        """
+        GET /api/researchers/all/
+        Returns ALL researchers as a flat list — for the sidebar listing.
+        Lightweight: name + department + paper count only.
+        """
+        from django.db import connection
+        with connection.cursor() as cur:
+            cur.execute('''
+                SELECT
+                    u."UserID",
+                    u."FullName_Ar",
+                    TRIM(CONCAT_WS(' ', u."FirstName", u."LastName")) AS full_name_en,
+                    d."DepartmentName",
+                    (SELECT COUNT(*) FROM "Authors" a WHERE a."UserID" = u."UserID") AS papers
+                FROM "Users" u
+                LEFT JOIN "Works_In" w ON w."UserID" = u."UserID" AND w."IsCurrentPosition" = TRUE
+                LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
+                WHERE u."UserType" = 'Researcher'
+                ORDER BY papers DESC NULLS LAST, u."FullName_Ar"
+            ''')
+            results = [
+                {
+                    'user_id': r[0],
+                    'full_name_ar': r[1],
+                    'full_name_en': r[2],
+                    'department_name': r[3],
+                    'papers': r[4],
+                }
+                for r in cur.fetchall()
+            ]
+        return response.Response({'results': results})
 
     @decorators.action(detail=False, methods=['get'])
     def search(self, request):
