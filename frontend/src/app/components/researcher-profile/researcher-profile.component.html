@@ -1,11 +1,11 @@
 <div class="min-h-screen bg-ink-100 px-8 py-10 max-w-6xl mx-auto">
   @if (loading()) {
     <div class="text-center text-ink-400 py-20">
-      <div class="text-sm">جاري التحميل...</div>
+      <div class="text-sm">Loading...</div>
     </div>
   } @else if (error()) {
     <div class="text-center py-20">
-      <div class="text-ink-900 text-lg font-semibold mb-2">عذراً</div>
+      <div class="text-ink-900 text-lg font-semibold mb-2">Error</div>
       <div class="text-sm text-ink-500">{{ error() }}</div>
     </div>
   } @else if (data(); as d) {
@@ -13,7 +13,7 @@
     <!-- Identity header -->
     <header class="mb-10">
       <div class="text-xs uppercase tracking-widest text-ink-500 font-medium mb-2">
-        {{ d.identity.department_name || 'باحث' }}
+        {{ d.identity.department_name || 'Researcher' }}
       </div>
       <h1 class="text-4xl font-bold text-ink-900 leading-tight">
         {{ d.identity.full_name_ar || d.identity.last_name }}
@@ -56,12 +56,12 @@
       <div class="bg-white rounded-2xl p-6 border border-ink-100">
         <div class="text-xs text-ink-500 mb-1">Publications</div>
         <div class="text-3xl font-bold text-ink-900">{{ fmt(d.stats.total_papers) }}</div>
-        <div class="text-xs text-ink-400 mt-1">{{ d.stats.q1_papers }} في Q1</div>
+        <div class="text-xs text-ink-400 mt-1">{{ d.stats.q1_papers }} in Q1</div>
       </div>
       <div class="bg-white rounded-2xl p-6 border border-ink-100">
         <div class="text-xs text-ink-500 mb-1">Citations (cumulative)</div>
         <div class="text-3xl font-bold text-ink-900">{{ fmt(d.stats.total_citations) }}</div>
-        <div class="text-xs text-ink-400 mt-1">إجمالي على مر السنين</div>
+        <div class="text-xs text-ink-400 mt-1">cumulative all-time</div>
       </div>
       <div class="bg-white rounded-2xl p-6 border border-ink-100">
         <div class="text-xs text-ink-500 mb-1">Indexing</div>
@@ -74,8 +74,8 @@
     @if (chart(); as c) {
       <section class="bg-white rounded-2xl p-6 border border-ink-100 mb-10">
         <div class="flex items-baseline justify-between mb-5">
-          <h2 class="text-lg font-semibold text-ink-900">Citations لكل سنة</h2>
-          <div class="text-xs text-ink-500">السايتيشن المستلمة في كل سنة</div>
+          <h2 class="text-lg font-semibold text-ink-900">Citations per Year</h2>
+          <div class="text-xs text-ink-500">citations received per year</div>
         </div>
         <svg [attr.viewBox]="'0 0 ' + c.W + ' ' + c.H"
              class="w-full h-auto" preserveAspectRatio="xMidYMid meet">
@@ -116,7 +116,7 @@
     } @else {
       <section class="bg-white rounded-2xl p-6 border border-ink-100 mb-10 text-center">
         <div class="text-sm text-ink-400">
-          ما عندنا citations per-year data لهذا الباحث بعد
+          No per-year citations data yet
         </div>
       </section>
     }
@@ -125,7 +125,7 @@
     <section class="space-y-6">
       <div class="flex items-baseline justify-between">
         <h2 class="text-lg font-semibold text-ink-900">
-          الابحاث ({{ d.papers.length }})
+          Publications ({{ d.papers.length }})
         </h2>
       </div>
 
@@ -134,9 +134,9 @@
           <div class="px-6 py-3 bg-ink-100/50 border-b border-ink-100
                       flex items-center justify-between">
             <div class="text-sm font-semibold text-ink-700">
-              {{ group.year || 'بدون سنة' }}
+              {{ group.year || 'Unknown year' }}
             </div>
-            <div class="text-xs text-ink-500">{{ group.papers.length }} ورقة</div>
+            <div class="text-xs text-ink-500">{{ group.papers.length }} papers</div>
           </div>
           <ul class="divide-y divide-ink-100">
             @for (p of group.papers; track p.paper_id) {

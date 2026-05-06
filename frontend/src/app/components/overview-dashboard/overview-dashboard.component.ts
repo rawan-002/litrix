@@ -135,11 +135,11 @@ export class OverviewDashboardComponent implements OnInit {
       .join(',');
 
     if (!years) {
-      alert('اختاري سنة واحدة على الأقل');
+      alert('Please select at least one year');
       return;
     }
     if (!sheets) {
-      alert('اختاري sheet واحد على الأقل');
+      alert('Please select at least one sheet');
       return;
     }
 

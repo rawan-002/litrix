@@ -168,8 +168,8 @@
                   <div class="flex-1 min-w-0">
                     <div class="text-sm font-medium text-ink-700">{{ dept.department_name }}</div>
                     <div class="text-xs text-ink-400 mt-1 flex gap-3">
-                      <span>{{ dept.journal_papers }} مجلة</span><span>·</span>
-                      <span>{{ dept.conference_papers }} مؤتمر</span><span>·</span>
+                      <span>{{ dept.journal_papers }} Journal</span><span>·</span>
+                      <span>{{ dept.conference_papers }} Conference</span><span>·</span>
                       <span>{{ fmt(dept.total_citations) }} citations</span>
                     </div>
                   </div>
@@ -210,7 +210,7 @@
                             <button (click)="loadMore(dept.department_id, 'Journal')"
                                     class="text-xs text-accent hover:text-accent-hover font-medium px-4 py-2 rounded-full hover:bg-accent-light transition-colors">
                               Load More
-                              ({{ papersFor(dept.department_id, 'Journal').length - visibleCount(dept.department_id, 'Journal') }} متبقي)
+                              ({{ papersFor(dept.department_id, 'Journal').length - visibleCount(dept.department_id, 'Journal') }} remaining)
                             </button>
                           </div>
                         }
@@ -243,7 +243,7 @@
                             <button (click)="loadMore(dept.department_id, 'Conference')"
                                     class="text-xs text-accent hover:text-accent-hover font-medium px-4 py-2 rounded-full hover:bg-accent-light transition-colors">
                               Load More
-                              ({{ papersFor(dept.department_id, 'Conference').length - visibleCount(dept.department_id, 'Conference') }} متبقي)
+                              ({{ papersFor(dept.department_id, 'Conference').length - visibleCount(dept.department_id, 'Conference') }} remaining)
                             </button>
                           </div>
                         }

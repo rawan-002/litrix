@@ -85,7 +85,7 @@ export class ResearcherProfileComponent implements OnInit {
     this.route.params.subscribe(params => {
       const userId = Number(params['id']);
       if (Number.isNaN(userId)) {
-        this.error.set('معرف الباحث غير صحيح');
+        this.error.set('Invalid researcher ID');
         this.loading.set(false);
         return;
       }
@@ -103,8 +103,8 @@ export class ResearcherProfileComponent implements OnInit {
       },
       error: err => {
         this.error.set(err.status === 404
-          ? 'لم يتم العثور على الباحث'
-          : `خطأ في التحميل: ${err.message}`);
+          ? 'Researcher not found'
+          : `Failed to load: ${err.message}`);
         this.loading.set(false);
       },
     });
