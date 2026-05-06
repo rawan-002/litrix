@@ -1,18 +1,10 @@
 /**
- * Top-bar Researcher Search.
- *
- * Layout:
- *   [Litrix Logo]    [🔍 Search input]    [دروب داون النتائج]
- *
- * Why a dropdown for results (not a panel):
- *   - Top bar is thin (~64px), no room for a long results list inline
- *   - Dropdown auto-positions below the input, closes on selection
- *   - Apple-style: results appear with subtle shadow, fade in
+ * Researcher Search — drops into the top bar as a search input + dropdown.
  */
 import { Component, inject, signal, computed, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 import { debounceTime, distinctUntilChanged, switchMap, of, Subject } from 'rxjs';
 import { toSignal } from '@angular/core/rxjs-interop';
 
@@ -22,25 +14,9 @@ import { ResearcherStats } from '../../models/litrix.models';
 @Component({
   selector: 'app-researcher-search-sidebar',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule],
   template: `
-    <!-- Logo / title -->
-    <a routerLink="/" class="text-base font-semibold text-ink-900 hover:text-accent
-                              transition-colors whitespace-nowrap">
-      Litrix
-    </a>
-
-    <span class="text-ink-300">|</span>
-
-    <span class="text-xs text-ink-400 hidden md:inline">
-      College of Computing & IT — Al-Baha University
-    </span>
-
-    <!-- Spacer pushes search to the left side (in RTL = visual end) -->
-    <div class="flex-1"></div>
-
-    <!-- Search input + dropdown -->
-    <div class="relative w-80">
+    <div class="relative w-72">
       <input
         type="text"
         [(ngModel)]="query"
@@ -59,7 +35,6 @@ import { ResearcherStats } from '../../models/litrix.models';
               d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
       </svg>
 
-      <!-- Dropdown panel -->
       @if (showResults() && query.length > 0) {
         <div class="absolute top-full mt-2 right-0 w-96
                     bg-white border border-ink-200 rounded-apple shadow-hover
@@ -102,9 +77,6 @@ import { ResearcherStats } from '../../models/litrix.models';
       }
     </div>
   `,
-  host: {
-    'class': 'flex items-center gap-3 w-full',
-  },
 })
 export class ResearcherSearchSidebarComponent {
   private readonly api = inject(LitrixApiService);
@@ -146,7 +118,6 @@ export class ResearcherSearchSidebarComponent {
     this.router.navigate(['/researcher', r.user_id]);
   }
 
-  // Close dropdown when clicking outside
   @HostListener('document:click', ['$event'])
   onDocClick(ev: MouseEvent) {
     const target = ev.target as HTMLElement;
