@@ -19,11 +19,13 @@ import { LitrixApiService } from '../../services/litrix-api.service';
 import {
   ResearcherProfilePayload, ProfilePaper,
 } from '../../models/litrix.models';
+import { PaperDetailModalComponent } from
+  '../paper-detail-modal/paper-detail-modal.component';
 
 @Component({
   selector: 'app-researcher-profile',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, PaperDetailModalComponent],
   templateUrl: './researcher-profile.component.html',
 })
 export class ResearcherProfileComponent implements OnInit {
@@ -34,8 +36,8 @@ export class ResearcherProfileComponent implements OnInit {
   readonly loading = signal<boolean>(true);
   readonly error   = signal<string | null>(null);
 
-  // Paper detail modal
-  readonly selectedPaper = signal<ProfilePaper | null>(null);
+  // Paper detail modal — store paper_id; the shared modal fetches full data
+  readonly selectedPaperId = signal<number | null>(null);
 
   // Pagination
   readonly LOAD_BATCH = 15;
@@ -82,8 +84,8 @@ export class ResearcherProfileComponent implements OnInit {
     this.visibleCount.update(n => n + this.LOAD_BATCH);
   }
 
-  openPaper(p: ProfilePaper) { this.selectedPaper.set(p); }
-  closePaper()              { this.selectedPaper.set(null); }
+  openPaper(p: ProfilePaper) { this.selectedPaperId.set(p.paper_id); }
+  closePaper()              { this.selectedPaperId.set(null); }
 
   encodeURIComponent(s: string | null | undefined): string {
     return s ? window.encodeURIComponent(s) : '';

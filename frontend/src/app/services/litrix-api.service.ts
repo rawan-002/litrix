@@ -71,6 +71,12 @@ export class LitrixApiService {
     );
   }
 
+  getPaperDetail(paperId: number): Observable<any> {
+    return this.http.get<any>(
+      `${this.baseUrl}/papers/${paperId}/detail/`
+    );
+  }
+
   listDepartments(): Observable<Paginated<DepartmentStats>> {
     return this.http.get<Paginated<DepartmentStats>>(
       `${this.baseUrl}/departments/`

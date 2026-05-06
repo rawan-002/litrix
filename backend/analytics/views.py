@@ -30,6 +30,106 @@ from .serializers import (
 FOCUS_YEARS = [2025, 2026]
 
 
+@decorators.api_view(['GET'])
+def paper_detail(request, paper_id):
+    """
+    GET /api/papers/<paper_id>/detail/
+
+    Full paper details for the modal popup. Pulls everything from
+    ResearchPaper + RawData_Log (the original scraped JSON), including:
+      - title, abstract, doi, year, publisher
+      - authors string (raw from Scholar)
+      - citation_id, link, total citations
+      - per-year citations breakdown
+      - journal info (name, issn, venue type, quartile, IF)
+      - department + Al-Baha researchers attribution
+    """
+    from django.db import connection
+    with connection.cursor() as cur:
+        cur.execute('''
+            SELECT
+                rp."PaperID",
+                rp."Title",
+                rp."Abstract",
+                rp."DOI",
+                rp."PubYear",
+                rp."Source",
+                rp."Indexing",
+                rp."CitationsByYear",
+                rp."RawData_Log"->>'authors'      AS raw_authors,
+                rp."RawData_Log"->>'publication'  AS publication,
+                rp."RawData_Log"->>'link'         AS link,
+                rp."RawData_Log"->>'citation_id'  AS cites_id,
+                COALESCE(
+                    ("RawData_Log"->'cited_by'->>'value')::int,
+                    ("RawData_Log"->>'cited_by_count')::int,
+                    0
+                ) AS total_citations,
+                j."JournalName",
+                j."ISSN_Print",
+                j."VenueType",
+                jr."Quartile",
+                jr."ImpactFactor"
+            FROM "ResearchPaper" rp
+            LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
+            LEFT JOIN "JournalRankings" jr ON jr."JournalID" = j."JournalID"
+            WHERE rp."PaperID" = %s
+        ''', [paper_id])
+        row = cur.fetchone()
+        if not row:
+            return response.Response(
+                {'error': 'Paper not found'}, status=404
+            )
+
+        cby_raw = row[7]
+        if isinstance(cby_raw, str):
+            try:
+                import json
+                cby = json.loads(cby_raw)
+            except Exception:
+                cby = None
+        else:
+            cby = cby_raw
+
+        paper = {
+            'paper_id':        row[0],
+            'title':           row[1],
+            'abstract':        row[2],
+            'doi':             row[3],
+            'pub_year':        row[4],
+            'source':          row[5],
+            'indexing':        row[6],
+            'citations_by_year': cby,
+            'raw_authors':     row[8],
+            'publication':     row[9],
+            'link':            row[10],
+            'cites_id':        row[11],
+            'total_citations': row[12],
+            'journal_name':    row[13],
+            'issn_print':      row[14],
+            'venue_type':      row[15],
+            'quartile':        row[16],
+            'impact_factor':   row[17],
+        }
+
+        # Al-Baha researchers attributed to this paper
+        cur.execute('''
+            SELECT u."UserID", u."FullName_Ar", d."DepartmentName"
+            FROM "Authors" a
+            JOIN "Users" u ON u."UserID" = a."UserID"
+            LEFT JOIN "Works_In" w ON w."UserID" = u."UserID" AND w."IsCurrentPosition" = TRUE
+            LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
+            WHERE a."PaperID" = %s
+            ORDER BY a."AuthorOrder" NULLS LAST
+        ''', [paper_id])
+        paper['albaha_authors'] = [
+            {'user_id': r[0], 'full_name_ar': r[1], 'department_name': r[2]}
+            for r in cur.fetchall()
+        ]
+
+    return response.Response(paper)
+
+
 def _excel_response(filename: str):
     """Helper: build an HttpResponse with the right xlsx headers."""
     resp = HttpResponse(

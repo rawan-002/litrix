@@ -11,13 +11,15 @@ import {
   OverviewPayload, YearlyBreakdownPayload, PaperDetail,
 } from '../../models/litrix.models';
 import { environment } from '../../../environments/environment';
+import { PaperDetailModalComponent } from
+  '../paper-detail-modal/paper-detail-modal.component';
 
 type ScopeYear = 'all' | 2025 | 2026;
 
 @Component({
   selector: 'app-overview-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, PaperDetailModalComponent],
   templateUrl: './overview-dashboard.component.html',
 })
 export class OverviewDashboardComponent implements OnInit {
@@ -88,16 +90,12 @@ export class OverviewDashboardComponent implements OnInit {
     );
   }
 
-  // Paper detail modal — accepts any paper-like shape (PaperDetail or
-  // TopPaper). The modal template only reads optional fields safely.
-  readonly selectedPaper = signal<any | null>(null);
+  // Paper detail modal — store just the paper_id; the modal component
+  // fetches the full details on demand.
+  readonly selectedPaperId = signal<number | null>(null);
 
-  openPaper(p: any) { this.selectedPaper.set(p); }
-  closePaper()      { this.selectedPaper.set(null); }
-
-  encodeURIComponent(s: string | null | undefined): string {
-    return s ? window.encodeURIComponent(s) : '';
-  }
+  openPaper(p: { paper_id: number }) { this.selectedPaperId.set(p.paper_id); }
+  closePaper()                       { this.selectedPaperId.set(null); }
 
   papersFor(deptId: number, venueType: 'Journal' | 'Conference'): PaperDetail[] {
     const papers = this.yearlyData()?.papers ?? [];

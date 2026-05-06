@@ -1,0 +1,194 @@
+@if (paperId) {
+  <div (click)="close()"
+       class="fixed inset-0 bg-black/40 backdrop-blur-sm z-30
+              flex items-center justify-center p-6">
+    <div (click)="$event.stopPropagation()"
+         class="bg-white rounded-2xl shadow-hover max-w-3xl w-full
+                max-h-[85vh] overflow-y-auto">
+
+      @if (loading()) {
+        <div class="px-7 py-12 text-center text-ink-400 text-sm">
+          Loading...
+        </div>
+      } @else if (error()) {
+        <div class="px-7 py-12 text-center">
+          <div class="text-ink-900 font-semibold mb-2">Error</div>
+          <div class="text-sm text-ink-500">{{ error() }}</div>
+          <button (click)="close()"
+                  class="mt-4 text-xs px-4 py-2 rounded-full bg-ink-100 hover:bg-ink-200">
+            Close
+          </button>
+        </div>
+      } @else if (data(); as p) {
+
+        <!-- Header -->
+        <div class="px-7 pt-6 pb-4 border-b border-ink-100 sticky top-0 bg-white z-10">
+          <div class="flex items-start justify-between gap-4">
+            <h3 class="text-xl font-semibold text-ink-900 leading-snug flex-1">
+              {{ p.title }}
+            </h3>
+            <button (click)="close()"
+                    class="text-ink-400 hover:text-ink-700 transition-colors shrink-0"
+                    aria-label="Close">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          @if (p.raw_authors) {
+            <div class="text-sm text-ink-600 mt-2">{{ p.raw_authors }}</div>
+          }
+        </div>
+
+        <!-- Body -->
+        <div class="px-7 py-5 space-y-5">
+
+          <!-- Abstract -->
+          @if (p.abstract) {
+            <div>
+              <h4 class="text-xs uppercase tracking-wide text-ink-500 font-medium mb-2">
+                Abstract
+              </h4>
+              <p class="text-sm text-ink-700 leading-relaxed">{{ p.abstract }}</p>
+            </div>
+          }
+
+          <!-- Publication info -->
+          <div>
+            <h4 class="text-xs uppercase tracking-wide text-ink-500 font-medium mb-2">
+              Publication Information
+            </h4>
+            <dl class="grid grid-cols-2 gap-y-2 gap-x-4 text-sm">
+              @if (p.pub_year) {
+                <dt class="text-ink-500">Year:</dt>
+                <dd class="text-ink-900 font-medium">{{ p.pub_year }}</dd>
+              }
+              @if (p.publication) {
+                <dt class="text-ink-500">Publisher:</dt>
+                <dd class="text-ink-900 font-medium">{{ p.publication }}</dd>
+              }
+              @if (p.journal_name) {
+                <dt class="text-ink-500">Journal:</dt>
+                <dd class="text-ink-900 font-medium">{{ p.journal_name }}</dd>
+              }
+              @if (p.venue_type) {
+                <dt class="text-ink-500">Venue:</dt>
+                <dd class="text-ink-900 font-medium">{{ p.venue_type }}</dd>
+              }
+              @if (p.quartile) {
+                <dt class="text-ink-500">Quartile:</dt>
+                <dd>
+                  <span class="px-1.5 py-0.5 rounded bg-ink-900 text-white text-[10px]">
+                    {{ p.quartile }}
+                  </span>
+                </dd>
+              }
+              @if (p.impact_factor) {
+                <dt class="text-ink-500">Impact Factor:</dt>
+                <dd class="text-ink-900 font-medium">{{ p.impact_factor }}</dd>
+              }
+              @if (p.indexing) {
+                <dt class="text-ink-500">Indexing:</dt>
+                <dd class="text-ink-900 font-medium">{{ p.indexing }}</dd>
+              }
+              @if (p.source) {
+                <dt class="text-ink-500">Source:</dt>
+                <dd class="text-ink-900 font-medium">{{ p.source }}</dd>
+              }
+              <dt class="text-ink-500">Total Citations:</dt>
+              <dd class="text-ink-900 font-bold">{{ fmt(p.total_citations) }}</dd>
+              @if (p.cites_id) {
+                <dt class="text-ink-500">Cites ID:</dt>
+                <dd class="text-ink-700 font-mono text-xs break-all">{{ p.cites_id }}</dd>
+              }
+            </dl>
+          </div>
+
+          <!-- Al-Baha researchers -->
+          @if (p.albaha_authors && p.albaha_authors.length > 0) {
+            <div>
+              <h4 class="text-xs uppercase tracking-wide text-ink-500 font-medium mb-2">
+                Al-Baha Researchers on this paper
+              </h4>
+              <ul class="space-y-1" dir="rtl">
+                @for (a of p.albaha_authors; track a.user_id) {
+                  <li class="text-sm">
+                    <span class="text-ink-900 font-medium">{{ a.full_name_ar }}</span>
+                    @if (a.department_name) {
+                      <span class="text-ink-400 mx-1">·</span>
+                      <span class="text-ink-500 text-xs">{{ a.department_name }}</span>
+                    }
+                  </li>
+                }
+              </ul>
+            </div>
+          }
+
+          <!-- Citations over time chart -->
+          @if (chart(); as c) {
+            <div>
+              <h4 class="text-xs uppercase tracking-wide text-ink-500 font-medium mb-2">
+                Citations Over Time
+              </h4>
+              <svg [attr.viewBox]="'0 0 ' + c.W + ' ' + c.H"
+                   class="w-full h-auto" preserveAspectRatio="xMidYMid meet">
+                <line [attr.x1]="c.padding.left"
+                      [attr.x2]="c.W - c.padding.right"
+                      [attr.y1]="c.H - c.padding.bottom"
+                      [attr.y2]="c.H - c.padding.bottom"
+                      stroke="#e8e8ed" stroke-width="1" />
+                @for (b of c.bars; track b.year) {
+                  <g>
+                    <rect [attr.x]="b.x" [attr.y]="b.y"
+                          [attr.width]="b.w" [attr.height]="b.h"
+                          rx="2" fill="#1c1917" opacity="0.85" />
+                    <text [attr.x]="b.x + b.w / 2"
+                          [attr.y]="c.H - c.padding.bottom + 12"
+                          text-anchor="middle"
+                          class="text-[9px] fill-ink-500">
+                      {{ b.year }}
+                    </text>
+                    @if (b.h > 12) {
+                      <text [attr.x]="b.x + b.w / 2"
+                            [attr.y]="b.y + 9"
+                            text-anchor="middle"
+                            class="text-[9px] fill-white font-medium">
+                        {{ b.count }}
+                      </text>
+                    }
+                  </g>
+                }
+              </svg>
+            </div>
+          }
+
+          <!-- Links -->
+          <div class="pt-2 flex gap-2 flex-wrap">
+            @if (p.doi) {
+              <a [href]="'https://doi.org/' + p.doi" target="_blank"
+                 class="text-xs px-4 py-2 rounded-full bg-ink-900 text-white
+                        hover:bg-ink-700 transition-colors">
+                Open via DOI
+              </a>
+            }
+            @if (p.link) {
+              <a [href]="p.link" target="_blank"
+                 class="text-xs px-4 py-2 rounded-full bg-ink-900 text-white
+                        hover:bg-ink-700 transition-colors">
+                Publication URL
+              </a>
+            }
+            <a [href]="'https://scholar.google.com/scholar?q=' + encodeURIComponent(p.title)"
+               target="_blank"
+               class="text-xs px-4 py-2 rounded-full bg-white border border-ink-200
+                      text-ink-700 hover:bg-ink-100 transition-colors">
+              Search on Scholar
+            </a>
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+}
