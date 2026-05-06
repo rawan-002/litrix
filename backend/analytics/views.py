@@ -315,6 +315,144 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
     ordering = ['-h_index', '-total_papers']
 
     @decorators.action(detail=True, methods=['get'])
+    def profile(self, request, pk=None):
+        """
+        GET /api/researchers/{user_id}/profile/
+
+        One-shot payload powering the researcher profile page:
+          - identity         (name, dept, scholar/orcid/openalex IDs)
+          - aggregated stats (papers, citations, h-index)
+          - per-year citations (merged across all papers — chart-ready)
+          - papers list      (full metadata: journal, quartile, citations,
+                              citations_by_year, source, indexing)
+
+        Why one endpoint: the profile page renders 3 sections that all
+        depend on the same data; batching avoids 3 round-trips and a
+        flash of empty-then-filled UI.
+        """
+        from django.db import connection
+        with connection.cursor() as cur:
+            cur.execute('''
+                SELECT
+                    u."UserID", u."FullName_Ar",
+                    u."FirstName", u."LastName", u."Email",
+                    u."Scholar_ID", u."ORCID",
+                    r."OpenAlex_AuthorID", r."LastSyncedAt",
+                    d."DepartmentID", d."DepartmentName"
+                FROM "Users" u
+                LEFT JOIN "Researcher" r ON r."UserID" = u."UserID"
+                LEFT JOIN "Works_In" w ON w."UserID" = u."UserID"
+                                       AND w."IsCurrentPosition" = TRUE
+                LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
+                WHERE u."UserID" = %s
+            ''', [pk])
+            row = cur.fetchone()
+            if not row:
+                return response.Response(
+                    {'error': 'Researcher not found'}, status=404
+                )
+            identity = {
+                'user_id':           row[0],
+                'full_name_ar':      row[1],
+                'first_name':        row[2],
+                'last_name':         row[3],
+                'email':             row[4],
+                'scholar_id':        row[5],
+                'orcid':             row[6],
+                'openalex_author_id': row[7],
+                'last_synced_at':    row[8],
+                'department_id':     row[9],
+                'department_name':   row[10],
+            }
+
+            # Aggregated stats + per-year citations
+            cur.execute('''
+                SELECT
+                    COUNT(DISTINCT rp."PaperID")                         AS total_papers,
+                    COALESCE(SUM(COALESCE(
+                        ("RawData_Log"->'cited_by'->>'value')::int,
+                        ("RawData_Log"->>'cited_by_count')::int,
+                        0)), 0)                                          AS total_citations,
+                    COUNT(DISTINCT rp."PaperID")
+                        FILTER (WHERE jr."Quartile" = 'Q1')              AS q1_papers,
+                    COUNT(DISTINCT rp."PaperID")
+                        FILTER (WHERE rp."Indexing" = 'Scopus'
+                                   OR jr."Quartile" IS NOT NULL)         AS scopus_papers,
+                    COUNT(DISTINCT rp."PaperID")
+                        FILTER (WHERE rp."Indexing" = 'ISI')             AS isi_papers
+                FROM "ResearchPaper" rp
+                JOIN "Authors" a ON a."PaperID" = rp."PaperID"
+                LEFT JOIN "JournalRankings" jr ON jr."JournalID" = rp."JournalID"
+                WHERE a."UserID" = %s
+            ''', [pk])
+            stats_row = cur.fetchone()
+            stats = {
+                'total_papers':    stats_row[0],
+                'total_citations': stats_row[1],
+                'q1_papers':       stats_row[2],
+                'scopus_papers':   stats_row[3],
+                'isi_papers':      stats_row[4],
+            }
+
+            # Per-year citations: merge JSONB across all his papers.
+            # We unfold each CitationsByYear into rows then sum by year.
+            cur.execute('''
+                SELECT
+                    yr.year::int            AS year,
+                    SUM(yr.cnt::int)        AS citations
+                FROM "ResearchPaper" rp
+                JOIN "Authors" a ON a."PaperID" = rp."PaperID"
+                CROSS JOIN LATERAL jsonb_each_text(
+                    COALESCE(rp."CitationsByYear", '{}'::jsonb)
+                ) AS yr(year, cnt)
+                WHERE a."UserID" = %s
+                  AND yr.year ~ '^[0-9]+$'
+                GROUP BY yr.year
+                ORDER BY yr.year
+            ''', [pk])
+            citations_by_year = [
+                {'year': r[0], 'citations': r[1]}
+                for r in cur.fetchall()
+            ]
+
+            # Papers list with full metadata
+            cur.execute('''
+                SELECT
+                    rp."PaperID", rp."Title", rp."DOI", rp."PubYear",
+                    rp."Source", rp."Indexing", rp."CitationsByYear",
+                    COALESCE(
+                        ("RawData_Log"->'cited_by'->>'value')::int,
+                        ("RawData_Log"->>'cited_by_count')::int,
+                        0
+                    )                       AS citations,
+                    j."JournalName",
+                    j."ISSN_Print",
+                    j."VenueType",
+                    jr."Quartile",
+                    jr."ImpactFactor"
+                FROM "ResearchPaper" rp
+                JOIN "Authors" a ON a."PaperID" = rp."PaperID"
+                LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
+                LEFT JOIN "JournalRankings" jr ON jr."JournalID" = rp."JournalID"
+                WHERE a."UserID" = %s
+                ORDER BY rp."PubYear" DESC NULLS LAST, rp."PaperID" DESC
+            ''', [pk])
+            paper_cols = [c[0].lower() for c in cur.description]
+            papers = [dict(zip([
+                'paper_id', 'title', 'doi', 'pub_year', 'source',
+                'indexing', 'citations_by_year', 'citations',
+                'journal_name', 'issn_print', 'venue_type',
+                'quartile', 'impact_factor',
+            ], r)) for r in cur.fetchall()]
+
+        return response.Response({
+            'identity':          identity,
+            'stats':             stats,
+            'citations_by_year': citations_by_year,
+            'papers':            papers,
+        })
+
+    @decorators.action(detail=True, methods=['get'])
     def papers(self, request, pk=None):
         """
         GET /api/researchers/{user_id}/papers/

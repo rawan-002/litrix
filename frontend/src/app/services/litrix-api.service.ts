@@ -15,7 +15,7 @@ import { Observable } from 'rxjs';
 import {
   ResearcherStats, DepartmentStats, TopPaper,
   PublicationTrend, OverviewPayload, Paginated,
-  YearlyBreakdownPayload,
+  YearlyBreakdownPayload, ResearcherProfilePayload,
 } from '../models/litrix.models';
 import { environment } from '../../environments/environment';
 
@@ -49,6 +49,19 @@ export class LitrixApiService {
   getResearcherPapers(userId: number): Observable<any[]> {
     return this.http.get<any[]>(
       `${this.baseUrl}/researchers/${userId}/papers/`
+    );
+  }
+
+  getResearcherProfile(userId: number): Observable<ResearcherProfilePayload> {
+    return this.http.get<ResearcherProfilePayload>(
+      `${this.baseUrl}/researchers/${userId}/profile/`
+    );
+  }
+
+  searchResearchers(query: string): Observable<Paginated<ResearcherStats>> {
+    let params = new HttpParams().set('search', query).set('page_size', '20');
+    return this.http.get<Paginated<ResearcherStats>>(
+      `${this.baseUrl}/researchers/`, { params }
     );
   }
 

@@ -126,3 +126,53 @@ export interface YearlyBreakdownPayload {
   departments: YearlyDepartmentSummary[];
   papers: PaperDetail[];
 }
+
+export interface ResearcherIdentity {
+  user_id: number;
+  full_name_ar: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  scholar_id: string | null;
+  orcid: string | null;
+  openalex_author_id: string | null;
+  last_synced_at: string | null;
+  department_id: number | null;
+  department_name: string | null;
+}
+
+export interface ResearcherStatsAgg {
+  total_papers: number;
+  total_citations: number;
+  q1_papers: number;
+  scopus_papers: number;
+  isi_papers: number;
+}
+
+export interface YearCitations {
+  year: number;
+  citations: number;
+}
+
+export interface ProfilePaper {
+  paper_id: number;
+  title: string;
+  doi: string | null;
+  pub_year: number | null;
+  source: string | null;
+  indexing: string | null;
+  citations_by_year: Record<string, number> | null;
+  citations: number;
+  journal_name: string | null;
+  issn_print: string | null;
+  venue_type: 'Journal' | 'Conference' | null;
+  quartile: string | null;
+  impact_factor: number | null;
+}
+
+export interface ResearcherProfilePayload {
+  identity: ResearcherIdentity;
+  stats: ResearcherStatsAgg;
+  citations_by_year: YearCitations[];
+  papers: ProfilePaper[];
+}
