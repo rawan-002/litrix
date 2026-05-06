@@ -150,4 +150,18 @@ CORS_ALLOWED_ORIGINS = [
 if _extra_origins:
     CORS_ALLOWED_ORIGINS += [o.strip() for o in _extra_origins.split(',') if o.strip()]
 
+# Regex patterns let us allow ALL Vercel preview deployments
+# (litrix-XXX-rawan-002s-projects.vercel.app) without listing each
+# explicitly. Set CORS_ALLOWED_ORIGIN_REGEXES env var to override.
+import re as _re
+_default_regexes = [
+    r'^https://litrix(-[a-z0-9]+)*-rawan-002s-projects\.vercel\.app$',
+    r'^https://litrix\.vercel\.app$',
+]
+_regex_env = os.getenv('CORS_ALLOWED_ORIGIN_REGEXES', '').strip()
+if _regex_env:
+    CORS_ALLOWED_ORIGIN_REGEXES = [r.strip() for r in _regex_env.split(',') if r.strip()]
+else:
+    CORS_ALLOWED_ORIGIN_REGEXES = _default_regexes
+
 CORS_ALLOW_CREDENTIALS = True
