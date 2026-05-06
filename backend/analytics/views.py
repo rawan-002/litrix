@@ -65,7 +65,7 @@ def paper_detail(request, paper_id):
                     ("RawData_Log"->>'cited_by_count')::int,
                     0
                 ) AS total_citations,
-                j."JournalName",
+                COALESCE(j."JournalName", rp."RawData_Log"->>'publication') AS journal_name,
                 j."ISSN_Print",
                 j."VenueType",
                 jr."Quartile",
@@ -743,7 +743,10 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
             except Exception:
                 citations_by_year = []
 
-            # Papers list with full metadata
+            # Papers list with full metadata.
+            # Journal name falls back to Scholar's free-text "publication"
+            # string (like "Sustainability 14 (2), 829, 2022") when we
+            # don't have a JournalID linked.
             cur.execute('''
                 SELECT
                     rp."PaperID", rp."Title", rp."DOI", rp."PubYear",
@@ -753,7 +756,8 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                         ("RawData_Log"->>'cited_by_count')::int,
                         0
                     )                       AS citations,
-                    j."JournalName",
+                    COALESCE(j."JournalName", rp."RawData_Log"->>'publication')
+                                            AS journal_name,
                     j."ISSN_Print",
                     j."VenueType",
                     jr."Quartile",
