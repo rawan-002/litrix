@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+.Python
+
+# Django
+*.log
+db.sqlite3
+db.sqlite3-journal
+staticfiles/
+media/
+
+# Environment files (CRITICAL - contains DB passwords + API keys)
+.env
+.env.*
+!.env.example
+
+# Database dumps
+*.dump
+*.sql.gz
+litrix_backup*
+
+# Node
+node_modules/
+.angular/
+dist/
+.npm
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Litrix specific
+*.csv.bak
+scraper_logs/
+*.log
+
+# Build artifacts
+*.egg-info/
+build/
+*.egg

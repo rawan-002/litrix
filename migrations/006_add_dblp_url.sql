@@ -1,0 +1,13 @@
+
+
+
+BEGIN;
+
+ALTER TABLE "Researcher"
+    ADD COLUMN IF NOT EXISTS "DBLP_URL" TEXT;
+
+CREATE INDEX IF NOT EXISTS "ix_researcher_dblp"
+    ON "Researcher" ("DBLP_URL")
+    WHERE "DBLP_URL" IS NOT NULL;
+
+COMMIT;

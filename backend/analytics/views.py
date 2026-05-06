@@ -1,0 +1,621 @@
+"""
+DRF ViewSets — REST endpoint logic.
+
+Each ViewSet is read-only (ReadOnlyModelViewSet) because the Angular
+frontend never WRITES to the DB through these — writes go through the
+scraper and bootstrap scripts. This is enforced at the framework level
+(no PUT/POST/DELETE handlers exist), giving us defense-in-depth.
+
+Filtering: we expose django-filter's DjangoFilterBackend so the frontend
+can do GET /api/researchers/?department_id=2 etc.
+
+Dashboard scope: the overview/export endpoints focus on the years in
+FOCUS_YEARS. Edit this list to broaden or narrow the dashboard window.
+"""
+from rest_framework import viewsets, filters, decorators, response
+from django_filters.rest_framework import DjangoFilterBackend
+from django.db.models import Sum, Count, Avg
+from django.http import HttpResponse
+
+from .models import (
+    ResearcherStats, DepartmentStats, TopPaper, PublicationTrend,
+    ResearchPaper,
+)
+from .serializers import (
+    ResearcherStatsSerializer, DepartmentStatsSerializer,
+    TopPaperSerializer, PublicationTrendSerializer,
+    ResearchPaperSerializer,
+)
+
+FOCUS_YEARS = [2025, 2026]
+
+
+def _excel_response(filename: str):
+    """Helper: build an HttpResponse with the right xlsx headers."""
+    resp = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    resp['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return resp
+
+
+@decorators.api_view(['GET'])
+def export_excel(request):
+    """
+    GET /api/export/excel/?years=2025,2026&sheets=summary,departments,researchers,journals,conferences
+
+    Build a comprehensive xlsx workbook based on user-selected years +
+    sheets. The Dashboard opens an options modal that posts to this URL
+    with the chosen filters. Defaults to all years + all sheets if no
+    params are provided.
+
+    Sheet layout (when all selected):
+        • Summary YYYY            — one per year picked
+        • Departments YYYY        — one per year picked (journal/conf split)
+        • Researchers             — single sheet, contributions in window
+        • Journals YYYY           — one per year, full paper details
+        • Conferences YYYY        — one per year, full paper details
+    """
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill
+    from django.db import connection
+
+    years_param = request.query_params.get('years', '').strip()
+    if years_param:
+        try:
+            years = [int(y) for y in years_param.split(',') if y.strip().isdigit()]
+        except ValueError:
+            years = list(FOCUS_YEARS)
+    else:
+        years = list(FOCUS_YEARS)
+    if not years:
+        years = list(FOCUS_YEARS)
+
+    sheets_param = request.query_params.get('sheets', '').strip()
+    if sheets_param:
+        sheets = {s.strip().lower() for s in sheets_param.split(',') if s.strip()}
+    else:
+        sheets = {'summary', 'departments', 'researchers', 'journals', 'conferences'}
+
+    wb = Workbook()
+    wb.remove(wb.active)
+    header_font = Font(bold=True, color='FFFFFF')
+    header_fill = PatternFill('solid', fgColor='1D1D1F')
+    header_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
+
+    def style_header(ws, ncols):
+        for col in range(1, ncols + 1):
+            c = ws.cell(row=1, column=col)
+            c.font = header_font
+            c.fill = header_fill
+            c.alignment = header_align
+        ws.row_dimensions[1].height = 26
+
+    def set_widths(ws, widths):
+        for col_idx, w in enumerate(widths, start=1):
+            ws.column_dimensions[chr(64 + col_idx)].width = w
+
+    if 'summary' in sheets:
+        for year in sorted(years):
+            ws = wb.create_sheet(f'Summary {year}')
+            ws.append(['Metric', 'Value'])
+            style_header(ws, 2)
+            with connection.cursor() as cur:
+                cur.execute('''
+                    SELECT
+                        COUNT(DISTINCT rp."PaperID"),
+                        COALESCE(SUM(COALESCE(("RawData_Log"->'cited_by'->>'value')::int, 0)), 0),
+                        COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q1'),
+                        COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q2'),
+                        COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q3'),
+                        COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q4'),
+                        COUNT(DISTINCT rp."PaperID") FILTER (WHERE j."VenueType" = 'Journal'),
+                        COUNT(DISTINCT rp."PaperID") FILTER (WHERE j."VenueType" = 'Conference')
+                    FROM "ResearchPaper" rp
+                    LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
+                    LEFT JOIN "JournalRankings" jr ON jr."JournalID" = rp."JournalID"
+                    WHERE rp."PubYear" = %s
+                      AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID")
+                ''', [year])
+                p, c, q1, q2, q3, q4, jp, cp = cur.fetchone()
+            for label, val in [
+                ('Year', year),
+                ('Total Papers', p),
+                ('Total Citations', c),
+                ('Journal Papers', jp),
+                ('Conference Papers', cp),
+                ('Q1 Papers', q1),
+                ('Q2 Papers', q2),
+                ('Q3 Papers', q3),
+                ('Q4 Papers', q4),
+            ]:
+                ws.append([label, val])
+            set_widths(ws, [25, 20])
+
+    if 'departments' in sheets:
+        for year in sorted(years):
+            ws = wb.create_sheet(f'Departments {year}')
+            ws.append([
+                'Department', 'Researchers',
+                'Journal Papers', 'Conference Papers', 'Total Papers',
+                'Citations', 'Q1', 'Q2', 'Q3', 'Q4'
+            ])
+            style_header(ws, 10)
+            with connection.cursor() as cur:
+                cur.execute('''
+                    SELECT
+                        d."DepartmentName",
+                        COUNT(DISTINCT u."UserID"),
+                        COUNT(DISTINCT rp."PaperID") FILTER (WHERE j."VenueType" = 'Journal'),
+                        COUNT(DISTINCT rp."PaperID") FILTER (WHERE j."VenueType" = 'Conference'),
+                        COUNT(DISTINCT rp."PaperID"),
+                        COALESCE(SUM(COALESCE((rp."RawData_Log"->'cited_by'->>'value')::int, 0)), 0),
+                        COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q1'),
+                        COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q2'),
+                        COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q3'),
+                        COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q4')
+                    FROM "Department" d
+                    LEFT JOIN "Works_In" w ON w."DepartmentID" = d."DepartmentID"
+                                          AND w."IsCurrentPosition" = TRUE
+                    LEFT JOIN "Users" u ON u."UserID" = w."UserID" AND u."UserType" = 'Researcher'
+                    LEFT JOIN "Authors" a ON a."UserID" = u."UserID"
+                    LEFT JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
+                                               AND rp."PubYear" = %s
+                    LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
+                    LEFT JOIN "JournalRankings" jr ON jr."JournalID" = rp."JournalID"
+                    GROUP BY d."DepartmentName"
+                    ORDER BY 5 DESC
+                ''', [year])
+                for row in cur.fetchall():
+                    ws.append(list(row))
+            set_widths(ws, [32, 12, 14, 16, 12, 12, 8, 8, 8, 8])
+
+    if 'researchers' in sheets:
+        ws = wb.create_sheet('Researchers')
+        ws.append([
+            'Researcher (AR)', 'Department', 'Rank',
+            'Papers (window)', 'Citations (window)',
+            'Papers (all-time)', 'Citations (all-time)',
+            'h-index (all-time)', 'Status',
+            'Scholar ID', 'ORCID'
+        ])
+        style_header(ws, 11)
+        with connection.cursor() as cur:
+            cur.execute('''
+                SELECT
+                    u."FullName_Ar",
+                    d."DepartmentName",
+                    r."AcademicRank",
+                    -- Window stats (focus years only)
+                    COUNT(DISTINCT a_w."PaperID") FILTER (WHERE rp_w."PubYear" = ANY(%(years)s)) AS papers_window,
+                    COALESCE(SUM(COALESCE((rp_w."RawData_Log"->'cited_by'->>'value')::int, 0))
+                        FILTER (WHERE rp_w."PubYear" = ANY(%(years)s)), 0) AS citations_window,
+                    -- All-time stats
+                    COUNT(DISTINCT a_w."PaperID") AS papers_all,
+                    COALESCE(SUM(COALESCE((rp_w."RawData_Log"->'cited_by'->>'value')::int, 0)), 0) AS citations_all,
+                    COALESCE(hi.h_index, 0) AS h_index,
+                    -- Status with clear priority:
+                    --   1. Has papers in the focus window  → Active
+                    --   2. Has all-time papers (manual OR scraped) → Historical
+                    --   3. Has a public profile but no papers yet → Pending Sync
+                    --   4. Nothing at all → No Profile (manual outreach needed)
+                    CASE
+                        WHEN COUNT(DISTINCT a_w."PaperID")
+                                FILTER (WHERE rp_w."PubYear" = ANY(%(years)s)) > 0
+                            THEN 'Active'
+                        WHEN COUNT(DISTINCT a_w."PaperID") > 0
+                            THEN 'Historical'
+                        WHEN u."Scholar_ID" IS NOT NULL
+                          OR r."ORCID_ID" IS NOT NULL
+                          OR r."OpenAlex_AuthorID" IS NOT NULL
+                          OR r."Scopus_ID" IS NOT NULL
+                            THEN 'Pending Sync'
+                        ELSE 'No Profile'
+                    END AS sync_status,
+                    u."Scholar_ID",
+                    r."ORCID_ID"
+                FROM "Users" u
+                JOIN "Researcher" r ON r."UserID" = u."UserID"
+                LEFT JOIN "Works_In" w ON w."UserID" = u."UserID" AND w."IsCurrentPosition" = TRUE
+                LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
+                LEFT JOIN "Authors" a_w ON a_w."UserID" = u."UserID"
+                LEFT JOIN "ResearchPaper" rp_w ON rp_w."PaperID" = a_w."PaperID"
+                LEFT JOIN v_researcher_h_index hi ON hi."UserID" = u."UserID"
+                WHERE u."UserType" = 'Researcher'
+                GROUP BY u."UserID", u."FullName_Ar", d."DepartmentName",
+                         r."AcademicRank", hi.h_index, u."Scholar_ID",
+                         r."ORCID_ID", r."OpenAlex_AuthorID", r."Scopus_ID",
+                         r."LastSyncedAt"
+                ORDER BY papers_window DESC, h_index DESC
+            ''', {'years': years})
+            for row in cur.fetchall():
+                ws.append(list(row))
+        set_widths(ws, [32, 22, 18, 12, 14, 14, 16, 14, 14, 18, 22])
+
+    if 'journals' in sheets:
+        for year in sorted(years):
+            ws = wb.create_sheet(f'Journals {year}')
+            ws.append([
+                'Department', 'Title',
+                'Al-Baha Authors', 'External Co-authors',
+                'Journal', 'Quartile', 'IF', 'Indexing',
+                'Citations', 'DOI'
+            ])
+            style_header(ws, 10)
+            with connection.cursor() as cur:
+                cur.execute('''
+                    SELECT
+                        department_name, title,
+                        albaha_authors, external_authors,
+                        journal_name, quartile, impact_factor, indexing,
+                        citations, doi
+                    FROM v_paper_details
+                    WHERE pub_year = %s AND venue_type = 'Journal'
+                    ORDER BY department_name, citations DESC NULLS LAST
+                ''', [year])
+                for row in cur.fetchall():
+                    ws.append(list(row))
+            set_widths(ws, [22, 60, 50, 40, 30, 10, 8, 12, 10, 30])
+
+    if 'conferences' in sheets:
+        for year in sorted(years):
+            ws = wb.create_sheet(f'Conferences {year}')
+            ws.append([
+                'Department', 'Title',
+                'Al-Baha Authors', 'External Co-authors',
+                'Conference', 'Indexing', 'Citations', 'DOI'
+            ])
+            style_header(ws, 8)
+            with connection.cursor() as cur:
+                cur.execute('''
+                    SELECT
+                        department_name, title,
+                        albaha_authors, external_authors,
+                        journal_name, indexing, citations, doi
+                    FROM v_paper_details
+                    WHERE pub_year = %s AND venue_type = 'Conference'
+                    ORDER BY department_name, citations DESC NULLS LAST
+                ''', [year])
+                for row in cur.fetchall():
+                    ws.append(list(row))
+            set_widths(ws, [22, 60, 50, 40, 30, 12, 10, 30])
+
+    if not wb.sheetnames:
+        ws = wb.create_sheet('Empty')
+        ws.append(['No sheets selected'])
+
+    fname = f"litrix_export_{'-'.join(map(str, sorted(years)))}.xlsx"
+    resp = _excel_response(fname)
+    wb.save(resp)
+    return resp
+
+
+class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    GET /api/researchers/             → list of all researchers
+    GET /api/researchers/?department_id=2  → filtered
+    GET /api/researchers/?search=محمد  → fuzzy search
+    GET /api/researchers/?ordering=-h_index  → sort
+    GET /api/researchers/{user_id}/   → single researcher detail
+    GET /api/researchers/{user_id}/papers/ → researcher's papers
+    """
+    queryset = ResearcherStats.objects.all()
+    serializer_class = ResearcherStatsSerializer
+    filter_backends = [
+        DjangoFilterBackend,
+        filters.OrderingFilter,
+        filters.SearchFilter,
+    ]
+    filterset_fields = ['department_id', 'academic_rank']
+    search_fields = ['full_name_ar', 'full_name_en', 'scholar_id', 'orcid_id']
+    ordering_fields = [
+        'total_papers', 'total_citations', 'h_index',
+        'q1_papers', 'last_pub_year',
+    ]
+    ordering = ['-h_index', '-total_papers']
+
+    @decorators.action(detail=True, methods=['get'])
+    def papers(self, request, pk=None):
+        """
+        GET /api/researchers/{user_id}/papers/
+        Returns ALL papers authored by this researcher (newest first).
+        """
+        from django.db import connection
+        with connection.cursor() as cur:
+            cur.execute('''
+                SELECT
+                    rp."PaperID", rp."Title", rp."Title_En", rp."Abstract",
+                    rp."Language", rp."DOI", rp."PubYear",
+                    rp."Volume", rp."Issue", rp."Pages",
+                    rp."Source", rp."IsVerified", rp."ScrapedAt"
+                FROM "ResearchPaper" rp
+                JOIN "Authors" a ON a."PaperID" = rp."PaperID"
+                WHERE a."UserID" = %s
+                ORDER BY rp."PubYear" DESC NULLS LAST, rp."PaperID" DESC
+            ''', [pk])
+            rows = cur.fetchall()
+            cols = [c[0].lower() for c in cur.description]
+
+        field_map = {
+            'paperid': 'paper_id', 'title': 'title', 'title_en': 'title_en',
+            'abstract': 'abstract', 'language': 'language', 'doi': 'doi',
+            'pubyear': 'pub_year', 'volume': 'volume', 'issue': 'issue',
+            'pages': 'pages', 'source': 'source',
+            'isverified': 'is_verified', 'scrapedat': 'scraped_at',
+        }
+        data = [
+            {field_map.get(c, c): row[i] for i, c in enumerate(cols)}
+            for row in rows
+        ]
+        return response.Response(data)
+
+
+class DepartmentViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    GET /api/departments/         → list with aggregated stats
+    GET /api/departments/{id}/    → single department detail
+    """
+    queryset = DepartmentStats.objects.all()
+    serializer_class = DepartmentStatsSerializer
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = [
+        'total_papers', 'total_citations', 'total_q1_papers',
+        'avg_h_index', 'total_researchers',
+    ]
+    ordering = ['-total_papers']
+
+    @decorators.action(detail=True, methods=['get'])
+    def researchers(self, request, pk=None):
+        """GET /api/departments/{id}/researchers/ — list of researchers."""
+        qs = ResearcherStats.objects.filter(department_id=pk).order_by(
+            '-h_index', '-total_papers'
+        )
+        page = self.paginate_queryset(qs)
+        ser = ResearcherStatsSerializer(page or qs, many=True)
+        return self.get_paginated_response(ser.data) if page else response.Response(ser.data)
+
+
+class TopPaperViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    GET /api/papers/top/?limit=10   → most-cited papers
+    GET /api/papers/top/?quartile=Q1
+    GET /api/papers/top/?pub_year=2024
+    """
+    queryset = TopPaper.objects.all()
+    serializer_class = TopPaperSerializer
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ['quartile', 'pub_year', 'source']
+    ordering_fields = ['citations', 'pub_year', 'impact_factor']
+    ordering = ['-citations']
+
+
+class PublicationTrendViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    GET /api/trends/                       → all departments × all years
+    GET /api/trends/?department_id=2       → single department's trend
+    """
+    queryset = PublicationTrend.objects.all()
+    serializer_class = PublicationTrendSerializer
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ['department_id', 'year']
+    ordering = ['department_name', 'year']
+
+
+@decorators.api_view(['GET'])
+def yearly_breakdown(request):
+    """
+    GET /api/yearly-breakdown/?year=2025
+
+    Returns the department-level breakdown for a given year:
+        • For each department: journal_papers + conference_papers + citations
+        • A flat list of all papers (split by venue_type on the frontend)
+
+    The frontend renders this as: Year tabs → Dept summary cards →
+    expandable Journal/Conference paper lists.
+    """
+    year = request.query_params.get('year')
+    if not year:
+        return response.Response(
+            {'error': 'year parameter required'}, status=400
+        )
+    try:
+        year_int = int(year)
+    except (TypeError, ValueError):
+        return response.Response(
+            {'error': 'year must be an integer'}, status=400
+        )
+
+    from django.db import connection
+    with connection.cursor() as cur:
+        cur.execute('''
+            SELECT
+                department_id,
+                department_name,
+                COUNT(*) FILTER (WHERE venue_type = 'Journal')    AS journal_papers,
+                COUNT(*) FILTER (WHERE venue_type = 'Conference') AS conference_papers,
+                COUNT(*)                                          AS total_papers,
+                COALESCE(SUM(citations), 0)                       AS total_citations
+            FROM v_paper_details
+            WHERE pub_year = %s
+              AND department_id IS NOT NULL
+            GROUP BY department_id, department_name
+            ORDER BY total_papers DESC
+        ''', [year_int])
+        dept_rows = cur.fetchall()
+        departments = [
+            {
+                'department_id':     r[0],
+                'department_name':   r[1],
+                'journal_papers':    r[2],
+                'conference_papers': r[3],
+                'total_papers':      r[4],
+                'total_citations':   r[5],
+            }
+            for r in dept_rows
+        ]
+
+        cur.execute('''
+            SELECT
+                paper_id, title, doi, citations, journal_name,
+                venue_type, quartile, impact_factor, indexing,
+                department_id, department_name, authors_ar
+            FROM v_paper_details
+            WHERE pub_year = %s
+              AND department_id IS NOT NULL
+            ORDER BY citations DESC NULLS LAST, paper_id
+        ''', [year_int])
+        cols = [c[0] for c in cur.description]
+        papers = [dict(zip(cols, row)) for row in cur.fetchall()]
+
+    return response.Response({
+        'year': year_int,
+        'departments': departments,
+        'papers': papers,
+    })
+
+
+def _resolve_years(request) -> list:
+    """
+    Read the optional ?year= query param. Returns:
+        - [year] if a single year is requested (e.g. ?year=2025)
+        - FOCUS_YEARS otherwise (default = both 2025 and 2026)
+    """
+    year_param = request.query_params.get('year')
+    if year_param and year_param.isdigit():
+        return [int(year_param)]
+    return list(FOCUS_YEARS)
+
+
+@decorators.api_view(['GET'])
+def overview(request):
+    """
+    GET /api/stats/overview/         → both focus years
+    GET /api/stats/overview/?year=2025  → just 2025
+    GET /api/stats/overview/?year=2026  → just 2026
+
+    A one-shot payload that powers the Admin/Dean landing page. Combines
+    multiple views into a single response so the frontend doesn't have
+    to make 5 round-trips on first load.
+    """
+    years = _resolve_years(request)
+    dept_agg = DepartmentStats.objects.aggregate(
+        researchers=Sum('total_researchers'),
+        active=Sum('active_researchers'),
+        avg_h=Avg('avg_h_index'),
+    )
+
+    from django.db import connection
+    with connection.cursor() as cur:
+        if len(years) == 1:
+            citations_expr = '''
+                COALESCE(SUM(
+                    COALESCE((rp."CitationsByYear"->>%s)::int, 0)
+                ), 0)
+            '''
+            citations_params = [str(years[0])]
+        else:
+            citations_expr = '''
+                COALESCE(SUM(COALESCE(
+                    ("RawData_Log"->'cited_by'->>'value')::int,
+                    ("RawData_Log"->>'cited_by_count')::int,
+                    0
+                )), 0)
+            '''
+            citations_params = []
+
+        cur.execute(f'''
+            SELECT
+                COUNT(DISTINCT rp."PaperID") AS papers,
+                {citations_expr} AS citations,
+                COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q1') AS q1,
+                COUNT(DISTINCT rp."PaperID")
+                    FILTER (WHERE rp."Indexing" = 'Scopus' OR jr."Quartile" IS NOT NULL) AS scopus,
+                COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = 'ISI') AS isi
+            FROM "ResearchPaper" rp
+            LEFT JOIN "JournalRankings" jr ON jr."JournalID" = rp."JournalID"
+            WHERE rp."PubYear" = ANY(%s)
+              AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID")
+        ''', citations_params + [years])
+        paper_totals = cur.fetchone()
+
+        cur.execute('''
+            SELECT
+                u."UserID",
+                u."FullName_Ar",
+                d."DepartmentName",
+                COUNT(DISTINCT rp."PaperID") AS focus_papers,
+                COALESCE(SUM(COALESCE(("RawData_Log"->'cited_by'->>'value')::int, 0)), 0) AS focus_citations
+            FROM "Users" u
+            JOIN "Authors" a ON a."UserID" = u."UserID"
+            JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
+            LEFT JOIN "Works_In" w ON w."UserID" = u."UserID" AND w."IsCurrentPosition" = TRUE
+            LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
+            WHERE rp."PubYear" = ANY(%s)
+              AND u."UserType" = 'Researcher'
+            GROUP BY u."UserID", u."FullName_Ar", d."DepartmentName"
+            ORDER BY focus_papers DESC, focus_citations DESC
+            LIMIT 5
+        ''', [years])
+        top_researchers_rows = cur.fetchall()
+
+        cur.execute('''
+            SELECT * FROM v_top_papers
+            WHERE pub_year = ANY(%s)
+            ORDER BY citations DESC NULLS LAST
+            LIMIT 5
+        ''', [years])
+        top_paper_cols = [c[0] for c in cur.description]
+        top_papers = [dict(zip(top_paper_cols, row)) for row in cur.fetchall()]
+
+        cur.execute('''
+            SELECT
+                d."DepartmentID"   AS department_id,
+                d."DepartmentName" AS department_name,
+                d."CollegeID"      AS college_id,
+                COUNT(DISTINCT u."UserID") AS total_researchers,
+                COUNT(DISTINCT u."UserID") FILTER (WHERE r."LastSyncedAt" IS NOT NULL) AS active_researchers,
+                COUNT(DISTINCT rp."PaperID") AS total_papers,
+                COALESCE(SUM(COALESCE((rp."RawData_Log"->'cited_by'->>'value')::int, 0)), 0) AS total_citations,
+                COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q1') AS total_q1_papers,
+                COUNT(DISTINCT rp."PaperID")
+                    FILTER (WHERE rp."Indexing" = 'Scopus' OR jr."Quartile" IS NOT NULL) AS total_scopus_papers,
+                COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = 'ISI') AS total_isi_papers
+            FROM "Department" d
+            LEFT JOIN "Works_In" w ON w."DepartmentID" = d."DepartmentID" AND w."IsCurrentPosition" = TRUE
+            LEFT JOIN "Users" u ON u."UserID" = w."UserID" AND u."UserType" = 'Researcher'
+            LEFT JOIN "Researcher" r ON r."UserID" = u."UserID"
+            LEFT JOIN "Authors" a ON a."UserID" = u."UserID"
+            LEFT JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID" AND rp."PubYear" = ANY(%s)
+            LEFT JOIN "JournalRankings" jr ON jr."JournalID" = rp."JournalID"
+            GROUP BY d."DepartmentID", d."DepartmentName", d."CollegeID"
+            ORDER BY total_papers DESC NULLS LAST
+        ''', [years])
+        dept_cols = [c[0] for c in cur.description]
+        departments = [dict(zip(dept_cols, row)) for row in cur.fetchall()]
+
+    return response.Response({
+        'focus_years': years,
+        'totals': {
+            'researchers':         dept_agg['researchers'] or 0,
+            'active_researchers':  dept_agg['active'] or 0,
+            'papers':              paper_totals[0] or 0,
+            'citations':           paper_totals[1] or 0,
+            'q1_papers':           paper_totals[2] or 0,
+            'scopus_papers':       paper_totals[3] or 0,
+            'isi_papers':          paper_totals[4] or 0,
+            'avg_h_index':         float(dept_agg['avg_h'] or 0),
+        },
+        'top_researchers': [
+            {
+                'user_id':         r[0],
+                'full_name_ar':    r[1],
+                'department_name': r[2],
+                'total_papers':    r[3],
+                'total_citations': r[4],
+                'h_index':         0,
+            }
+            for r in top_researchers_rows
+        ],
+        'top_papers':      top_papers,
+        'departments':     departments,
+    })
