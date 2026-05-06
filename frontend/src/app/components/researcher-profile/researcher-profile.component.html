@@ -1,25 +1,25 @@
-<div class="min-h-screen bg-stone-50 px-8 py-10 max-w-6xl mx-auto">
+<div class="min-h-screen bg-ink-100 px-8 py-10 max-w-6xl mx-auto">
   @if (loading()) {
-    <div class="text-center text-stone-400 py-20">
+    <div class="text-center text-ink-400 py-20">
       <div class="text-sm">جاري التحميل...</div>
     </div>
   } @else if (error()) {
     <div class="text-center py-20">
-      <div class="text-stone-900 text-lg font-semibold mb-2">عذراً</div>
-      <div class="text-sm text-stone-500">{{ error() }}</div>
+      <div class="text-ink-900 text-lg font-semibold mb-2">عذراً</div>
+      <div class="text-sm text-ink-500">{{ error() }}</div>
     </div>
   } @else if (data(); as d) {
 
     <!-- Identity header -->
     <header class="mb-10">
-      <div class="text-xs uppercase tracking-widest text-stone-500 font-medium mb-2">
+      <div class="text-xs uppercase tracking-widest text-ink-500 font-medium mb-2">
         {{ d.identity.department_name || 'باحث' }}
       </div>
-      <h1 class="text-4xl font-bold text-stone-900 leading-tight">
+      <h1 class="text-4xl font-bold text-ink-900 leading-tight">
         {{ d.identity.full_name_ar || d.identity.last_name }}
       </h1>
       @if (d.identity.email && !d.identity.email.includes('placeholder')) {
-        <div class="text-sm text-stone-500 mt-2">{{ d.identity.email }}</div>
+        <div class="text-sm text-ink-500 mt-2">{{ d.identity.email }}</div>
       }
 
       <!-- Identifier pills -->
@@ -27,24 +27,24 @@
         @if (d.identity.scholar_id) {
           <a [href]="'https://scholar.google.com/citations?user=' + d.identity.scholar_id"
              target="_blank"
-             class="text-[11px] px-3 py-1 rounded-full bg-white border border-stone-200
-                    text-stone-700 hover:bg-stone-100 transition">
+             class="text-[11px] px-3 py-1 rounded-full bg-white border border-ink-200
+                    text-ink-700 hover:bg-ink-100 transition">
             Google Scholar
           </a>
         }
         @if (d.identity.orcid) {
           <a [href]="'https://orcid.org/' + d.identity.orcid"
              target="_blank"
-             class="text-[11px] px-3 py-1 rounded-full bg-white border border-stone-200
-                    text-stone-700 hover:bg-stone-100 transition">
+             class="text-[11px] px-3 py-1 rounded-full bg-white border border-ink-200
+                    text-ink-700 hover:bg-ink-100 transition">
             ORCID
           </a>
         }
         @if (d.identity.openalex_author_id) {
           <a [href]="'https://openalex.org/' + d.identity.openalex_author_id"
              target="_blank"
-             class="text-[11px] px-3 py-1 rounded-full bg-white border border-stone-200
-                    text-stone-700 hover:bg-stone-100 transition">
+             class="text-[11px] px-3 py-1 rounded-full bg-white border border-ink-200
+                    text-ink-700 hover:bg-ink-100 transition">
             OpenAlex
           </a>
         }
@@ -53,36 +53,36 @@
 
     <!-- KPI cards -->
     <div class="grid grid-cols-3 gap-4 mb-10">
-      <div class="bg-white rounded-2xl p-6 border border-stone-100">
-        <div class="text-xs text-stone-500 mb-1">Publications</div>
-        <div class="text-3xl font-bold text-stone-900">{{ fmt(d.stats.total_papers) }}</div>
-        <div class="text-xs text-stone-400 mt-1">{{ d.stats.q1_papers }} في Q1</div>
+      <div class="bg-white rounded-2xl p-6 border border-ink-100">
+        <div class="text-xs text-ink-500 mb-1">Publications</div>
+        <div class="text-3xl font-bold text-ink-900">{{ fmt(d.stats.total_papers) }}</div>
+        <div class="text-xs text-ink-400 mt-1">{{ d.stats.q1_papers }} في Q1</div>
       </div>
-      <div class="bg-white rounded-2xl p-6 border border-stone-100">
-        <div class="text-xs text-stone-500 mb-1">Citations (cumulative)</div>
-        <div class="text-3xl font-bold text-stone-900">{{ fmt(d.stats.total_citations) }}</div>
-        <div class="text-xs text-stone-400 mt-1">إجمالي على مر السنين</div>
+      <div class="bg-white rounded-2xl p-6 border border-ink-100">
+        <div class="text-xs text-ink-500 mb-1">Citations (cumulative)</div>
+        <div class="text-3xl font-bold text-ink-900">{{ fmt(d.stats.total_citations) }}</div>
+        <div class="text-xs text-ink-400 mt-1">إجمالي على مر السنين</div>
       </div>
-      <div class="bg-white rounded-2xl p-6 border border-stone-100">
-        <div class="text-xs text-stone-500 mb-1">Indexing</div>
-        <div class="text-3xl font-bold text-stone-900">{{ fmt(d.stats.scopus_papers) }}</div>
-        <div class="text-xs text-stone-400 mt-1">Scopus indexed</div>
+      <div class="bg-white rounded-2xl p-6 border border-ink-100">
+        <div class="text-xs text-ink-500 mb-1">Indexing</div>
+        <div class="text-3xl font-bold text-ink-900">{{ fmt(d.stats.scopus_papers) }}</div>
+        <div class="text-xs text-ink-400 mt-1">Scopus indexed</div>
       </div>
     </div>
 
     <!-- Citations per year chart -->
     @if (chart(); as c) {
-      <section class="bg-white rounded-2xl p-6 border border-stone-100 mb-10">
+      <section class="bg-white rounded-2xl p-6 border border-ink-100 mb-10">
         <div class="flex items-baseline justify-between mb-5">
-          <h2 class="text-lg font-semibold text-stone-900">Citations لكل سنة</h2>
-          <div class="text-xs text-stone-500">السايتيشن المستلمة في كل سنة</div>
+          <h2 class="text-lg font-semibold text-ink-900">Citations لكل سنة</h2>
+          <div class="text-xs text-ink-500">السايتيشن المستلمة في كل سنة</div>
         </div>
         <svg [attr.viewBox]="'0 0 ' + c.W + ' ' + c.H"
              class="w-full h-auto" preserveAspectRatio="xMidYMid meet">
           <!-- Y-axis labels -->
           @for (yl of c.yLabels; track yl.v) {
             <text [attr.x]="c.padding.left - 8" [attr.y]="yl.y + 4"
-                  text-anchor="end" class="text-[10px] fill-stone-400">
+                  text-anchor="end" class="text-[10px] fill-ink-400">
               {{ yl.v }}
             </text>
             <line [attr.x1]="c.padding.left" [attr.x2]="c.W - c.padding.right"
@@ -98,7 +98,7 @@
               <text [attr.x]="b.x + b.w / 2"
                     [attr.y]="c.H - c.padding.bottom + 16"
                     text-anchor="middle"
-                    class="text-[10px] fill-stone-500">
+                    class="text-[10px] fill-ink-500">
                 {{ b.year }}
               </text>
               @if (b.h > 14) {
@@ -114,8 +114,8 @@
         </svg>
       </section>
     } @else {
-      <section class="bg-white rounded-2xl p-6 border border-stone-100 mb-10 text-center">
-        <div class="text-sm text-stone-400">
+      <section class="bg-white rounded-2xl p-6 border border-ink-100 mb-10 text-center">
+        <div class="text-sm text-ink-400">
           ما عندنا citations per-year data لهذا الباحث بعد
         </div>
       </section>
@@ -124,50 +124,50 @@
     <!-- Papers list grouped by year -->
     <section class="space-y-6">
       <div class="flex items-baseline justify-between">
-        <h2 class="text-lg font-semibold text-stone-900">
+        <h2 class="text-lg font-semibold text-ink-900">
           الابحاث ({{ d.papers.length }})
         </h2>
       </div>
 
       @for (group of papersByYear(); track group.year) {
-        <div class="bg-white rounded-2xl border border-stone-100 overflow-hidden">
-          <div class="px-6 py-3 bg-stone-50/50 border-b border-stone-100
+        <div class="bg-white rounded-2xl border border-ink-100 overflow-hidden">
+          <div class="px-6 py-3 bg-ink-100/50 border-b border-ink-100
                       flex items-center justify-between">
-            <div class="text-sm font-semibold text-stone-700">
+            <div class="text-sm font-semibold text-ink-700">
               {{ group.year || 'بدون سنة' }}
             </div>
-            <div class="text-xs text-stone-500">{{ group.papers.length }} ورقة</div>
+            <div class="text-xs text-ink-500">{{ group.papers.length }} ورقة</div>
           </div>
-          <ul class="divide-y divide-stone-100">
+          <ul class="divide-y divide-ink-100">
             @for (p of group.papers; track p.paper_id) {
-              <li class="px-6 py-4 hover:bg-stone-50 transition-colors">
+              <li class="px-6 py-4 hover:bg-ink-100 transition-colors">
                 <div class="flex items-start justify-between gap-4">
                   <div class="flex-1 min-w-0">
-                    <div class="text-sm font-medium text-stone-900 leading-snug
+                    <div class="text-sm font-medium text-ink-900 leading-snug
                                 line-clamp-2">
                       {{ p.title }}
                     </div>
                     <div class="flex flex-wrap items-center gap-2 mt-2 text-xs">
                       @if (p.journal_name) {
-                        <span class="text-stone-600">{{ p.journal_name }}</span>
+                        <span class="text-ink-600">{{ p.journal_name }}</span>
                       }
                       @if (p.quartile) {
-                        <span class="px-1.5 py-0.5 rounded bg-stone-900 text-white text-[10px]">
+                        <span class="px-1.5 py-0.5 rounded bg-ink-900 text-white text-[10px]">
                           {{ p.quartile }}
                         </span>
                       }
                       @if (p.venue_type) {
-                        <span class="text-stone-400">·</span>
-                        <span class="text-stone-500">{{ p.venue_type }}</span>
+                        <span class="text-ink-400">·</span>
+                        <span class="text-ink-500">{{ p.venue_type }}</span>
                       }
                       @if (p.indexing) {
-                        <span class="text-stone-400">·</span>
-                        <span class="text-stone-500">{{ p.indexing }}</span>
+                        <span class="text-ink-400">·</span>
+                        <span class="text-ink-500">{{ p.indexing }}</span>
                       }
                       @if (p.doi) {
-                        <span class="text-stone-400">·</span>
+                        <span class="text-ink-400">·</span>
                         <a [href]="'https://doi.org/' + p.doi" target="_blank"
-                           class="text-stone-500 hover:text-stone-900 underline-offset-2 hover:underline">
+                           class="text-ink-500 hover:text-ink-900 underline-offset-2 hover:underline">
                           DOI
                         </a>
                       }
@@ -175,10 +175,10 @@
                   </div>
 
                   <div class="text-right shrink-0">
-                    <div class="text-2xl font-bold text-stone-900">
+                    <div class="text-2xl font-bold text-ink-900">
                       {{ fmt(p.citations) }}
                     </div>
-                    <div class="text-[10px] text-stone-400 uppercase tracking-wide">
+                    <div class="text-[10px] text-ink-400 uppercase tracking-wide">
                       citations
                     </div>
                   </div>
@@ -188,7 +188,7 @@
                 @if (p.citations_by_year && (p.citations_by_year | keyvalue).length > 0) {
                   <div class="mt-3 flex flex-wrap gap-1.5">
                     @for (entry of (p.citations_by_year | keyvalue); track entry.key) {
-                      <span class="text-[10px] px-2 py-0.5 rounded-md bg-stone-100 text-stone-600">
+                      <span class="text-[10px] px-2 py-0.5 rounded-md bg-ink-100 text-ink-600">
                         {{ entry.key }}: <span class="font-semibold">{{ entry.value }}</span>
                       </span>
                     }

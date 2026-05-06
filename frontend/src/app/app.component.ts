@@ -21,8 +21,11 @@ import { ResearcherSearchSidebarComponent } from
   imports: [RouterOutlet, ResearcherSearchSidebarComponent],
   template: `
     <div class="min-h-screen flex" dir="rtl">
-      <!-- Right sidebar (search + future tools) -->
-      <aside class="w-80 shrink-0 border-l border-stone-200 bg-stone-50
+      <!-- Right sidebar (search + future tools).
+           Uses ink-* (project palette) for consistency with the rest
+           of the dashboard. Border-l + white bg makes it pop against
+           the body's ink-100 backdrop. -->
+      <aside class="w-80 shrink-0 border-l border-ink-200 bg-white
                     sticky top-0 h-screen overflow-y-auto">
         <app-researcher-search-sidebar />
       </aside>
