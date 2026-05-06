@@ -506,27 +506,10 @@ def overview(request):
 
     from django.db import connection
     with connection.cursor() as cur:
-        if len(years) == 1:
-            citations_expr = '''
-                COALESCE(SUM(
-                    COALESCE((rp."CitationsByYear"->>%s)::int, 0)
-                ), 0)
-            '''
-            citations_params = [str(years[0])]
-        else:
-            citations_expr = '''
-                COALESCE(SUM(COALESCE(
-                    ("RawData_Log"->'cited_by'->>'value')::int,
-                    ("RawData_Log"->>'cited_by_count')::int,
-                    0
-                )), 0)
-            '''
-            citations_params = []
-
-        cur.execute(f'''
+        # Papers count: filter by PubYear (papers published in window).
+        cur.execute('''
             SELECT
                 COUNT(DISTINCT rp."PaperID") AS papers,
-                {citations_expr} AS citations,
                 COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q1') AS q1,
                 COUNT(DISTINCT rp."PaperID")
                     FILTER (WHERE rp."Indexing" = 'Scopus' OR jr."Quartile" IS NOT NULL) AS scopus,
@@ -535,27 +518,72 @@ def overview(request):
             LEFT JOIN "JournalRankings" jr ON jr."JournalID" = rp."JournalID"
             WHERE rp."PubYear" = ANY(%s)
               AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID")
-        ''', citations_params + [years])
-        paper_totals = cur.fetchone()
+        ''', [years])
+        paper_count_row = cur.fetchone()
 
-        cur.execute('''
+        # Citations: per-year semantics. SUM(CitationsByYear[year]) across
+        # ALL papers attributed to our researchers (regardless of PubYear).
+        # This reflects "citations RECEIVED in those years" — a true
+        # impact metric, not just citations to newly-published papers.
+        year_keys_expr = ' + '.join([
+            f"COALESCE((rp.\"CitationsByYear\"->>%s)::int, 0)"
+            for _ in years
+        ])
+        cur.execute(f'''
+            SELECT COALESCE(SUM({year_keys_expr}), 0) AS citations
+            FROM "ResearchPaper" rp
+            WHERE EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID")
+        ''', [str(y) for y in years])
+        citations_row = cur.fetchone()
+
+        # Combine into the shape downstream code expects:
+        # (papers, citations, q1, scopus, isi)
+        paper_totals = (
+            paper_count_row[0],   # papers
+            citations_row[0],     # citations (per-year sum)
+            paper_count_row[1],   # q1
+            paper_count_row[2],   # scopus
+            paper_count_row[3],   # isi
+        )
+
+        # Top researchers: papers PUBLISHED in window + citations RECEIVED
+        # in window (per-year sum). Two CTEs, joined on UserID.
+        year_keys_expr_alias = ' + '.join([
+            f"COALESCE((rp_all.\"CitationsByYear\"->>%s)::int, 0)"
+            for _ in years
+        ])
+        cur.execute(f'''
+            WITH papers_in_window AS (
+                SELECT a."UserID",
+                       COUNT(DISTINCT rp."PaperID") AS focus_papers
+                FROM "Authors" a
+                JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
+                WHERE rp."PubYear" = ANY(%s)
+                GROUP BY a."UserID"
+            ),
+            citations_in_window AS (
+                SELECT a."UserID",
+                       COALESCE(SUM({year_keys_expr_alias}), 0) AS focus_citations
+                FROM "Authors" a
+                JOIN "ResearchPaper" rp_all ON rp_all."PaperID" = a."PaperID"
+                GROUP BY a."UserID"
+            )
             SELECT
                 u."UserID",
                 u."FullName_Ar",
                 d."DepartmentName",
-                COUNT(DISTINCT rp."PaperID") AS focus_papers,
-                COALESCE(SUM(COALESCE(("RawData_Log"->'cited_by'->>'value')::int, 0)), 0) AS focus_citations
+                COALESCE(p.focus_papers, 0) AS focus_papers,
+                COALESCE(c.focus_citations, 0) AS focus_citations
             FROM "Users" u
-            JOIN "Authors" a ON a."UserID" = u."UserID"
-            JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
-            LEFT JOIN "Works_In" w ON w."UserID" = u."UserID" AND w."IsCurrentPosition" = TRUE
+            LEFT JOIN papers_in_window    p ON p."UserID" = u."UserID"
+            LEFT JOIN citations_in_window c ON c."UserID" = u."UserID"
+            LEFT JOIN "Works_In"   w ON w."UserID" = u."UserID" AND w."IsCurrentPosition" = TRUE
             LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
-            WHERE rp."PubYear" = ANY(%s)
-              AND u."UserType" = 'Researcher'
-            GROUP BY u."UserID", u."FullName_Ar", d."DepartmentName"
+            WHERE u."UserType" = 'Researcher'
+              AND COALESCE(p.focus_papers, 0) > 0
             ORDER BY focus_papers DESC, focus_citations DESC
             LIMIT 5
-        ''', [years])
+        ''', [years] + [str(y) for y in years])
         top_researchers_rows = cur.fetchall()
 
         cur.execute('''
@@ -567,7 +595,25 @@ def overview(request):
         top_paper_cols = [c[0] for c in cur.description]
         top_papers = [dict(zip(top_paper_cols, row)) for row in cur.fetchall()]
 
-        cur.execute('''
+        # Departments: papers PUBLISHED in window + citations RECEIVED in
+        # window (per-year). Citation aggregation lives in a separate CTE
+        # to avoid the cartesian explosion of joining authors→papers→
+        # citations (each Department-Researcher contributes once).
+        year_keys_dept = ' + '.join([
+            f"COALESCE((rp_all.\"CitationsByYear\"->>%s)::int, 0)"
+            for _ in years
+        ])
+        cur.execute(f'''
+            WITH dept_citations AS (
+                SELECT
+                    w."DepartmentID",
+                    COALESCE(SUM({year_keys_dept}), 0) AS total_citations
+                FROM "Works_In" w
+                JOIN "Authors" a ON a."UserID" = w."UserID"
+                JOIN "ResearchPaper" rp_all ON rp_all."PaperID" = a."PaperID"
+                WHERE w."IsCurrentPosition" = TRUE
+                GROUP BY w."DepartmentID"
+            )
             SELECT
                 d."DepartmentID"   AS department_id,
                 d."DepartmentName" AS department_name,
@@ -575,7 +621,7 @@ def overview(request):
                 COUNT(DISTINCT u."UserID") AS total_researchers,
                 COUNT(DISTINCT u."UserID") FILTER (WHERE r."LastSyncedAt" IS NOT NULL) AS active_researchers,
                 COUNT(DISTINCT rp."PaperID") AS total_papers,
-                COALESCE(SUM(COALESCE((rp."RawData_Log"->'cited_by'->>'value')::int, 0)), 0) AS total_citations,
+                COALESCE(MAX(dc.total_citations), 0) AS total_citations,
                 COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q1') AS total_q1_papers,
                 COUNT(DISTINCT rp."PaperID")
                     FILTER (WHERE rp."Indexing" = 'Scopus' OR jr."Quartile" IS NOT NULL) AS total_scopus_papers,
@@ -587,9 +633,10 @@ def overview(request):
             LEFT JOIN "Authors" a ON a."UserID" = u."UserID"
             LEFT JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID" AND rp."PubYear" = ANY(%s)
             LEFT JOIN "JournalRankings" jr ON jr."JournalID" = rp."JournalID"
+            LEFT JOIN dept_citations dc ON dc."DepartmentID" = d."DepartmentID"
             GROUP BY d."DepartmentID", d."DepartmentName", d."CollegeID"
             ORDER BY total_papers DESC NULLS LAST
-        ''', [years])
+        ''', [str(y) for y in years] + [years])
         dept_cols = [c[0] for c in cur.description]
         departments = [dict(zip(dept_cols, row)) for row in cur.fetchall()]
 
