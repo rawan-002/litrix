@@ -27,6 +27,30 @@ export class PaperDetailModalComponent implements OnChanges {
   readonly loading = signal<boolean>(false);
   readonly error   = signal<string | null>(null);
 
+  // Abstract truncation. Show first N chars; "Show more" reveals all.
+  readonly ABSTRACT_PREVIEW_CHARS = 220;
+  readonly abstractExpanded = signal<boolean>(false);
+
+  readonly abstractIsLong = computed(() => {
+    const a = this.data()?.abstract;
+    return typeof a === 'string' && a.length > this.ABSTRACT_PREVIEW_CHARS;
+  });
+
+  readonly abstractDisplay = computed(() => {
+    const a = this.data()?.abstract || '';
+    if (this.abstractExpanded() || a.length <= this.ABSTRACT_PREVIEW_CHARS) {
+      return a;
+    }
+    // Truncate at word boundary if possible
+    const truncated = a.slice(0, this.ABSTRACT_PREVIEW_CHARS);
+    const lastSpace = truncated.lastIndexOf(' ');
+    return (lastSpace > 50 ? truncated.slice(0, lastSpace) : truncated) + '…';
+  });
+
+  toggleAbstract() {
+    this.abstractExpanded.update(v => !v);
+  }
+
   // Mini bar chart for citations-over-time
   readonly chart = computed(() => {
     const cby = this.data()?.citations_by_year;
@@ -70,6 +94,7 @@ export class PaperDetailModalComponent implements OnChanges {
     this.loading.set(true);
     this.error.set(null);
     this.data.set(null);
+    this.abstractExpanded.set(false);  // reset for each new paper
     this.api.getPaperDetail(id).subscribe({
       next: payload => {
         this.data.set(payload);

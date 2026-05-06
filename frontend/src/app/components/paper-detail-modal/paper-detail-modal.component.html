@@ -45,13 +45,22 @@
         <!-- Body -->
         <div class="px-7 py-5 space-y-5">
 
-          <!-- Abstract -->
+          <!-- Abstract — truncated by default, "Show more" expands -->
           @if (p.abstract) {
             <div>
               <h4 class="text-xs uppercase tracking-wide text-ink-500 font-medium mb-2">
                 Abstract
               </h4>
-              <p class="text-sm text-ink-700 leading-relaxed">{{ p.abstract }}</p>
+              <p class="text-sm text-ink-700 leading-relaxed whitespace-pre-line">
+                {{ abstractDisplay() }}
+              </p>
+              @if (abstractIsLong()) {
+                <button (click)="toggleAbstract()"
+                        class="mt-2 text-xs font-medium text-accent
+                               hover:text-accent-hover transition-colors">
+                  {{ abstractExpanded() ? 'Show less' : 'Show more' }}
+                </button>
+              }
             </div>
           }
 
