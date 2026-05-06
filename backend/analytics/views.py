@@ -83,6 +83,89 @@ def export_excel(request):
     header_fill = PatternFill('solid', fgColor='1D1D1F')
     header_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
+    # Apple-style KPI overview sheet — first sheet so it opens by default.
+    # Mirrors the dashboard cards: Researchers / Publications / Citations / h-index.
+    if 'summary' in sheets or 'departments' in sheets or 'researchers' in sheets:
+        ws_overview = wb.create_sheet('نظرة عامة', 0)
+        big_value_font = Font(bold=True, size=28, color='1D1D1F')
+        label_font = Font(bold=True, size=11, color='86868B')
+        sublabel_font = Font(size=10, color='86868B')
+        title_font = Font(bold=True, size=18, color='1D1D1F')
+        bg_fill = PatternFill('solid', fgColor='FAFAFA')
+
+        # Title row
+        ws_overview['A1'] = 'Litrix — نظرة عامة'
+        ws_overview['A1'].font = title_font
+        ws_overview.row_dimensions[1].height = 36
+        years_label = '، '.join(str(y) for y in sorted(years))
+        ws_overview['A2'] = f'خلال {("السنتين" if len(years) == 2 else "السنوات")}: {years_label}'
+        ws_overview['A2'].font = sublabel_font
+
+        # KPI computation — same per-year semantics as the dashboard.
+        with connection.cursor() as cur:
+            year_keys_expr = ' + '.join([
+                f"COALESCE((rp.\"CitationsByYear\"->>%s)::int, 0)"
+                for _ in years
+            ])
+            cur.execute(f'''
+                WITH window_papers AS (
+                    SELECT DISTINCT rp."PaperID", jr."Quartile", rp."Indexing"
+                    FROM "ResearchPaper" rp
+                    LEFT JOIN "JournalRankings" jr ON jr."JournalID" = rp."JournalID"
+                    WHERE rp."PubYear" = ANY(%s)
+                      AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID")
+                ),
+                year_citations AS (
+                    SELECT COALESCE(SUM({year_keys_expr}), 0) AS total
+                    FROM "ResearchPaper" rp
+                    WHERE EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID")
+                )
+                SELECT
+                    (SELECT COUNT(*) FROM "Users" WHERE "UserType" = 'Researcher')                  AS researchers,
+                    (SELECT COUNT(*) FROM "Users" u
+                       JOIN "Researcher" r ON r."UserID" = u."UserID"
+                      WHERE r."LastSyncedAt" IS NOT NULL)                                            AS active,
+                    (SELECT COUNT(*) FROM window_papers)                                            AS papers,
+                    (SELECT COUNT(*) FROM window_papers WHERE "Quartile" = 'Q1')                    AS q1,
+                    (SELECT total FROM year_citations)                                              AS citations,
+                    (SELECT ROUND(AVG(h_index)::numeric, 1) FROM v_researcher_h_index)              AS avg_h
+            ''', [years] + [str(y) for y in years])
+            r_total, r_active, p_total, p_q1, c_total, avg_h = cur.fetchone()
+
+        # KPI cards laid out across columns (4 cards in a row)
+        # Each card spans 2 columns: A-B, C-D, E-F, G-H
+        cards = [
+            ('Researchers',  str(r_total),                f'{r_active} active'),
+            ('Publications', f'{p_total:,}',              f'{p_q1} in Q1 journals'),
+            ('Citations',    f'{c_total:,}',              f'خلال {years_label}'),
+            ('h-index',      str(avg_h or 0),             'avg h-index'),
+        ]
+        for idx, (label, value, sub) in enumerate(cards):
+            col_label = chr(ord('A') + idx * 2)
+            col_value = chr(ord('A') + idx * 2)  # same col, multiple rows
+
+            # Row 4: label
+            cell_label = ws_overview.cell(row=4, column=idx * 2 + 1, value=label.upper())
+            cell_label.font = label_font
+            cell_label.fill = bg_fill
+
+            # Row 5: big value
+            cell_val = ws_overview.cell(row=5, column=idx * 2 + 1, value=value)
+            cell_val.font = big_value_font
+            cell_val.fill = bg_fill
+            ws_overview.row_dimensions[5].height = 44
+
+            # Row 6: sublabel
+            cell_sub = ws_overview.cell(row=6, column=idx * 2 + 1, value=sub)
+            cell_sub.font = sublabel_font
+            cell_sub.fill = bg_fill
+
+        # Widen the KPI columns
+        for col in ['A', 'C', 'E', 'G']:
+            ws_overview.column_dimensions[col].width = 22
+        for col in ['B', 'D', 'F', 'H']:
+            ws_overview.column_dimensions[col].width = 4  # spacer
+
     def style_header(ws, ncols):
         for col in range(1, ncols + 1):
             c = ws.cell(row=1, column=col)
@@ -235,9 +318,12 @@ def export_excel(request):
     if 'journals' in sheets:
         for year in sorted(years):
             ws = wb.create_sheet(f'Journals {year}')
+            # Two author columns:
+            #   1. Al-Baha researchers only (Arabic names, NO "(جامعة الباحة)" suffix)
+            #   2. All authors combined (Arabic + foreign, no affiliations)
             ws.append([
                 'Department', 'Title',
-                'Al-Baha Authors', 'External Co-authors',
+                'باحثو جامعة الباحة', 'كل المؤلفين',
                 'Journal', 'Quartile', 'IF', 'Indexing',
                 'Citations', 'DOI'
             ])
@@ -246,7 +332,8 @@ def export_excel(request):
                 cur.execute('''
                     SELECT
                         department_name, title,
-                        albaha_authors, external_authors,
+                        authors_ar,             -- clean Arabic names
+                        all_authors_combined,   -- all authors, no affiliations
                         journal_name, quartile, impact_factor, indexing,
                         citations, doi
                     FROM v_paper_details
@@ -255,14 +342,14 @@ def export_excel(request):
                 ''', [year])
                 for row in cur.fetchall():
                     ws.append(list(row))
-            set_widths(ws, [22, 60, 50, 40, 30, 10, 8, 12, 10, 30])
+            set_widths(ws, [22, 60, 50, 50, 30, 10, 8, 12, 10, 30])
 
     if 'conferences' in sheets:
         for year in sorted(years):
             ws = wb.create_sheet(f'Conferences {year}')
             ws.append([
                 'Department', 'Title',
-                'Al-Baha Authors', 'External Co-authors',
+                'باحثو جامعة الباحة', 'كل المؤلفين',
                 'Conference', 'Indexing', 'Citations', 'DOI'
             ])
             style_header(ws, 8)
@@ -270,7 +357,8 @@ def export_excel(request):
                 cur.execute('''
                     SELECT
                         department_name, title,
-                        albaha_authors, external_authors,
+                        authors_ar,             -- clean Arabic names
+                        all_authors_combined,   -- all authors, no affiliations
                         journal_name, indexing, citations, doi
                     FROM v_paper_details
                     WHERE pub_year = %s AND venue_type = 'Conference'
@@ -278,7 +366,7 @@ def export_excel(request):
                 ''', [year])
                 for row in cur.fetchall():
                     ws.append(list(row))
-            set_widths(ws, [22, 60, 50, 40, 30, 12, 10, 30])
+            set_widths(ws, [22, 60, 50, 50, 30, 12, 10, 30])
 
     if not wb.sheetnames:
         ws = wb.create_sheet('Empty')
