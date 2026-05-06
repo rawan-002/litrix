@@ -93,16 +93,16 @@ interface DeptGroup {
 
                 <!-- Researchers in this department -->
                 @if (isExpanded(group.department)) {
-                  <ul class="space-y-0.5 mt-1 mr-3">
+                  <ul class="list-none space-y-0.5 mt-1 ml-3 p-0">
                     @for (r of group.researchers; track r.user_id) {
-                      <li>
+                      <li class="list-none">
                         <button
                           (click)="select(r)"
-                          class="w-full text-right px-3 py-2 rounded-apple
+                          class="w-full text-left px-3 py-2 rounded-apple
                                  hover:bg-ink-50 transition-colors group">
                           <div class="text-sm font-medium text-ink-700
-                                      group-hover:text-ink-900 line-clamp-1">
-                            {{ r.full_name_ar || r.full_name_en }}
+                                      group-hover:text-ink-900 truncate">
+                            {{ r.full_name_ar || r.full_name_en || ('User #' + r.user_id) }}
                           </div>
                           <div class="text-[10px] text-ink-400 mt-0.5">
                             {{ r.papers }} pubs
