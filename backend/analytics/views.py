@@ -631,7 +631,9 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                 'department_name':   row[10],
             }
 
-            # Aggregated stats + per-year citations
+            # Aggregated stats. For citations, sum the per-paper Scholar
+            # cited_by.value (most accurate per-paper signal), falling
+            # back to OpenAlex's cumulative count.
             cur.execute('''
                 SELECT
                     COUNT(DISTINCT rp."PaperID")                         AS total_papers,
@@ -652,6 +654,38 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                 WHERE a."UserID" = %s
             ''', [pk])
             stats_row = cur.fetchone()
+
+            # If we have author-level per-year data from Scholar, prefer
+            # its TOTAL (Scholar's own count) over per-paper aggregation.
+            try:
+                cur.execute(
+                    'SELECT "CitationsByYear" FROM "Researcher" WHERE "UserID" = %s',
+                    [pk],
+                )
+                rcby = cur.fetchone()
+                if rcby and rcby[0]:
+                    raw = rcby[0]
+                    if isinstance(raw, str):
+                        import json as _json
+                        try:
+                            raw = _json.loads(raw)
+                        except Exception:
+                            raw = {}
+                    scholar_total = sum(
+                        int(v) for v in (raw or {}).values()
+                        if str(v).isdigit() or isinstance(v, int)
+                    )
+                    if scholar_total > 0:
+                        # Override with Scholar's authoritative total
+                        stats_row = (
+                            stats_row[0],
+                            scholar_total,
+                            stats_row[2],
+                            stats_row[3],
+                            stats_row[4],
+                        )
+            except Exception:
+                pass
             stats = {
                 'total_papers':    stats_row[0],
                 'total_citations': stats_row[1],
@@ -660,31 +694,53 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                 'isi_papers':      stats_row[4],
             }
 
-            # Per-year citations: merge JSONB across all his papers.
-            # Safe-casts protect against non-numeric values in the JSONB.
+            # Per-year citations: PREFER Researcher.CitationsByYear (the
+            # author-level data straight from Scholar's cited_by.graph,
+            # which is what Scholar itself displays in the profile).
+            # Fall back to summing per-paper CitationsByYear if not set.
+            citations_by_year = []
             try:
                 cur.execute('''
-                    SELECT
-                        yr.year::int AS year,
-                        SUM(CASE WHEN yr.cnt ~ '^[0-9]+$'
-                                 THEN yr.cnt::int
-                                 ELSE 0 END) AS citations
-                    FROM "ResearchPaper" rp
-                    JOIN "Authors" a ON a."PaperID" = rp."PaperID"
-                    CROSS JOIN LATERAL jsonb_each_text(
-                        COALESCE(rp."CitationsByYear", '{}'::jsonb)
-                    ) AS yr(year, cnt)
-                    WHERE a."UserID" = %s
-                      AND yr.year ~ '^[0-9]+$'
-                    GROUP BY yr.year
-                    ORDER BY yr.year
+                    SELECT "CitationsByYear" FROM "Researcher"
+                    WHERE "UserID" = %s
                 ''', [pk])
-                citations_by_year = [
-                    {'year': r[0], 'citations': r[1]}
-                    for r in cur.fetchall()
-                ]
+                rcby = cur.fetchone()
+                if rcby and rcby[0]:
+                    raw = rcby[0]
+                    if isinstance(raw, str):
+                        import json as _json
+                        try:
+                            raw = _json.loads(raw)
+                        except Exception:
+                            raw = {}
+                    citations_by_year = sorted(
+                        ({'year': int(y), 'citations': int(v)}
+                         for y, v in (raw or {}).items()
+                         if str(y).isdigit()),
+                        key=lambda x: x['year'],
+                    )
+                else:
+                    cur.execute('''
+                        SELECT
+                            yr.year::int AS year,
+                            SUM(CASE WHEN yr.cnt ~ '^[0-9]+$'
+                                     THEN yr.cnt::int
+                                     ELSE 0 END) AS citations
+                        FROM "ResearchPaper" rp
+                        JOIN "Authors" a ON a."PaperID" = rp."PaperID"
+                        CROSS JOIN LATERAL jsonb_each_text(
+                            COALESCE(rp."CitationsByYear", '{}'::jsonb)
+                        ) AS yr(year, cnt)
+                        WHERE a."UserID" = %s
+                          AND yr.year ~ '^[0-9]+$'
+                        GROUP BY yr.year
+                        ORDER BY yr.year
+                    ''', [pk])
+                    citations_by_year = [
+                        {'year': r[0], 'citations': r[1]}
+                        for r in cur.fetchall()
+                    ]
             except Exception:
-                # If JSONB has bad data, fall back to empty rather than 500
                 citations_by_year = []
 
             # Papers list with full metadata
