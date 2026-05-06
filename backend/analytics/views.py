@@ -644,7 +644,8 @@ def overview(request):
 
     from django.db import connection
     with connection.cursor() as cur:
-        # Papers count: filter by PubYear (papers published in window).
+        # Papers count: papers PUBLISHED in window (sets the denominator
+        # for "publications" KPI).
         cur.execute('''
             SELECT
                 COUNT(DISTINCT rp."PaperID") AS papers,
@@ -659,10 +660,11 @@ def overview(request):
         ''', [years])
         paper_count_row = cur.fetchone()
 
-        # Citations: per-year semantics. SUM(CitationsByYear[year]) across
-        # ALL papers attributed to our researchers (regardless of PubYear).
-        # This reflects "citations RECEIVED in those years" — a true
-        # impact metric, not just citations to newly-published papers.
+        # Citations: per-year semantics — a citation is bound to the
+        # year it was received, not the year the paper was published.
+        # SUM(CitationsByYear[year]) across ALL papers attributed to
+        # our researchers (any pub_year). This matches academic norms
+        # for "research impact in YYYY".
         year_keys_expr = ' + '.join([
             f"COALESCE((rp.\"CitationsByYear\"->>%s)::int, 0)"
             for _ in years
@@ -674,18 +676,17 @@ def overview(request):
         ''', [str(y) for y in years])
         citations_row = cur.fetchone()
 
-        # Combine into the shape downstream code expects:
-        # (papers, citations, q1, scopus, isi)
+        # Combine into the (papers, citations, q1, scopus, isi) shape
         paper_totals = (
-            paper_count_row[0],   # papers
-            citations_row[0],     # citations (per-year sum)
-            paper_count_row[1],   # q1
-            paper_count_row[2],   # scopus
-            paper_count_row[3],   # isi
+            paper_count_row[0],
+            citations_row[0],
+            paper_count_row[1],
+            paper_count_row[2],
+            paper_count_row[3],
         )
 
-        # Top researchers: papers PUBLISHED in window + citations RECEIVED
-        # in window (per-year sum). Two CTEs, joined on UserID.
+        # Top researchers: papers PUBLISHED in window + citations
+        # RECEIVED in window (per-year sum across ALL their papers).
         year_keys_expr_alias = ' + '.join([
             f"COALESCE((rp_all.\"CitationsByYear\"->>%s)::int, 0)"
             for _ in years
