@@ -34,11 +34,22 @@ export class ResearcherProfileComponent implements OnInit {
   readonly loading = signal<boolean>(true);
   readonly error   = signal<string | null>(null);
 
-  // Derived: papers grouped by year (newest first)
+  // Paper detail modal
+  readonly selectedPaper = signal<ProfilePaper | null>(null);
+
+  // Pagination for the papers list. Show this many papers max initially;
+  // each "Load More" click bumps it by LOAD_BATCH.
+  readonly LOAD_BATCH = 15;
+  readonly visibleCount = signal<number>(15);
+
+  // Derived: papers grouped by year (newest first), respecting visibleCount.
+  // We slice the FULL ordered list, then re-group, so the slice still
+  // shows the most-recent papers across all years.
   readonly papersByYear = computed(() => {
-    const papers = this.data()?.papers ?? [];
+    const allPapers = this.data()?.papers ?? [];
+    const visible = allPapers.slice(0, this.visibleCount());
     const groups = new Map<number, ProfilePaper[]>();
-    for (const p of papers) {
+    for (const p of visible) {
       const y = p.pub_year ?? 0;
       if (!groups.has(y)) groups.set(y, []);
       groups.get(y)!.push(p);
@@ -49,6 +60,29 @@ export class ResearcherProfileComponent implements OnInit {
       papers: groups.get(y)!,
     }));
   });
+
+  readonly hasMore = computed(() =>
+    (this.data()?.papers?.length ?? 0) > this.visibleCount()
+  );
+
+  loadMore() {
+    this.visibleCount.update(n => n + this.LOAD_BATCH);
+  }
+
+  openPaper(p: ProfilePaper) { this.selectedPaper.set(p); }
+  closePaper()              { this.selectedPaper.set(null); }
+
+  encodeURIComponent(s: string | null | undefined): string {
+    return s ? window.encodeURIComponent(s) : '';
+  }
+
+  citationsByYearEntries(p: ProfilePaper): { year: string; count: number }[] {
+    const cby = p.citations_by_year as any;
+    if (!cby || typeof cby !== 'object') return [];
+    return Object.entries(cby)
+      .map(([year, count]) => ({ year, count: Number(count) || 0 }))
+      .sort((a, b) => a.year.localeCompare(b.year));
+  }
 
   // Chart geometry: convert citations_by_year into bar coordinates
   readonly chart = computed(() => {
