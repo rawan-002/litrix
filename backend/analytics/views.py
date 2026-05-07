@@ -1114,6 +1114,55 @@ def overview(request):
         dept_cols = [c[0] for c in cur.description]
         departments = [dict(zip(dept_cols, row)) for row in cur.fetchall()]
 
+        # Per-year breakdown per department.
+        # Papers: published count per (dept, year) — DISTINCT to avoid
+        # double-counting papers shared across multiple co-authored faculty.
+        # Citations: sum of Researcher.CitationsByYear[year] for each
+        # researcher in the dept (Scholar's authoritative author-level graph).
+        cur.execute('''
+            SELECT w."DepartmentID", rp."PubYear",
+                   COUNT(DISTINCT rp."PaperID") AS papers
+            FROM "Works_In" w
+            JOIN "Authors" a ON a."UserID" = w."UserID"
+            JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
+            WHERE w."IsCurrentPosition" = TRUE
+              AND rp."PubYear" = ANY(%s)
+            GROUP BY w."DepartmentID", rp."PubYear"
+        ''', [years])
+        papers_by_dept_year = {}
+        for did, yr, n in cur.fetchall():
+            papers_by_dept_year.setdefault(did, {})[int(yr)] = int(n)
+
+        cur.execute('''
+            SELECT w."DepartmentID",
+                   year_kv.key::int AS year,
+                   SUM((year_kv.value)::int) AS citations
+            FROM "Works_In" w
+            JOIN "Researcher" r ON r."UserID" = w."UserID"
+            CROSS JOIN LATERAL jsonb_each_text(
+                COALESCE(r."CitationsByYear", '{}'::jsonb)
+            ) AS year_kv
+            WHERE w."IsCurrentPosition" = TRUE
+              AND year_kv.value ~ '^[0-9]+$'
+              AND year_kv.key::int = ANY(%s)
+            GROUP BY w."DepartmentID", year_kv.key::int
+        ''', [years])
+        cites_by_dept_year = {}
+        for did, yr, n in cur.fetchall():
+            cites_by_dept_year.setdefault(did, {})[int(yr)] = int(n)
+
+        # Inject by_year into each department row
+        for d in departments:
+            did = d['department_id']
+            d['by_year'] = [
+                {
+                    'year': y,
+                    'papers':    papers_by_dept_year.get(did, {}).get(y, 0),
+                    'citations': cites_by_dept_year.get(did, {}).get(y, 0),
+                }
+                for y in sorted(years)
+            ]
+
     return response.Response({
         'focus_years': years,
         'totals': {

@@ -130,6 +130,20 @@ export class OverviewDashboardComponent implements OnInit {
     return n.toLocaleString('en-US');
   }
 
+  /** Sum across by_year breakdown — used for the "Total" row in the
+   *  per-department mini-table. Avoids storing the total separately. */
+  deptTotalPapers(dept: any): number {
+    return (dept.by_year || []).reduce(
+      (acc: number, y: any) => acc + (y.papers || 0), 0,
+    );
+  }
+
+  deptTotalCitations(dept: any): number {
+    return (dept.by_year || []).reduce(
+      (acc: number, y: any) => acc + (y.citations || 0), 0,
+    );
+  }
+
   openExportModal()  { this.showExportModal.set(true); }
   closeExportModal() { this.showExportModal.set(false); }
 
