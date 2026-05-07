@@ -340,14 +340,26 @@ def export_excel(request):
             ])
             style_header(ws, 10)
             with connection.cursor() as cur:
+                # Citations come from Researcher.CitationsByYear[year] —
+                # same source as the dashboard. Computed in a separate
+                # subquery so it's not multiplied by the papers JOIN.
                 cur.execute('''
+                    WITH dept_cites AS (
+                        SELECT w."DepartmentID",
+                               SUM(COALESCE((r."CitationsByYear"->>%s)::int, 0)) AS cites
+                        FROM "Works_In" w
+                        JOIN "Researcher" r ON r."UserID" = w."UserID"
+                        WHERE w."IsCurrentPosition" = TRUE
+                          AND r."CitationsByYear" IS NOT NULL
+                        GROUP BY w."DepartmentID"
+                    )
                     SELECT
                         d."DepartmentName",
                         COUNT(DISTINCT u."UserID"),
                         COUNT(DISTINCT rp."PaperID") FILTER (WHERE j."VenueType" = 'Journal'),
                         COUNT(DISTINCT rp."PaperID") FILTER (WHERE j."VenueType" = 'Conference'),
                         COUNT(DISTINCT rp."PaperID"),
-                        COALESCE(SUM(COALESCE((rp."RawData_Log"->'cited_by'->>'value')::int, 0)), 0),
+                        COALESCE(MAX(dc.cites), 0) AS citations,
                         COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q1'),
                         COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q2'),
                         COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q3'),
@@ -361,9 +373,10 @@ def export_excel(request):
                                                AND rp."PubYear" = %s
                     LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
                     LEFT JOIN "JournalRankings" jr ON jr."JournalID" = rp."JournalID"
+                    LEFT JOIN dept_cites dc ON dc."DepartmentID" = d."DepartmentID"
                     GROUP BY d."DepartmentName"
                     ORDER BY 5 DESC
-                ''', [year])
+                ''', [str(year), year])
                 for row in cur.fetchall():
                     ws.append(list(row))
             set_widths(ws, [32, 12, 14, 16, 12, 12, 8, 8, 8, 8])
