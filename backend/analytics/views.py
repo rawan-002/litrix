@@ -202,8 +202,11 @@ def export_excel(request):
 
         # KPI computation — same per-year semantics as the dashboard.
         with connection.cursor() as cur:
+            # Citations sourced from Researcher.CitationsByYear (Scholar's
+            # author-level per-year graph). Same approach as the live
+            # /overview/ endpoint — single source of truth.
             year_keys_expr = ' + '.join([
-                f"COALESCE((rp.\"CitationsByYear\"->>%s)::int, 0)"
+                f"COALESCE((r.\"CitationsByYear\"->>%s)::int, 0)"
                 for _ in years
             ])
             cur.execute(f'''
@@ -216,8 +219,8 @@ def export_excel(request):
                 ),
                 year_citations AS (
                     SELECT COALESCE(SUM({year_keys_expr}), 0) AS total
-                    FROM "ResearchPaper" rp
-                    WHERE EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID")
+                    FROM "Researcher" r
+                    WHERE r."CitationsByYear" IS NOT NULL
                 )
                 SELECT
                     (SELECT COUNT(*) FROM "Users" WHERE "UserType" = 'Researcher')                  AS researchers,
@@ -992,19 +995,19 @@ def overview(request):
         ''', [years])
         paper_count_row = cur.fetchone()
 
-        # Citations: per-year semantics — a citation is bound to the
-        # year it was received, not the year the paper was published.
-        # SUM(CitationsByYear[year]) across ALL papers attributed to
-        # our researchers (any pub_year). This matches academic norms
-        # for "research impact in YYYY".
+        # Citations: SUM Researcher.CitationsByYear for the requested years.
+        # This is Scholar's authoritative per-year graph at the AUTHOR level
+        # (no per-paper backfill needed). Slight over-count risk on co-authored
+        # papers between our own researchers, but acceptable given Scholar's
+        # native granularity and the cost of per-paper SerpAPI fetches.
         year_keys_expr = ' + '.join([
-            f"COALESCE((rp.\"CitationsByYear\"->>%s)::int, 0)"
+            f"COALESCE((r.\"CitationsByYear\"->>%s)::int, 0)"
             for _ in years
         ])
         cur.execute(f'''
             SELECT COALESCE(SUM({year_keys_expr}), 0) AS citations
-            FROM "ResearchPaper" rp
-            WHERE EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID")
+            FROM "Researcher" r
+            WHERE r."CitationsByYear" IS NOT NULL
         ''', [str(y) for y in years])
         citations_row = cur.fetchone()
 
