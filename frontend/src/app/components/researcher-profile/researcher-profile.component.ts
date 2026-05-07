@@ -47,6 +47,9 @@ export class ResearcherProfileComponent implements OnInit {
   readonly sortField = signal<'year' | 'citations'>('year');
   readonly sortDir   = signal<'asc' | 'desc'>('desc');
 
+  // Quartile filter — multi-select. Empty Set = no filter (show all).
+  readonly activeQuartiles = signal<Set<string>>(new Set());
+
   setSort(field: 'year' | 'citations') {
     if (this.sortField() === field) {
       this.sortDir.update(d => d === 'desc' ? 'asc' : 'desc');
@@ -57,9 +60,26 @@ export class ResearcherProfileComponent implements OnInit {
     this.visibleCount.set(this.LOAD_BATCH);
   }
 
-  // Sort the full papers list according to the user's chosen field+direction.
+  toggleQuartile(q: string) {
+    this.activeQuartiles.update(s => {
+      const next = new Set(s);
+      if (next.has(q)) next.delete(q);
+      else next.add(q);
+      return next;
+    });
+    this.visibleCount.set(this.LOAD_BATCH);
+  }
+
+  // Filter papers by selected quartiles, then sort by chosen field+direction.
   readonly sortedPapers = computed(() => {
-    const all = [...(this.data()?.papers ?? [])];
+    let all = [...(this.data()?.papers ?? [])];
+
+    // Quartile filter — empty Set means "show all" (no filter)
+    const quartiles = this.activeQuartiles();
+    if (quartiles.size > 0) {
+      all = all.filter(p => p.quartile && quartiles.has(p.quartile));
+    }
+
     const field = this.sortField();
     const dir = this.sortDir();
     const mult = dir === 'desc' ? -1 : 1;

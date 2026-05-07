@@ -138,32 +138,48 @@
           Publications ({{ d.papers.length }})
         </h2>
 
-        <!-- Sort controls: Year / Citations with toggle direction arrows -->
-        <div class="flex items-center gap-1 bg-ink-100 rounded-full p-1">
-          <button (click)="setSort('year')"
-                  class="text-xs font-medium px-3 py-1.5 rounded-full
-                         flex items-center gap-1 transition-colors"
-                  [class.bg-white]="sortField() === 'year'"
-                  [class.shadow-card]="sortField() === 'year'"
-                  [class.text-ink-700]="sortField() === 'year'"
-                  [class.text-ink-500]="sortField() !== 'year'">
-            Year
-            @if (sortField() === 'year') {
-              <span class="text-[10px]">{{ sortDir() === 'desc' ? '↓' : '↑' }}</span>
+        <div class="flex items-center gap-2 flex-wrap">
+          <!-- Quartile filter pills (Q1/Q2/Q3/Q4) — multi-select; empty = all -->
+          <div class="flex items-center gap-1 bg-ink-100 rounded-full p-1">
+            @for (q of ['Q1', 'Q2', 'Q3', 'Q4']; track q) {
+              <button (click)="toggleQuartile(q)"
+                      class="text-xs font-medium px-3 py-1.5 rounded-full transition-colors"
+                      [class.bg-white]="activeQuartiles().has(q)"
+                      [class.shadow-card]="activeQuartiles().has(q)"
+                      [class.text-ink-700]="activeQuartiles().has(q)"
+                      [class.text-ink-400]="!activeQuartiles().has(q)">
+                {{ q }}
+              </button>
             }
-          </button>
-          <button (click)="setSort('citations')"
-                  class="text-xs font-medium px-3 py-1.5 rounded-full
-                         flex items-center gap-1 transition-colors"
-                  [class.bg-white]="sortField() === 'citations'"
-                  [class.shadow-card]="sortField() === 'citations'"
-                  [class.text-ink-700]="sortField() === 'citations'"
-                  [class.text-ink-500]="sortField() !== 'citations'">
-            Citations
-            @if (sortField() === 'citations') {
-              <span class="text-[10px]">{{ sortDir() === 'desc' ? '↓' : '↑' }}</span>
-            }
-          </button>
+          </div>
+
+          <!-- Sort controls: Year / Citations with toggle direction arrows -->
+          <div class="flex items-center gap-1 bg-ink-100 rounded-full p-1">
+            <button (click)="setSort('year')"
+                    class="text-xs font-medium px-3 py-1.5 rounded-full
+                           flex items-center gap-1 transition-colors"
+                    [class.bg-white]="sortField() === 'year'"
+                    [class.shadow-card]="sortField() === 'year'"
+                    [class.text-ink-700]="sortField() === 'year'"
+                    [class.text-ink-500]="sortField() !== 'year'">
+              Year
+              @if (sortField() === 'year') {
+                <span class="text-[10px]">{{ sortDir() === 'desc' ? '↓' : '↑' }}</span>
+              }
+            </button>
+            <button (click)="setSort('citations')"
+                    class="text-xs font-medium px-3 py-1.5 rounded-full
+                           flex items-center gap-1 transition-colors"
+                    [class.bg-white]="sortField() === 'citations'"
+                    [class.shadow-card]="sortField() === 'citations'"
+                    [class.text-ink-700]="sortField() === 'citations'"
+                    [class.text-ink-500]="sortField() !== 'citations'">
+              Citations
+              @if (sortField() === 'citations') {
+                <span class="text-[10px]">{{ sortDir() === 'desc' ? '↓' : '↑' }}</span>
+              }
+            </button>
+          </div>
         </div>
       </div>
 
