@@ -286,10 +286,10 @@ def export_excel(request):
             ws.append(['Metric', 'Value'])
             style_header(ws, 2)
             with connection.cursor() as cur:
+                # Paper counts per year (published-in-year semantics)
                 cur.execute('''
                     SELECT
                         COUNT(DISTINCT rp."PaperID"),
-                        COALESCE(SUM(COALESCE(("RawData_Log"->'cited_by'->>'value')::int, 0)), 0),
                         COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q1'),
                         COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q2'),
                         COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q3'),
@@ -302,7 +302,20 @@ def export_excel(request):
                     WHERE rp."PubYear" = %s
                       AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID")
                 ''', [year])
-                p, c, q1, q2, q3, q4, jp, cp = cur.fetchone()
+                p, q1, q2, q3, q4, jp, cp = cur.fetchone()
+
+                # Citations: SUM Researcher.CitationsByYear[year] across all
+                # researchers — same source as the dashboard "Citations" KPI.
+                # Year-of-receipt semantics: how many citations our faculty
+                # RECEIVED in this calendar year.
+                cur.execute('''
+                    SELECT COALESCE(SUM(
+                        COALESCE(("CitationsByYear"->>%s)::int, 0)
+                    ), 0)
+                    FROM "Researcher"
+                    WHERE "CitationsByYear" IS NOT NULL
+                ''', [str(year)])
+                c = cur.fetchone()[0]
             for label, val in [
                 ('Year', year),
                 ('Total Papers', p),
