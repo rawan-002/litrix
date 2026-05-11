@@ -1,0 +1,123 @@
+<div class="max-w-5xl mx-auto">
+  <div class="mb-8">
+    <h1 class="text-2xl font-semibold text-ink-900">Registration Requests</h1>
+    <p class="text-sm text-ink-500 mt-1">Review and approve new researcher applications</p>
+  </div>
+
+  @if (loading()) {
+    <div class="text-center py-12 text-ink-400 text-sm">Loading...</div>
+  } @else if (requests().length === 0) {
+    <div class="bg-white rounded-2xl shadow-card p-12 text-center">
+      <div class="w-16 h-16 mx-auto rounded-full bg-ink-50 flex items-center justify-center mb-4">
+        <span class="text-2xl text-ink-300">○</span>
+      </div>
+      <h3 class="text-base font-medium text-ink-700 mb-1">No pending requests</h3>
+      <p class="text-sm text-ink-400">All registrations have been reviewed</p>
+    </div>
+  } @else {
+    <div class="space-y-3">
+      @for (req of requests(); track req.RequestID) {
+        <div class="bg-white rounded-2xl shadow-card p-6">
+          <div class="flex items-start justify-between gap-6 flex-wrap">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-baseline gap-3 mb-1 flex-wrap">
+                <h3 class="text-base font-semibold text-ink-900" dir="rtl">
+                  {{ req.FullName_Ar || req.FullName_En || req.Email }}
+                </h3>
+                @if (req.FullName_En && req.FullName_Ar) {
+                  <span class="text-xs text-ink-400">· {{ req.FullName_En }}</span>
+                }
+              </div>
+              <div class="text-xs text-ink-500 mb-3 flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span>{{ req.Email }}</span>
+                @if (req.departmentname) {
+                  <span class="text-ink-300">·</span>
+                  <span class="inline-flex items-center gap-1.5">
+                    <svg class="w-3 h-3 text-ink-400" fill="none" stroke="currentColor"
+                         viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9
+                               0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0
+                               011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                    <span class="font-medium text-ink-700">{{ req.departmentname }}</span>
+                  </span>
+                }
+                @if (req.AcademicRank) {
+                  <span class="text-ink-300">·</span>
+                  <span>{{ req.AcademicRank }}</span>
+                }
+              </div>
+
+              <div class="flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
+                @if (req.Scholar_ID) {
+                  <div class="text-ink-500">
+                    <span class="text-ink-400 mr-1">Scholar:</span>
+                    <span class="font-mono text-ink-700">{{ req.Scholar_ID }}</span>
+                  </div>
+                }
+                @if (req.Orcid_ID) {
+                  <div class="text-ink-500">
+                    <span class="text-ink-400 mr-1">ORCID:</span>
+                    <span class="font-mono text-ink-700">{{ req.Orcid_ID }}</span>
+                  </div>
+                }
+                @if (req.Scopus_ID) {
+                  <div class="text-ink-500">
+                    <span class="text-ink-400 mr-1">Scopus:</span>
+                    <span class="font-mono text-ink-700">{{ req.Scopus_ID }}</span>
+                  </div>
+                }
+                @if (!req.Scholar_ID && !req.Orcid_ID && !req.Scopus_ID) {
+                  <span class="text-amber-600">⚠ No academic IDs provided</span>
+                }
+              </div>
+
+              <div class="text-[10px] text-ink-400 mt-3">
+                Submitted: {{ formatDate(req.CreatedAt) }}
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button (click)="approve(req.RequestID)"
+                      [disabled]="processing() === req.RequestID"
+                      class="px-4 py-2 rounded-lg bg-ink-900 text-white text-xs font-medium
+                             hover:bg-ink-700 transition disabled:opacity-50">
+                {{ processing() === req.RequestID ? '...' : 'Approve' }}
+              </button>
+              <button (click)="toggleReject(req.RequestID)"
+                      class="px-4 py-2 rounded-lg border border-ink-200 text-ink-500 text-xs
+                             hover:bg-ink-50 transition">
+                Reject
+              </button>
+            </div>
+          </div>
+
+          @if (showRejectFor() === req.RequestID) {
+            <div class="mt-4 pt-4 border-t border-ink-100">
+              <label class="block text-xs text-ink-500 mb-1.5">Rejection reason (optional)</label>
+              <textarea rows="2"
+                        [value]="getReason(req.RequestID)"
+                        (input)="setReason(req.RequestID, $any($event.target).value)"
+                        class="w-full px-3 py-2 rounded-lg border border-ink-200 text-sm
+                               focus:border-accent outline-none resize-none"
+                        placeholder="Tell the applicant why their registration was rejected..."></textarea>
+              <div class="flex gap-2 mt-2">
+                <button (click)="reject(req.RequestID)"
+                        [disabled]="processing() === req.RequestID"
+                        class="px-4 py-1.5 rounded-lg bg-red-600 text-white text-xs font-medium
+                               hover:bg-red-700 transition disabled:opacity-50">
+                  Confirm Reject
+                </button>
+                <button (click)="toggleReject(req.RequestID)"
+                        class="px-4 py-1.5 rounded-lg text-ink-500 text-xs hover:bg-ink-50">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+</div>

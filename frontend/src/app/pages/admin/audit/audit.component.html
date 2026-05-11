@@ -1,0 +1,74 @@
+<div class="max-w-6xl mx-auto">
+  <div class="flex items-baseline justify-between mb-8 flex-wrap gap-3">
+    <div>
+      <h1 class="text-2xl font-semibold text-ink-900">Audit Log</h1>
+      <p class="text-sm text-ink-500 mt-1">All actions across the platform</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <select [ngModel]="actionFilter()" (ngModelChange)="actionFilter.set($event); load()"
+              class="text-xs px-3 py-1.5 rounded-lg border border-ink-200 bg-white">
+        <option value="">All actions</option>
+        <option value="auth.login">Logins</option>
+        <option value="auth.logout">Logouts</option>
+        <option value="registration">Registrations</option>
+        <option value="user.">User changes</option>
+        <option value="profile.">Profile updates</option>
+      </select>
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="text-center py-12 text-ink-400 text-sm">Loading...</div>
+  } @else if (logs().length === 0) {
+    <div class="bg-white rounded-2xl shadow-card p-12 text-center text-ink-400 text-sm">
+      No audit log entries
+    </div>
+  } @else {
+    <div class="bg-white rounded-2xl shadow-card overflow-hidden">
+      <table class="w-full text-sm">
+        <thead class="bg-ink-50 border-b border-ink-100">
+          <tr class="text-left text-[10px] uppercase tracking-wider text-ink-500">
+            <th class="px-4 py-3 font-medium">Time</th>
+            <th class="px-4 py-3 font-medium">User</th>
+            <th class="px-4 py-3 font-medium">Action</th>
+            <th class="px-4 py-3 font-medium">Target</th>
+            <th class="px-4 py-3 font-medium">IP</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (log of logs(); track log.LogID) {
+            <tr class="border-b border-ink-100 hover:bg-ink-50/50">
+              <td class="px-4 py-3 text-xs text-ink-500 font-mono">
+                {{ formatDate(log.CreatedAt) }}
+              </td>
+              <td class="px-4 py-3">
+                <div class="text-xs text-ink-900" dir="rtl">{{ log.FullName_Ar || '—' }}</div>
+                <div class="text-[10px] text-ink-400">{{ log.Email || 'system' }}</div>
+              </td>
+              <td class="px-4 py-3">
+                <span class="text-[11px] px-2 py-0.5 rounded font-mono" [class]="badgeClass(log.Action)">
+                  {{ log.Action }}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-xs text-ink-500">
+                @if (log.TargetType) {
+                  <span class="font-mono">{{ log.TargetType }}#{{ log.TargetID }}</span>
+                } @else {
+                  —
+                }
+                @if (formatMeta(log.Metadata)) {
+                  <div class="text-[10px] text-ink-400 mt-1 font-mono truncate max-w-xs">
+                    {{ formatMeta(log.Metadata) }}
+                  </div>
+                }
+              </td>
+              <td class="px-4 py-3 text-[10px] text-ink-400 font-mono">
+                {{ log.IpAddress || '—' }}
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>

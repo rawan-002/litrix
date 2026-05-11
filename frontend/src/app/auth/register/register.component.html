@@ -1,0 +1,359 @@
+<div class="min-h-screen flex items-center justify-center bg-ink-50 px-4 py-12">
+  <div class="w-full max-w-md">
+    <div class="text-center mb-10">
+      <h1 class="text-3xl font-semibold text-ink-900 tracking-tight">Litrix</h1>
+      <p class="text-sm text-ink-500 mt-2">Research Analytics Platform</p>
+    </div>
+
+    <div class="flex items-center justify-center gap-2 mb-6">
+      @for (s of ['profile', 'verify', 'done']; track s; let i = $index) {
+        <div class="flex items-center">
+          <div [class.bg-ink-900]="step() === s || isStepDone(s, i)"
+               [class.text-white]="step() === s || isStepDone(s, i)"
+               [class.bg-ink-200]="step() !== s && !isStepDone(s, i)"
+               [class.text-ink-400]="step() !== s && !isStepDone(s, i)"
+               class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold">
+            {{ i + 1 }}
+          </div>
+          @if (i < 2) {
+            <div class="w-8 h-px bg-ink-200 mx-1"></div>
+          }
+        </div>
+      }
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-card p-8">
+      @if (step() === 'profile') {
+        @if (invite(); as inv) {
+          @if (inv.valid) {
+            <!-- Invitation banner — pinned role + dept on top of the form. -->
+            <div class="mb-6 rounded-xl border border-accent/30 bg-accent-light p-4">
+              <div class="flex items-start gap-3">
+                <svg class="w-5 h-5 text-accent flex-shrink-0 mt-0.5"
+                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2
+                           2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                <div class="flex-1">
+                  <h3 class="text-sm font-semibold text-accent">
+                    You've been invited
+                  </h3>
+                  <p class="text-xs text-ink-700 mt-1">
+                    Registering as
+                    <span class="font-semibold">{{ inv.intended_user_type }}</span>
+                    @if (inv.department_name) {
+                      of <span class="font-semibold" dir="rtl">{{ inv.department_name }}</span>
+                    }
+                    .
+                  </p>
+                  <p class="text-[11px] text-ink-500 mt-1">
+                    Email is locked to {{ inv.invited_email }}.
+                  </p>
+                </div>
+              </div>
+            </div>
+          } @else {
+            <div class="mb-6 rounded-xl border border-red-200 bg-red-50 p-4">
+              <h3 class="text-sm font-semibold text-red-900">Invitation invalid</h3>
+              <p class="text-xs text-red-700 mt-1">
+                @switch (inv.reason) {
+                  @case ('expired')      { This invitation link has expired. }
+                  @case ('already_used') { This invitation has already been used. }
+                  @case ('revoked')      { This invitation has been revoked. }
+                  @case ('not_found')    { This invitation link is not recognized. }
+                  @default               { Please request a new invitation from your administrator. }
+                }
+              </p>
+            </div>
+          }
+        }
+
+        <h2 class="text-xl font-semibold text-ink-900 mb-1">Create your account</h2>
+        <p class="text-sm text-ink-500 mb-6">
+          @if (invite()?.valid) {
+            Complete your details below
+          } @else {
+            Step 1 of 2 — Tell us about yourself
+          }
+        </p>
+
+        <!-- Identity verification banner. Color depends on severity:
+             • high   → red    (already-claimed account or hard mismatch)
+             • medium → amber  (department / rank disagrees with stored)
+             • info   → blue   (informational — match found, dept unset) -->
+        @if (verification(); as v) {
+          @if (v.match_found && v.mismatches.length > 0) {
+            <div class="mb-5 rounded-xl border p-4"
+                 [class.border-red-300]="highestSeverity() === 'high'"
+                 [class.bg-red-50]="highestSeverity() === 'high'"
+                 [class.border-amber-300]="highestSeverity() === 'medium'"
+                 [class.bg-amber-50]="highestSeverity() === 'medium'"
+                 [class.border-blue-300]="highestSeverity() === 'info'"
+                 [class.bg-blue-50]="highestSeverity() === 'info'">
+              <div class="flex items-start gap-3">
+                <svg class="w-5 h-5 flex-shrink-0 mt-0.5"
+                     [class.text-red-600]="highestSeverity() === 'high'"
+                     [class.text-amber-600]="highestSeverity() === 'medium'"
+                     [class.text-blue-600]="highestSeverity() === 'info'"
+                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667
+                           1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34
+                           16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div class="flex-1 min-w-0"
+                     [class.text-red-900]="highestSeverity() === 'high'"
+                     [class.text-amber-900]="highestSeverity() === 'medium'"
+                     [class.text-blue-900]="highestSeverity() === 'info'">
+                  <h3 class="text-sm font-semibold">
+                    @if (highestSeverity() === 'high') {
+                      Identity check failed
+                    } @else if (highestSeverity() === 'info') {
+                      We already track this researcher
+                    } @else {
+                      Please verify your information
+                    }
+                  </h3>
+                  <p class="text-xs mt-1 leading-relaxed opacity-90">
+                    We found an existing record matching your
+                    <span class="font-medium">{{ v.matched_by }}</span>
+                    @if (v.stored?.papers_count) {
+                      with
+                      <span class="font-medium">
+                        {{ v.stored?.papers_count }} stored paper{{ v.stored?.papers_count === 1 ? '' : 's' }}
+                      </span>.
+                    }
+                  </p>
+
+                  <ul class="mt-2 space-y-2 text-xs">
+                    @for (m of v.mismatches; track m.field) {
+                      <li>
+                        @if (m.note) {
+                          <div class="opacity-90">{{ m.note }}</div>
+                        } @else if (m.field === 'identity_already_claimed') {
+                          <div>
+                            This {{ m.your_value }} is already linked to an
+                            <span class="font-semibold">active account</span>
+                            ({{ m.our_value }}). If this is you, sign in instead.
+                            If not, contact your administrator.
+                          </div>
+                        } @else {
+                          <div class="flex items-baseline gap-2">
+                            <span class="font-medium">{{ m.label }}:</span>
+                            <span class="line-through opacity-70">{{ m.your_value }}</span>
+                            <span class="opacity-60">→</span>
+                            <span class="font-semibold">
+                              {{ m.our_label || m.our_value }}
+                            </span>
+                          </div>
+                        }
+                      </li>
+                    }
+                  </ul>
+
+                  @if (highestSeverity() !== 'high') {
+                    <p class="text-xs mt-3 opacity-80">
+                      If you're sure your input is correct, you can still submit and
+                      the administrator will review.
+                    </p>
+                  }
+                </div>
+              </div>
+            </div>
+          }
+        }
+
+        <form [formGroup]="profileForm" (ngSubmit)="submitProfile()" class="space-y-4">
+          <div>
+            <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide">
+              Email *
+            </label>
+            <input type="email" formControlName="email"
+                   class="w-full px-4 py-2.5 rounded-lg border border-ink-200
+                          focus:border-accent focus:ring-2 focus:ring-accent/20
+                          outline-none transition text-sm" />
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide">
+              Password *
+            </label>
+            <input type="password" formControlName="password"
+                   class="w-full px-4 py-2.5 rounded-lg border border-ink-200
+                          focus:border-accent focus:ring-2 focus:ring-accent/20
+                          outline-none transition text-sm" />
+            <p class="text-xs text-ink-400 mt-1">Minimum 8 characters</p>
+          </div>
+
+          <!-- English name — REQUIRED. Listed first to signal priority. -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide">
+                First Name *
+              </label>
+              <input type="text" formControlName="first_name_en"
+                     class="w-full px-4 py-2.5 rounded-lg border border-ink-200
+                            focus:border-accent focus:ring-2 focus:ring-accent/20
+                            outline-none transition text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide">
+                Last Name *
+              </label>
+              <input type="text" formControlName="last_name_en"
+                     class="w-full px-4 py-2.5 rounded-lg border border-ink-200
+                            focus:border-accent focus:ring-2 focus:ring-accent/20
+                            outline-none transition text-sm" />
+            </div>
+          </div>
+
+          <!-- Arabic name — OPTIONAL. -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide"
+                     dir="rtl">
+                الاسم الأول
+                <span class="text-ink-300 normal-case tracking-normal">(اختياري)</span>
+              </label>
+              <input type="text" formControlName="first_name_ar" dir="rtl"
+                     class="w-full px-4 py-2.5 rounded-lg border border-ink-200
+                            focus:border-accent focus:ring-2 focus:ring-accent/20
+                            outline-none transition text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide"
+                     dir="rtl">
+                الاسم الأخير
+                <span class="text-ink-300 normal-case tracking-normal">(اختياري)</span>
+              </label>
+              <input type="text" formControlName="last_name_ar" dir="rtl"
+                     class="w-full px-4 py-2.5 rounded-lg border border-ink-200
+                            focus:border-accent focus:ring-2 focus:ring-accent/20
+                            outline-none transition text-sm" />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide">
+              Department
+            </label>
+            <select formControlName="department_id"
+                    class="w-full px-4 py-2.5 rounded-lg border border-ink-200
+                           focus:border-accent outline-none text-sm bg-white">
+              <option [ngValue]="null">— Select department —</option>
+              @for (d of departments(); track d.department_id) {
+                <option [ngValue]="d.department_id">{{ d.department_name }}</option>
+              }
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide">
+              Academic Rank
+            </label>
+            <select formControlName="academic_rank"
+                    class="w-full px-4 py-2.5 rounded-lg border border-ink-200
+                           focus:border-accent outline-none text-sm bg-white">
+              <option value="">— Select rank —</option>
+              <option value="Lecturer">Lecturer</option>
+              <option value="AssistantProfessor">Assistant Professor</option>
+              <option value="AssociateProfessor">Associate Professor</option>
+              <option value="Professor">Professor</option>
+            </select>
+          </div>
+
+          <div class="pt-2 border-t border-ink-100">
+            <p class="text-xs text-ink-500 mb-3">
+              Add at least one academic profile so we can sync your publications:
+            </p>
+            <div class="space-y-2.5">
+              <input type="text" formControlName="scholar_id"
+                     placeholder="Google Scholar ID (e.g. AbCd1234EfGh)"
+                     class="w-full px-4 py-2 rounded-lg border border-ink-200
+                            focus:border-accent outline-none text-sm" />
+              <input type="text" formControlName="orcid_id"
+                     placeholder="ORCID (e.g. 0000-0000-0000-0000)"
+                     class="w-full px-4 py-2 rounded-lg border border-ink-200
+                            focus:border-accent outline-none text-sm" />
+              <input type="text" formControlName="scopus_id"
+                     placeholder="Scopus Author ID"
+                     class="w-full px-4 py-2 rounded-lg border border-ink-200
+                            focus:border-accent outline-none text-sm" />
+            </div>
+          </div>
+
+          @if (error()) {
+            <div class="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">
+              {{ error() }}
+            </div>
+          }
+
+          <button type="submit"
+                  [disabled]="profileForm.invalid || loading()"
+                  class="w-full py-2.5 rounded-lg bg-ink-900 text-white text-sm font-medium
+                         hover:bg-ink-700 transition disabled:opacity-50">
+            {{ loading() ? 'Sending verification code...' : 'Continue' }}
+          </button>
+
+          <div class="text-center text-xs text-ink-400">
+            Already have an account?
+            <a routerLink="/login" class="text-ink-700 hover:underline">Sign in</a>
+          </div>
+        </form>
+      }
+
+      @if (step() === 'verify') {
+        <h2 class="text-xl font-semibold text-ink-900 mb-1">Verify your email</h2>
+        <p class="text-sm text-ink-500 mb-6">
+          Step 2 of 2 — We sent a 6-digit code to
+          <span class="text-ink-700 font-medium">{{ registeredEmail() }}</span>
+        </p>
+
+        <form [formGroup]="verifyForm" (ngSubmit)="submitVerify()" class="space-y-4">
+          <div>
+            <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide">
+              Verification Code
+            </label>
+            <input type="text" formControlName="token" maxlength="6"
+                   class="w-full px-4 py-3 rounded-lg border border-ink-200
+                          focus:border-accent focus:ring-2 focus:ring-accent/20
+                          outline-none transition text-center text-2xl font-mono tracking-widest"
+                   placeholder="000000" />
+          </div>
+
+          @if (error()) {
+            <div class="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">
+              {{ error() }}
+            </div>
+          }
+
+          <button type="submit"
+                  [disabled]="verifyForm.invalid || loading()"
+                  class="w-full py-2.5 rounded-lg bg-ink-900 text-white text-sm font-medium
+                         hover:bg-ink-700 transition disabled:opacity-50">
+            {{ loading() ? 'Verifying...' : 'Verify' }}
+          </button>
+        </form>
+      }
+
+      @if (step() === 'done') {
+        <div class="text-center py-6">
+          <div class="w-16 h-16 mx-auto rounded-full bg-green-50 flex items-center justify-center mb-4">
+            <span class="text-3xl">✓</span>
+          </div>
+          <h2 class="text-xl font-semibold text-ink-900 mb-2">Almost there!</h2>
+          <p class="text-sm text-ink-500 mb-6">
+            Your registration has been submitted for review.
+            You'll receive an email once your account is approved.
+          </p>
+          <a routerLink="/login"
+             class="inline-block px-6 py-2.5 rounded-lg bg-ink-900 text-white
+                    text-sm font-medium hover:bg-ink-700 transition">
+            Back to Sign In
+          </a>
+        </div>
+      }
+    </div>
+  </div>
+</div>

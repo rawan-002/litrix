@@ -9,6 +9,7 @@ import { LitrixApiService } from '../../services/litrix-api.service';
 
 interface ResearcherListItem {
   user_id: number;
+  litrix_id: string;
   full_name_ar: string | null;
   full_name_en: string | null;
   department_name: string | null;
@@ -189,6 +190,9 @@ export class ResearcherSearchSidebarComponent implements OnInit {
   }
 
   select(r: ResearcherListItem) {
-    this.router.navigate(['/researcher', r.user_id]);
+    // Use the public Litrix-ID (Lit-NNNNNN) when available; fall back to
+    // user_id only if the backend hasn't been migrated yet (pre-sprint3).
+    const id = r.litrix_id || r.user_id;
+    this.router.navigate(['/profile', id]);
   }
 }

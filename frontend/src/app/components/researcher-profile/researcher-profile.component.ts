@@ -12,9 +12,9 @@
  * the minimalist Apple aesthetic. We can swap to Chart.js later if we
  * need tooltips/legends/etc.
  */
-import { Component, OnInit, inject, signal, computed } from '@angular/core';
+import { Component, OnInit, Input, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { LitrixApiService } from '../../services/litrix-api.service';
 import {
   ResearcherProfilePayload, ProfilePaper,
@@ -25,12 +25,13 @@ import { PaperDetailModalComponent } from
 @Component({
   selector: 'app-researcher-profile',
   standalone: true,
-  imports: [CommonModule, RouterLink, PaperDetailModalComponent],
+  imports: [CommonModule, PaperDetailModalComponent],
   templateUrl: './researcher-profile.component.html',
 })
 export class ResearcherProfileComponent implements OnInit {
   private readonly api = inject(LitrixApiService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
 
   readonly data    = signal<ResearcherProfilePayload | null>(null);
   readonly loading = signal<boolean>(true);
@@ -151,22 +152,34 @@ export class ResearcherProfileComponent implements OnInit {
     };
   });
 
+  /**
+   * Public Litrix-ID (Lit-NNNNNN) of the researcher to display.
+   * Falls back to the :litrixId route param when not set explicitly.
+   * The backend resolves Lit-NNNNNN → UserID at the boundary, so this
+   * is the only identifier the UI ever has to think about.
+   */
+  @Input() overrideLitrixId?: string | null;
+
   ngOnInit() {
+    if (this.overrideLitrixId) {
+      this.load(this.overrideLitrixId);
+      return;
+    }
     this.route.params.subscribe(params => {
-      const userId = Number(params['id']);
-      if (Number.isNaN(userId)) {
+      const litrixId = params['litrixId'] ?? params['id'];
+      if (!litrixId) {
         this.error.set('Invalid researcher ID');
         this.loading.set(false);
         return;
       }
-      this.load(userId);
+      this.load(litrixId);
     });
   }
 
-  load(userId: number) {
+  load(id: string | number) {
     this.loading.set(true);
     this.error.set(null);
-    this.api.getResearcherProfile(userId).subscribe({
+    this.api.getResearcherProfile(id).subscribe({
       next: payload => {
         // Normalize: backend sometimes returns CitationsByYear as a JSON
         // string (when going through certain views) rather than an
@@ -183,6 +196,13 @@ export class ResearcherProfileComponent implements OnInit {
         }
         this.data.set(payload);
         this.loading.set(false);
+
+        // URL canonicalization. The backend's case/padding-insensitive
+        // lookup means the user might land here via /profile/LIT-0001
+        // or /profile/lit-1, but the truth in the DB is Lit-000001.
+        // Replace the URL silently so the address bar matches the
+        // displayed identifier — no history pollution, no flash.
+        this.canonicalizeUrl(payload?.identity?.litrix_id);
       },
       error: err => {
         this.error.set(err.status === 404
@@ -191,6 +211,16 @@ export class ResearcherProfileComponent implements OnInit {
         this.loading.set(false);
       },
     });
+  }
+
+  private canonicalizeUrl(canonical: string | undefined | null) {
+    if (!canonical) return;
+    if (this.overrideLitrixId) return;  // hosted inside another page
+    const current = this.route.snapshot.paramMap.get('litrixId')
+                 ?? this.route.snapshot.paramMap.get('id');
+    if (current && current !== canonical) {
+      this.router.navigate(['/profile', canonical], { replaceUrl: true });
+    }
   }
 
   fmt(n: number | null | undefined): string {

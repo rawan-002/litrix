@@ -129,6 +129,8 @@ export interface YearlyBreakdownPayload {
 
 export interface ResearcherIdentity {
   user_id: number;
+  /** Public Lit-NNNNNN identifier — the canonical reference outside the DB. */
+  litrix_id: string;
   full_name_ar: string | null;
   first_name: string | null;
   last_name: string | null;
@@ -175,4 +177,31 @@ export interface ResearcherProfilePayload {
   stats: ResearcherStatsAgg;
   citations_by_year: YearCitations[];
   papers: ProfilePaper[];
+}
+
+/* ----------------------------------------------------------------------
+ * Universal search result shapes
+ * ---------------------------------------------------------------------- */
+
+export interface SearchProfileResult {
+  user_id: number;
+  litrix_id: string;
+  full_name_ar: string | null;
+  full_name_en: string | null;
+  user_type: string;
+  department_name: string | null;
+  papers: number;
+}
+
+export interface SearchPaperResult {
+  paper_id: number;
+  title: string;
+  title_en: string | null;
+  pub_year: number | null;
+  doi: string | null;
+  indexing: string | null;
+  journal_name: string | null;
+  quartile: string | null;
+  citations: number;
+  authors_summary: string | null;
 }

@@ -1,0 +1,169 @@
+<div class="max-w-6xl mx-auto">
+  <div class="flex items-baseline justify-between mb-8 flex-wrap gap-3">
+    <div>
+      <h1 class="text-2xl font-semibold text-ink-900">Users</h1>
+      <p class="text-sm text-ink-500 mt-1">Manage user accounts, roles, and access</p>
+    </div>
+    <input type="text"
+           [ngModel]="search()"
+           (ngModelChange)="search.set($event)"
+           placeholder="Search by name or email..."
+           class="px-4 py-2 rounded-lg border border-ink-200 text-sm w-64
+                  focus:border-accent outline-none" />
+  </div>
+
+  @if (loading()) {
+    <div class="text-center py-12 text-ink-400 text-sm">Loading...</div>
+  } @else if (filtered().length === 0) {
+    <div class="bg-white rounded-2xl shadow-card p-12 text-center text-ink-400 text-sm">
+      No users found
+    </div>
+  } @else {
+    <div class="bg-white rounded-2xl shadow-card overflow-hidden">
+      <table class="w-full text-sm">
+        <thead class="bg-ink-50 border-b border-ink-100">
+          <tr class="text-left text-[10px] uppercase tracking-wider text-ink-500">
+            <th class="px-4 py-3 font-medium">User</th>
+            <th class="px-4 py-3 font-medium">Role</th>
+            <th class="px-4 py-3 font-medium">Status</th>
+            <th class="px-4 py-3 font-medium">Last Login</th>
+            <th class="px-4 py-3 font-medium text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (u of filtered(); track u.UserID) {
+            <tr class="border-b border-ink-100 hover:bg-ink-50/50">
+              <td class="px-4 py-3">
+                <div class="font-medium text-ink-900" dir="rtl">
+                  {{ u.FullName_Ar || u.Email }}
+                </div>
+                <div class="text-xs text-ink-400">{{ u.Email }}</div>
+                <div class="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+                  <!-- UserType pill — quick visual cue for the role tier -->
+                  <span class="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                        [class.bg-ink-900]="u.UserType === 'Admin'"
+                        [class.text-white]="u.UserType === 'Admin'"
+                        [class.bg-accent-light]="u.UserType === 'HoD' || u.UserType === 'Dean'"
+                        [class.text-accent]="u.UserType === 'HoD' || u.UserType === 'Dean'"
+                        [class.bg-ink-100]="u.UserType !== 'Admin' && u.UserType !== 'HoD' && u.UserType !== 'Dean'"
+                        [class.text-ink-600]="u.UserType !== 'Admin' && u.UserType !== 'HoD' && u.UserType !== 'Dean'">
+                    {{ u.UserType }}
+                  </span>
+                  @if (u.departmentname) {
+                    <span class="text-[10px] text-ink-500" dir="rtl">
+                      {{ u.departmentname }}
+                    </span>
+                  }
+                </div>
+                <div class="text-[10px] text-ink-300 mt-0.5 flex gap-2 flex-wrap">
+                  @if (u.Scholar_ID) { <span>S: {{ u.Scholar_ID }}</span> }
+                  @if (u.Orcid_ID)   { <span>O: {{ u.Orcid_ID }}</span> }
+                </div>
+              </td>
+              <td class="px-4 py-3">
+                <select [value]="u.RoleID || ''"
+                        (change)="changeRole(u, +$any($event.target).value)"
+                        class="text-xs px-2 py-1 rounded border border-ink-200 bg-white">
+                  <option value="">— No role —</option>
+                  @for (r of roles(); track r.RoleID) {
+                    <option [value]="r.RoleID">{{ r.Name }}</option>
+                  }
+                </select>
+              </td>
+              <td class="px-4 py-3">
+                @if (u.IsActive) {
+                  <span class="text-[11px] px-2 py-0.5 rounded-full bg-green-50 text-green-700">
+                    Active
+                  </span>
+                } @else {
+                  <span class="text-[11px] px-2 py-0.5 rounded-full bg-ink-100 text-ink-500">
+                    Inactive
+                  </span>
+                }
+                @if (!u.EmailVerified) {
+                  <span class="text-[10px] text-amber-600 ml-1">unverified</span>
+                }
+              </td>
+              <td class="px-4 py-3 text-xs text-ink-500">
+                {{ formatDate(u.LastLoginAt) }}
+              </td>
+              <td class="px-4 py-3 text-right">
+                <div class="flex items-center justify-end gap-1.5">
+                  <button (click)="toggleActive(u)"
+                          [disabled]="deletingId() === u.UserID"
+                          class="text-xs px-3 py-1 rounded-lg border border-ink-200
+                                 hover:bg-ink-50 transition disabled:opacity-50">
+                    {{ u.IsActive ? 'Deactivate' : 'Activate' }}
+                  </button>
+                  <button (click)="askDelete(u)"
+                          [disabled]="deletingId() === u.UserID"
+                          title="Delete this researcher and all their links"
+                          class="text-xs px-3 py-1 rounded-lg border border-red-200
+                                 text-red-600 hover:bg-red-50 transition disabled:opacity-50">
+                    @if (deletingId() === u.UserID) {
+                      Deleting…
+                    } @else {
+                      Delete
+                    }
+                  </button>
+                </div>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  <!-- Confirm-delete modal — destructive action gets a deliberate stop. -->
+  @if (pendingDelete(); as target) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center px-4
+                bg-ink-900/40 backdrop-blur-sm"
+         (click)="cancelDelete()">
+      <div class="bg-white rounded-2xl shadow-hover max-w-md w-full p-6"
+           (click)="$event.stopPropagation()">
+        <div class="flex items-start gap-3 mb-4">
+          <div class="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
+            <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor"
+                 viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667
+                       1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34
+                       16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <div class="flex-1">
+            <h3 class="text-base font-semibold text-ink-900">Delete this user?</h3>
+            <p class="text-sm text-ink-500 mt-1 leading-relaxed">
+              <span class="font-semibold text-ink-900" dir="rtl">
+                {{ target.FullName_Ar || target.Email }}
+              </span>
+              — <span class="text-ink-400">{{ target.Email }}</span>
+            </p>
+          </div>
+        </div>
+
+        <div class="rounded-xl bg-ink-50 px-4 py-3 text-xs text-ink-600 mb-5 leading-relaxed">
+          This permanently removes the account, their author links,
+          department membership, sync history, and notifications. Papers
+          they co-authored stay (they may have other authors). The action
+          cannot be undone.
+        </div>
+
+        <div class="flex justify-end gap-2">
+          <button (click)="cancelDelete()"
+                  class="px-4 py-2 rounded-lg text-sm text-ink-700
+                         hover:bg-ink-100 transition">
+            Cancel
+          </button>
+          <button (click)="confirmDelete()"
+                  [disabled]="deletingId() !== null"
+                  class="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium
+                         hover:bg-red-700 transition disabled:opacity-50">
+            {{ deletingId() !== null ? 'Deleting…' : 'Delete user' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

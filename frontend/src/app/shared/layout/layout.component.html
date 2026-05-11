@@ -1,0 +1,96 @@
+<div class="min-h-screen bg-ink-50 flex">
+  <aside class="w-64 bg-white border-r border-ink-200 flex flex-col fixed h-screen">
+    <div class="px-6 py-6 border-b border-ink-100">
+      <h1 class="text-xl font-semibold text-ink-900 tracking-tight">Litrix</h1>
+      <p class="text-xs text-ink-400 mt-0.5">Research Analytics</p>
+    </div>
+
+    <nav class="flex-1 px-3 py-4 overflow-y-auto">
+      <div class="text-[10px] uppercase tracking-wider text-ink-400 px-3 mb-2">
+        {{ auth.role() || 'Researcher' }}
+      </div>
+      <ul class="space-y-0.5">
+        @for (item of navItems(); track item.route) {
+          <li>
+            <!-- Hover lights up to the system blue (#0071e3) so the
+                 active interactive surface stands out on the otherwise
+                 monochrome sidebar. The active route stays inked-in
+                 (bg-ink-100) for stronger persistent identity. -->
+            <a [routerLink]="item.route"
+               routerLinkActive="bg-ink-100 text-ink-900"
+               [routerLinkActiveOptions]="{ exact: item.route === '/' }"
+               class="flex items-center gap-3 px-3 py-2 rounded-lg
+                      text-sm text-ink-500
+                      hover:bg-accent-light hover:text-accent
+                      transition-colors">
+              <span class="text-base w-5 text-center">{{ item.icon }}</span>
+              <span>{{ item.label }}</span>
+            </a>
+          </li>
+        }
+      </ul>
+    </nav>
+
+    <div class="border-t border-ink-100 p-3 relative">
+      <button (click)="toggleUserMenu()"
+              class="w-full flex items-center gap-3 px-3 py-2 rounded-lg
+                     hover:bg-ink-50 transition text-left">
+        <div class="w-8 h-8 rounded-full bg-ink-900 text-white text-xs
+                    font-semibold flex items-center justify-center flex-shrink-0">
+          {{ initials() }}
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="text-sm text-ink-700 font-medium truncate">
+            {{ auth.user()?.full_name || auth.user()?.email }}
+          </div>
+          <div class="text-xs text-ink-400 truncate">{{ auth.user()?.email }}</div>
+        </div>
+        <span class="text-ink-400 text-xs">⋯</span>
+      </button>
+
+      @if (userMenuOpen()) {
+        <div class="absolute bottom-full left-3 right-3 mb-2 bg-white rounded-lg
+                    shadow-lg border border-ink-200 py-1 z-50">
+          <a routerLink="/me" (click)="closeUserMenu()"
+             class="block px-4 py-2 text-sm text-ink-700 hover:bg-ink-50">
+            My Profile
+          </a>
+          <a routerLink="/settings" (click)="closeUserMenu()"
+             class="block px-4 py-2 text-sm text-ink-700 hover:bg-ink-50">
+            Settings
+          </a>
+          <div class="border-t border-ink-100 my-1"></div>
+          <button (click)="logout()"
+                  class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50">
+            Sign Out
+          </button>
+        </div>
+      }
+    </div>
+  </aside>
+
+  <main class="flex-1 ml-64 min-h-screen">
+    <header class="bg-white border-b border-ink-200 px-8 py-4 flex items-center justify-end">
+      <div class="flex items-center gap-3">
+        <a routerLink="/notifications"
+           class="relative w-9 h-9 rounded-full hover:bg-ink-100 flex items-center justify-center transition">
+          <span class="text-base">◇</span>
+          @if (notifs.unreadCount() > 0) {
+            <span class="absolute top-1.5 right-1.5 min-w-[16px] h-[16px] rounded-full
+                         bg-red-500 text-white text-[10px] font-semibold
+                         flex items-center justify-center px-1">
+              {{ notifs.unreadCount() }}
+            </span>
+          }
+        </a>
+        <span class="text-xs px-2 py-1 rounded-full bg-ink-100 text-ink-600 font-medium">
+          {{ auth.role() }}
+        </span>
+      </div>
+    </header>
+
+    <div class="p-8">
+      <router-outlet></router-outlet>
+    </div>
+  </main>
+</div>

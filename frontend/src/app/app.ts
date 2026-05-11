@@ -1,35 +1,19 @@
 /**
- * Root App Shell — collapsible right sidebar.
+ * Root App Shell — minimal pass-through.
  *
- * The sidebar can be toggled open/closed via a small handle button.
- * State persists in localStorage so it stays open/closed across reloads.
+ * The full layout (sidebar nav, header, content) lives in
+ * `shared/layout/layout.component.ts` and is mounted as a parent route.
+ * Keeping this shell empty means each route owns its own chrome and
+ * there's no duplicated layout to fight against.
  */
-import { Component, signal } from '@angular/core';
-import { RouterOutlet, RouterLink } from '@angular/router';
-import { ResearcherSearchSidebarComponent } from
-  './components/researcher-search-sidebar/researcher-search-sidebar.component';
+import { Component } from '@angular/core';
+import { RouterOutlet } from '@angular/router';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, ResearcherSearchSidebarComponent],
+  imports: [RouterOutlet],
   templateUrl: './app.html',
-  styleUrl: './app.css'
+  styleUrl: './app.css',
 })
-export class App {
-  protected readonly title = signal('frontend');
-  // Persist sidebar state across reloads.
-  protected readonly sidebarOpen = signal<boolean>(
-    typeof localStorage !== 'undefined'
-      ? localStorage.getItem('litrix.sidebarOpen') !== 'false'
-      : true
-  );
-
-  toggleSidebar() {
-    const next = !this.sidebarOpen();
-    this.sidebarOpen.set(next);
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('litrix.sidebarOpen', String(next));
-    }
-  }
-}
+export class App {}

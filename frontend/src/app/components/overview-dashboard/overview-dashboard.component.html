@@ -26,36 +26,99 @@
         </p>
       </div>
 
-      <div class="flex items-center gap-3">
-        
-        <div class="bg-ink-100 rounded-full p-1 flex gap-1">
-          <button (click)="setScope('all')"
-                  class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors"
-                  [class.bg-white]="scope() === 'all'"
-                  [class.text-ink-700]="scope() === 'all'"
-                  [class.shadow-card]="scope() === 'all'"
-                  [class.text-ink-400]="scope() !== 'all'">
-            All
+      <div class="flex items-center gap-3 flex-wrap">
+
+        <!-- Department filter — All Departments OR a specific one.
+             Uses native (change) + [selected] instead of ngModel to
+             dodge the ngModel/ngValue type-coercion gotcha (string
+             "all" vs numeric IDs). The handler normalizes both. -->
+        <select (change)="setDepartment($any($event.target).value)"
+                class="px-4 py-2 rounded-full bg-white border border-ink-200
+                       text-sm font-medium text-ink-700 outline-none
+                       hover:border-ink-300 cursor-pointer min-w-[200px]"
+                dir="rtl">
+          <option value="all" [selected]="selectedDeptId() == null">
+            All Departments
+          </option>
+          @for (dept of d.departments; track dept.department_id) {
+            <option [value]="dept.department_id"
+                    [selected]="selectedDeptId() === dept.department_id">
+              {{ dept.department_name }}
+            </option>
+          }
+        </select>
+
+        <!-- Multi-year picker — empty selection = "All Years".
+             Stop click propagation on the popover so clicking inside
+             doesn't immediately trigger the document-level close. -->
+        <div class="relative">
+          <button (click)="toggleYearMenu(); $event.stopPropagation()"
+                  class="px-4 py-2 rounded-full bg-white border border-ink-200
+                         text-sm font-medium text-ink-700 outline-none
+                         hover:border-ink-300 cursor-pointer min-w-[140px]
+                         flex items-center justify-between gap-2">
+            <span>Years: {{ yearsLabel() }}</span>
+            <svg class="w-3.5 h-3.5 text-ink-400 transition-transform"
+                 [class.rotate-180]="yearMenuOpen()"
+                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M19 9l-7 7-7-7" />
+            </svg>
           </button>
-          <button (click)="setScope(2025)"
-                  class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors"
-                  [class.bg-white]="scope() === 2025"
-                  [class.text-ink-700]="scope() === 2025"
-                  [class.shadow-card]="scope() === 2025"
-                  [class.text-ink-400]="scope() !== 2025">
-            2025
-          </button>
-          <button (click)="setScope(2026)"
-                  class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors"
-                  [class.bg-white]="scope() === 2026"
-                  [class.text-ink-700]="scope() === 2026"
-                  [class.shadow-card]="scope() === 2026"
-                  [class.text-ink-400]="scope() !== 2026">
-            2026
-          </button>
+
+          @if (yearMenuOpen()) {
+            <div (click)="$event.stopPropagation()"
+                 class="absolute top-full mt-2 right-0 z-30
+                        bg-white rounded-xl shadow-hover border border-ink-100
+                        w-44 py-2">
+
+              <!-- "All Years" toggle — clears the selection. -->
+              <button (click)="clearYears()"
+                      class="w-full flex items-center gap-3 px-4 py-2 text-sm
+                             hover:bg-ink-50 transition text-left"
+                      [class.font-semibold]="selectedYears().size === 0">
+                <span class="w-4 h-4 rounded border flex items-center justify-center"
+                      [class.border-ink-900]="selectedYears().size === 0"
+                      [class.bg-ink-900]="selectedYears().size === 0"
+                      [class.border-ink-300]="selectedYears().size > 0">
+                  @if (selectedYears().size === 0) {
+                    <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor"
+                         viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round"
+                            stroke-width="3" d="M5 13l4 4L19 7" />
+                    </svg>
+                  }
+                </span>
+                <span>All Years</span>
+              </button>
+
+              <div class="border-t border-ink-100 my-1"></div>
+
+              <!-- Per-year checkboxes -->
+              @for (y of availableYears; track y) {
+                <button (click)="toggleYear(y)"
+                        class="w-full flex items-center gap-3 px-4 py-2 text-sm
+                               hover:bg-ink-50 transition text-left">
+                  <span class="w-4 h-4 rounded border flex items-center justify-center"
+                        [class.border-ink-900]="isYearSelected(y)"
+                        [class.bg-ink-900]="isYearSelected(y)"
+                        [class.border-ink-300]="!isYearSelected(y)">
+                    @if (isYearSelected(y)) {
+                      <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor"
+                           viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                              stroke-width="3" d="M5 13l4 4L19 7" />
+                      </svg>
+                    }
+                  </span>
+                  <span [class.font-semibold]="isYearSelected(y)">{{ y }}</span>
+                </button>
+              }
+            </div>
+          }
         </div>
 
-        
+
         <button (click)="openExportModal()"
                 class="bg-ink-700 hover:bg-ink-900 text-white text-sm font-medium px-5 py-2.5 rounded-full transition-colors flex items-center gap-2 shadow-card">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -68,24 +131,341 @@
       </div>
     </header>
 
-    
-    <section class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+    <!-- KPI cards — values reflect the active department filter. -->
+    <section class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
       <div class="bg-white rounded-apple shadow-card p-6">
         <div class="text-ink-400 text-xs uppercase tracking-wider mb-2">Researchers</div>
-        <div class="text-5xl font-semibold text-ink-700">{{ fmt(d.totals.researchers) }}</div>
-        <div class="text-ink-400 text-sm mt-2">{{ fmt(d.totals.active_researchers) }} active</div>
+        <div class="text-5xl font-semibold text-ink-700">{{ fmt(filteredTotals().researchers) }}</div>
+        <div class="text-ink-400 text-sm mt-2">{{ fmt(filteredTotals().active_researchers) }} active</div>
       </div>
 
       <div class="bg-white rounded-apple shadow-card p-6">
         <div class="text-ink-400 text-xs uppercase tracking-wider mb-2">Publications</div>
-        <div class="text-5xl font-semibold text-ink-700">{{ fmt(d.totals.papers) }}</div>
-        <div class="text-ink-400 text-sm mt-2">{{ fmt(d.totals.q1_papers) }} in Q1 journals</div>
+        <div class="text-5xl font-semibold text-ink-700">{{ fmt(filteredTotals().papers) }}</div>
+        <div class="text-ink-400 text-sm mt-2">{{ fmt(filteredTotals().q1_papers) }} in Q1 journals</div>
       </div>
 
       <div class="bg-white rounded-apple shadow-card p-6">
         <div class="text-ink-400 text-xs uppercase tracking-wider mb-2">Citations</div>
-        <div class="text-5xl font-semibold text-accent">{{ fmt(d.totals.citations) }}</div>
-        <div class="text-ink-400 text-sm mt-2">avg h-index: {{ d.totals.avg_h_index | number:'1.1-1' }}</div>
+        <div class="text-5xl font-semibold text-accent">{{ fmt(filteredTotals().citations) }}</div>
+        <div class="text-ink-400 text-sm mt-2">avg h-index: {{ filteredTotals().avg_h_index | number:'1.1-1' }}</div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         Analytics charts — 2x2 grid, all derived from the filtered
+         payload. The 4th cell flips between "Top Departments" (when
+         All is selected) and "Quartile breakdown" otherwise.
+         ============================================================ -->
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-12">
+
+      <!-- Cell 1: Publications per Year — hover-only.
+           Hovering a bar highlights it and surfaces a tooltip; clicks
+           are intentionally disabled per UX request. -->
+      <div class="bg-white rounded-apple shadow-card p-6">
+        <div class="flex items-baseline justify-between mb-4">
+          <h2 class="text-sm font-semibold text-ink-700">Publications per Year</h2>
+          <div class="text-[10px] text-ink-400">papers published each year</div>
+        </div>
+        @if (chartPublications(); as c) {
+          <svg [attr.viewBox]="'0 0 ' + c.W + ' ' + c.H"
+               class="w-full h-auto select-none" preserveAspectRatio="xMidYMid meet"
+               (mouseleave)="setHoveredPub(null)">
+            @for (yl of c.yLabels; track yl.v) {
+              <text [attr.x]="c.padding.left - 8" [attr.y]="yl.y + 4"
+                    text-anchor="end" class="text-[10px] fill-ink-400">
+                {{ yl.v }}
+              </text>
+              <line [attr.x1]="c.padding.left" [attr.x2]="c.W - c.padding.right"
+                    [attr.y1]="yl.y" [attr.y2]="yl.y"
+                    stroke="#f5f5f4" stroke-width="1" />
+            }
+            @for (b of c.bars; track b.label) {
+              <g (mouseenter)="setHoveredPub(b)">
+                <!-- Hovered bar shifts to the accent (Apple blue). -->
+                <rect [attr.x]="b.x" [attr.y]="b.y"
+                      [attr.width]="b.w" [attr.height]="b.h"
+                      rx="3"
+                      [attr.fill]="hoveredPub()?.year === +b.label ? '#0071e3' : '#1c1917'"
+                      class="transition-all"
+                      [attr.opacity]="hoveredPub()?.year === +b.label ? 1 : 0.85" />
+                <text [attr.x]="b.x + b.w / 2"
+                      [attr.y]="c.H - c.padding.bottom + 16"
+                      text-anchor="middle"
+                      class="text-[10px] fill-ink-500">
+                  {{ b.label }}
+                </text>
+                @if (b.h > 18) {
+                  <text [attr.x]="b.x + b.w / 2"
+                        [attr.y]="b.y + 12"
+                        text-anchor="middle"
+                        class="text-[10px] fill-white font-medium pointer-events-none">
+                    {{ b.value }}
+                  </text>
+                }
+              </g>
+            }
+            @if (hoveredPub(); as h) {
+              <g [attr.transform]="'translate(' + h.x + ',' + (h.y - 10) + ')'"
+                 class="pointer-events-none">
+                <rect x="-32" y="-22" width="64" height="22" rx="4"
+                      fill="#0071e3" />
+                <text text-anchor="middle" y="-7"
+                      class="text-[10px] fill-white font-semibold">
+                  {{ h.year }} · {{ h.value }}
+                </text>
+              </g>
+            }
+          </svg>
+        } @else {
+          <div class="text-center py-12 text-sm text-ink-400">No publication data</div>
+        }
+      </div>
+
+      <!-- Cell 2: Citations over Time — hover-only -->
+      <div class="bg-white rounded-apple shadow-card p-6">
+        <div class="flex items-baseline justify-between mb-4">
+          <h2 class="text-sm font-semibold text-ink-700">Citations over Time</h2>
+          <div class="text-[10px] text-ink-400">trend by year</div>
+        </div>
+        @if (chartCitations(); as c) {
+          <svg [attr.viewBox]="'0 0 ' + c.W + ' ' + c.H"
+               class="w-full h-auto select-none" preserveAspectRatio="xMidYMid meet"
+               (mouseleave)="setHoveredCit(null)">
+
+            <defs>
+              <linearGradient id="citGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"   stop-color="#1c1917" stop-opacity="0.20" />
+                <stop offset="100%" stop-color="#1c1917" stop-opacity="0.02" />
+              </linearGradient>
+            </defs>
+
+            @for (yl of c.yLabels; track yl.v) {
+              <text [attr.x]="c.padding.left - 8" [attr.y]="yl.y + 4"
+                    text-anchor="end" class="text-[10px] fill-ink-400">
+                {{ yl.v }}
+              </text>
+              <line [attr.x1]="c.padding.left" [attr.x2]="c.W - c.padding.right"
+                    [attr.y1]="yl.y" [attr.y2]="yl.y"
+                    stroke="#f5f5f4" stroke-width="1" />
+            }
+
+            <path [attr.d]="c.areaPath" fill="url(#citGrad)" />
+            <path [attr.d]="c.linePath"
+                  fill="none" stroke="#1c1917" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round" />
+
+            <!-- Data points — hover only.
+                 The invisible larger hit-area circle (r=14) makes the
+                 hover target forgiving without changing the visible
+                 dot size. -->
+            @for (p of c.points; track p.year) {
+              <g (mouseenter)="setHoveredCit(p)">
+                <circle [attr.cx]="p.x" [attr.cy]="p.y" r="14"
+                        fill="transparent" />
+                <!-- Hovered point: accent stroke + larger radius. -->
+                <circle [attr.cx]="p.x" [attr.cy]="p.y"
+                        [attr.r]="hoveredCit()?.year === p.year ? 6 : 4"
+                        fill="white"
+                        [attr.stroke]="hoveredCit()?.year === p.year ? '#0071e3' : '#1c1917'"
+                        [attr.stroke-width]="hoveredCit()?.year === p.year ? 3 : 2"
+                        class="transition-all" />
+                <text [attr.x]="p.x" [attr.y]="p.y - 12"
+                      text-anchor="middle"
+                      class="text-[10px] font-medium pointer-events-none transition-colors"
+                      [class.fill-accent]="hoveredCit()?.year === p.year"
+                      [class.fill-ink-700]="!hoveredCit() || hoveredCit()?.year === p.year"
+                      [class.fill-ink-400]="hoveredCit() && hoveredCit()?.year !== p.year">
+                  {{ p.value }}
+                </text>
+                <text [attr.x]="p.x"
+                      [attr.y]="c.H - c.padding.bottom + 16"
+                      text-anchor="middle"
+                      class="text-[10px] fill-ink-500">
+                  {{ p.year }}
+                </text>
+              </g>
+            }
+
+            @if (hoveredCit(); as h) {
+              <g [attr.transform]="'translate(' + h.x + ',' + (h.y - 16) + ')'"
+                 class="pointer-events-none">
+                <rect x="-38" y="-26" width="76" height="22" rx="4"
+                      fill="#0071e3" />
+                <text text-anchor="middle" y="-11"
+                      class="text-[10px] fill-white font-semibold">
+                  {{ h.year }} · {{ h.value }} cit.
+                </text>
+              </g>
+            }
+          </svg>
+        } @else {
+          <div class="text-center py-12 text-sm text-ink-400">No citations data</div>
+        }
+      </div>
+
+      <!-- Cell 3: Quartile / Indexing Donut -->
+      <div class="bg-white rounded-apple shadow-card p-6">
+        <div class="flex items-baseline justify-between mb-4">
+          <h2 class="text-sm font-semibold text-ink-700">Quartile & Indexing</h2>
+          <div class="text-[10px] text-ink-400">share of papers by tier</div>
+        </div>
+        @if (chartQuartile(); as q) {
+          <div class="flex items-center gap-6"
+               (mouseleave)="hoveredQuartile.set(null)">
+            <svg viewBox="-80 -80 160 160" class="w-44 h-44 -rotate-90 select-none">
+              <circle r="56" cx="0" cy="0" fill="none"
+                      stroke="#f5f5f4" stroke-width="20" />
+              @for (s of q.slices; track s.label) {
+                <!-- Hovered slice grows in stroke-width to pop forward. -->
+                <circle r="56" cx="0" cy="0" fill="none"
+                        [attr.stroke]="s.color"
+                        [attr.stroke-width]="hoveredQuartile() === s.label ? 26 : 20"
+                        stroke-linecap="butt"
+                        class="cursor-pointer transition-all"
+                        [attr.stroke-dasharray]="s.dashLength + ' ' + (q.circumference - s.dashLength)"
+                        [attr.stroke-dashoffset]="s.dashOffset"
+                        (mouseenter)="hoveredQuartile.set(s.label)" />
+              }
+              <g class="rotate-90 pointer-events-none">
+                @if (hoveredQuartile(); as hl) {
+                  <!-- Surface the hovered slice's value in the center. -->
+                  @for (s of q.slices; track s.label) {
+                    @if (s.label === hl) {
+                      <text x="0" y="-3" text-anchor="middle"
+                            class="text-[18px] fill-ink-900 font-bold">
+                        {{ s.value }}
+                      </text>
+                      <text x="0" y="14" text-anchor="middle"
+                            class="text-[9px] fill-ink-500 uppercase tracking-widest">
+                        {{ s.label }}
+                      </text>
+                    }
+                  }
+                } @else {
+                  <text x="0" y="-3" text-anchor="middle"
+                        class="text-[20px] fill-ink-900 font-bold">
+                    {{ q.total }}
+                  </text>
+                  <text x="0" y="14" text-anchor="middle"
+                        class="text-[9px] fill-ink-500 uppercase tracking-widest">
+                    Papers
+                  </text>
+                }
+              </g>
+            </svg>
+            <ul class="flex-1 space-y-2">
+              @for (s of q.slices; track s.label) {
+                <li class="flex items-center justify-between text-xs px-2 py-1
+                           rounded cursor-default transition-colors"
+                    [class.bg-accent-light]="hoveredQuartile() === s.label"
+                    (mouseenter)="hoveredQuartile.set(s.label)"
+                    (mouseleave)="hoveredQuartile.set(null)">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full inline-block transition-transform"
+                          [class.scale-150]="hoveredQuartile() === s.label"
+                          [style.background]="s.color"></span>
+                    <span class="font-medium transition-colors"
+                          [class.text-accent]="hoveredQuartile() === s.label"
+                          [class.text-ink-700]="hoveredQuartile() !== s.label">
+                      {{ s.label }}
+                    </span>
+                  </div>
+                  <div class="text-ink-500 tabular-nums">
+                    {{ s.value }}
+                    <span class="text-ink-400 ml-1">({{ (s.pct * 100).toFixed(0) }}%)</span>
+                  </div>
+                </li>
+              }
+            </ul>
+          </div>
+        } @else {
+          <div class="text-center py-12 text-sm text-ink-400">No data</div>
+        }
+      </div>
+
+      <!-- Cell 4: Top Departments (when All) — or department-specific summary card -->
+      <div class="bg-white rounded-apple shadow-card p-6">
+        @if (selectedDeptId() == null) {
+          <div class="flex items-baseline justify-between mb-4">
+            <h2 class="text-sm font-semibold text-ink-700">Top Departments</h2>
+            <div class="text-[10px] text-ink-400">by total publications</div>
+          </div>
+          @if (chartDepartments(); as bars) {
+            <ul class="space-y-2.5">
+              @for (b of bars; track b.id) {
+                <li (mouseenter)="hoveredDept.set(b.id)"
+                    (mouseleave)="hoveredDept.set(null)">
+                  <div class="w-full text-left">
+                    <div class="flex items-baseline justify-between gap-3 mb-1">
+                      <span class="text-xs font-medium truncate transition-colors"
+                            [class.text-accent]="hoveredDept() === b.id"
+                            [class.text-ink-700]="hoveredDept() !== b.id">
+                        {{ b.label }}
+                      </span>
+                      <span class="text-xs tabular-nums flex-shrink-0 transition-colors"
+                            [class.text-accent]="hoveredDept() === b.id"
+                            [class.font-semibold]="hoveredDept() === b.id"
+                            [class.text-ink-500]="hoveredDept() !== b.id">
+                        {{ b.value }}
+                      </span>
+                    </div>
+                    <div class="h-2 rounded-full bg-ink-100 overflow-hidden">
+                      <div class="h-full rounded-full transition-all duration-200"
+                           [class.bg-ink-900]="hoveredDept() !== b.id"
+                           [class.bg-accent]="hoveredDept() === b.id"
+                           [style.width.%]="b.pct * 100"></div>
+                    </div>
+                    <!-- The label tints to accent on hover for the same -->
+                    <!-- "this is what you're hovering" cue.            -->
+                  </div>
+                </li>
+              }
+            </ul>
+          } @else {
+            <div class="text-center py-12 text-sm text-ink-400">No departments</div>
+          }
+        } @else {
+          <!-- Single-department mode: show focused stats -->
+          <div class="flex items-baseline justify-between mb-4">
+            <h2 class="text-sm font-semibold text-ink-700">Department Focus</h2>
+            <button (click)="setDepartment('all')"
+                    class="text-[11px] text-accent hover:text-accent-hover font-medium">
+              ← Show all
+            </button>
+          </div>
+          @if (visibleDepartments()[0]; as dept) {
+            <div dir="rtl" class="text-base font-semibold text-ink-900 mb-3">
+              {{ dept.department_name }}
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="rounded-xl bg-ink-50 p-3">
+                <div class="text-[10px] uppercase tracking-widest text-ink-500">Q1 Papers</div>
+                <div class="text-2xl font-bold text-ink-900 mt-0.5">
+                  {{ fmt(dept.total_q1_papers) }}
+                </div>
+              </div>
+              <div class="rounded-xl bg-ink-50 p-3">
+                <div class="text-[10px] uppercase tracking-widest text-ink-500">Scopus</div>
+                <div class="text-2xl font-bold text-ink-900 mt-0.5">
+                  {{ fmt(dept.total_scopus_papers) }}
+                </div>
+              </div>
+              <div class="rounded-xl bg-ink-50 p-3">
+                <div class="text-[10px] uppercase tracking-widest text-ink-500">ISI</div>
+                <div class="text-2xl font-bold text-ink-900 mt-0.5">
+                  {{ fmt(dept.total_isi_papers) }}
+                </div>
+              </div>
+              <div class="rounded-xl bg-ink-50 p-3">
+                <div class="text-[10px] uppercase tracking-widest text-ink-500">Active</div>
+                <div class="text-2xl font-bold text-ink-900 mt-0.5">
+                  {{ fmt(dept.active_researchers) }}<span class="text-sm text-ink-400">/{{ fmt(dept.total_researchers) }}</span>
+                </div>
+              </div>
+            </div>
+          }
+        }
       </div>
     </section>
 
@@ -96,7 +476,7 @@
         Department Research Statistics
       </h2>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        @for (dept of d.departments; track dept.department_id) {
+        @for (dept of visibleDepartments(); track dept.department_id) {
           <div class="border border-ink-200 rounded-lg p-5">
             <div class="flex items-baseline justify-between mb-3" dir="rtl">
               <h3 class="text-base font-semibold text-ink-900">
@@ -145,7 +525,7 @@
     <section class="bg-white rounded-apple shadow-card p-6 mb-12">
       <h2 class="text-lg font-semibold text-ink-700 mb-4">Top Researchers</h2>
       <ol class="divide-y divide-ink-200">
-        @for (r of d.top_researchers; track r.user_id) {
+        @for (r of visibleTopResearchers(); track r.user_id) {
           <li class="flex items-center justify-between py-3">
             <div class="flex-1 min-w-0">
               <div class="text-sm font-medium text-ink-700 truncate" dir="rtl">
@@ -169,19 +549,14 @@
     <section class="bg-white rounded-apple shadow-card p-6 mb-12">
       <div class="flex items-center justify-between mb-6">
         <h2 class="text-lg font-semibold text-ink-700">Yearly Department Breakdown</h2>
-        <div class="flex gap-2">
+        <select (change)="loadYear(+$any($event.target).value)"
+                class="px-4 py-2 rounded-full bg-white border border-ink-200
+                       text-sm font-medium text-ink-700 outline-none
+                       hover:border-ink-300 cursor-pointer min-w-[120px]">
           @for (y of availableYears; track y) {
-            <button (click)="loadYear(y)"
-                    class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors"
-                    [class.bg-accent]="selectedYear() === y"
-                    [class.text-white]="selectedYear() === y"
-                    [class.bg-ink-100]="selectedYear() !== y"
-                    [class.text-ink-700]="selectedYear() !== y"
-                    [class.hover:bg-ink-200]="selectedYear() !== y">
-              {{ y }}
-            </button>
+            <option [value]="y" [selected]="selectedYear() === y">{{ y }}</option>
           }
-        </div>
+        </select>
       </div>
 
       @if (yearlyLoading()) {
@@ -299,7 +674,7 @@
     <section class="bg-white rounded-apple shadow-card p-6">
       <h2 class="text-lg font-semibold text-ink-700 mb-4">Most-cited Papers</h2>
       <ol class="divide-y divide-ink-200">
-        @for (p of d.top_papers; track p.paper_id) {
+        @for (p of visibleTopPapers(); track p.paper_id) {
           <li class="py-4">
             <div class="flex items-start justify-between gap-4">
               <div class="flex-1 min-w-0">
@@ -341,20 +716,33 @@
                 class="text-ink-400 hover:text-ink-700 text-2xl leading-none">×</button>
       </div>
 
-      
+
       <div class="mb-6">
-        <label class="text-xs uppercase tracking-wider text-ink-400 mb-3 block">
-          Years
-        </label>
-        <div class="flex gap-3">
-          <label class="flex items-center gap-2 cursor-pointer flex-1 bg-ink-100 rounded p-3 hover:bg-ink-200">
-            <input type="checkbox" [(ngModel)]="exportYears[2025]" class="w-4 h-4">
-            <span class="text-sm text-ink-700 font-medium">2025</span>
+        <div class="flex items-center justify-between mb-3">
+          <label class="text-xs uppercase tracking-wider text-ink-400">
+            Years
           </label>
-          <label class="flex items-center gap-2 cursor-pointer flex-1 bg-ink-100 rounded p-3 hover:bg-ink-200">
-            <input type="checkbox" [(ngModel)]="exportYears[2026]" class="w-4 h-4">
-            <span class="text-sm text-ink-700 font-medium">2026</span>
-          </label>
+          <div class="flex gap-3 text-xs">
+            <button (click)="selectAllExportYears()"
+                    class="text-accent hover:text-accent-hover">
+              Select all
+            </button>
+            <span class="text-ink-300">·</span>
+            <button (click)="clearExportYears()"
+                    class="text-ink-500 hover:text-ink-700">
+              Clear
+            </button>
+          </div>
+        </div>
+        <!-- Grid of checkbox chips, one per available year. -->
+        <div class="grid grid-cols-3 gap-2">
+          @for (y of availableYears; track y) {
+            <label class="flex items-center gap-2 cursor-pointer
+                          bg-ink-100 hover:bg-ink-200 rounded p-2.5">
+              <input type="checkbox" [(ngModel)]="exportYears[y]" class="w-4 h-4">
+              <span class="text-sm text-ink-700 font-medium">{{ y }}</span>
+            </label>
+          }
         </div>
       </div>
 
@@ -382,12 +770,12 @@
           <label class="flex items-center gap-3 cursor-pointer p-2 hover:bg-ink-50 rounded">
             <input type="checkbox" [(ngModel)]="exportSheets.journals" class="w-4 h-4">
             <span class="text-sm text-ink-700">Journal papers</span>
-            <span class="ml-auto text-xs text-ink-400">titles + authors + journal</span>
+            <span class="ml-auto text-xs text-ink-400">titles + abstracts + authors + journal</span>
           </label>
           <label class="flex items-center gap-3 cursor-pointer p-2 hover:bg-ink-50 rounded">
             <input type="checkbox" [(ngModel)]="exportSheets.conferences" class="w-4 h-4">
             <span class="text-sm text-ink-700">Conference papers</span>
-            <span class="ml-auto text-xs text-ink-400">titles + authors + venue</span>
+            <span class="ml-auto text-xs text-ink-400">titles + abstracts + authors + venue</span>
           </label>
         </div>
       </div>
@@ -399,13 +787,24 @@
           Cancel
         </button>
         <button (click)="triggerExport()"
-                class="bg-ink-700 hover:bg-ink-900 text-white text-sm font-medium px-5 py-2.5 rounded-full transition-colors flex items-center gap-2">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="7 10 12 15 17 10"/>
-            <line x1="12" y1="15" x2="12" y2="3"/>
-          </svg>
-          Export
+                [disabled]="exporting()"
+                class="bg-ink-700 hover:bg-ink-900 text-white text-sm font-medium px-5 py-2.5 rounded-full transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
+          @if (exporting()) {
+            <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"
+                      stroke-opacity="0.3" />
+              <path d="M22 12a10 10 0 0 0-10-10" stroke="currentColor"
+                    stroke-width="3" stroke-linecap="round" />
+            </svg>
+            Exporting…
+          } @else {
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Export
+          }
         </button>
       </div>
     </div>

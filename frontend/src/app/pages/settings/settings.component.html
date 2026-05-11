@@ -1,0 +1,138 @@
+<div class="max-w-3xl mx-auto space-y-6">
+  <div>
+    <h1 class="text-2xl font-semibold text-ink-900">Settings</h1>
+    @if (!everSaved()) {
+      <p class="text-sm text-ink-500 mt-1">
+        Update your personal information, academic IDs, and password
+      </p>
+    }
+  </div>
+
+  <!-- Identity card -->
+  <div class="bg-white rounded-2xl shadow-card p-6">
+    <div class="flex items-center gap-4 pb-5 border-b border-ink-100">
+      <div class="w-14 h-14 rounded-full bg-ink-900 text-white text-base font-semibold
+                  flex items-center justify-center">
+        {{ (auth.user()?.full_name || auth.user()?.email || '?').slice(0, 2).toUpperCase() }}
+      </div>
+      <div>
+        <div class="text-base font-semibold text-ink-900">
+          {{ auth.user()?.full_name }}
+        </div>
+        <div class="text-sm text-ink-500">{{ auth.user()?.email }}</div>
+        <div class="text-xs mt-1">
+          <span class="px-2 py-0.5 rounded-full bg-ink-100 text-ink-600 font-medium">
+            {{ auth.user()?.role }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <form [formGroup]="profileForm" (ngSubmit)="saveProfile()" class="space-y-4 mt-5">
+      <h3 class="text-sm font-semibold text-ink-900">Personal Information</h3>
+
+      <div>
+        <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide">
+          Name (Arabic)
+        </label>
+        <input type="text" formControlName="full_name_ar" dir="rtl"
+               class="w-full px-4 py-2.5 rounded-lg border border-ink-200
+                      focus:border-accent outline-none text-sm" />
+      </div>
+
+      @if (showAcademicIds) {
+        <div class="pt-3 border-t border-ink-100">
+          <h3 class="text-sm font-semibold text-ink-900 mb-3">Academic IDs</h3>
+          <p class="text-xs text-ink-500 mb-3">
+            Add your profiles for automatic publication sync
+          </p>
+          <div class="space-y-3">
+            <div>
+              <label class="block text-xs font-medium text-ink-500 mb-1.5">Google Scholar ID</label>
+              <input type="text" formControlName="scholar_id"
+                     placeholder="e.g. AbCd1234EfGh"
+                     class="w-full px-4 py-2 rounded-lg border border-ink-200 font-mono text-sm
+                            focus:border-accent outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-ink-500 mb-1.5">ORCID</label>
+              <input type="text" formControlName="orcid_id"
+                     placeholder="0000-0000-0000-0000"
+                     class="w-full px-4 py-2 rounded-lg border border-ink-200 font-mono text-sm
+                            focus:border-accent outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-ink-500 mb-1.5">Scopus Author ID</label>
+              <input type="text" formControlName="scopus_id"
+                     placeholder="e.g. 12345678900"
+                     class="w-full px-4 py-2 rounded-lg border border-ink-200 font-mono text-sm
+                            focus:border-accent outline-none" />
+            </div>
+          </div>
+        </div>
+      }
+
+      @if (success()) {
+        <div class="text-xs text-green-700 bg-green-50 px-3 py-2 rounded-lg">
+          {{ success() }}
+        </div>
+      }
+      @if (error()) {
+        <div class="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">
+          {{ error() }}
+        </div>
+      }
+
+      <button type="submit"
+              [disabled]="saving()"
+              class="px-5 py-2.5 rounded-lg bg-ink-900 text-white text-sm font-medium
+                     hover:bg-ink-700 transition disabled:opacity-50">
+        {{ saving() ? 'Saving...' : 'Save Changes' }}
+      </button>
+    </form>
+  </div>
+
+  <!-- Change Password card -->
+  <div class="bg-white rounded-2xl shadow-card p-6">
+    <h3 class="text-sm font-semibold text-ink-900 mb-4">Change Password</h3>
+
+    <form [formGroup]="passwordForm" (ngSubmit)="changePassword()" class="space-y-4">
+      <div>
+        <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide">
+          Current Password
+        </label>
+        <input type="password" formControlName="old_password"
+               class="w-full px-4 py-2.5 rounded-lg border border-ink-200
+                      focus:border-accent outline-none text-sm" />
+      </div>
+
+      <div>
+        <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide">
+          New Password
+        </label>
+        <input type="password" formControlName="new_password"
+               class="w-full px-4 py-2.5 rounded-lg border border-ink-200
+                      focus:border-accent outline-none text-sm" />
+        <p class="text-xs text-ink-400 mt-1">Minimum 8 characters</p>
+      </div>
+
+      @if (passwordSuccess()) {
+        <div class="text-xs text-green-700 bg-green-50 px-3 py-2 rounded-lg">
+          {{ passwordSuccess() }}
+        </div>
+      }
+      @if (passwordError()) {
+        <div class="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">
+          {{ passwordError() }}
+        </div>
+      }
+
+      <button type="submit"
+              [disabled]="passwordForm.invalid || passwordSaving()"
+              class="px-5 py-2.5 rounded-lg bg-ink-900 text-white text-sm font-medium
+                     hover:bg-ink-700 transition disabled:opacity-50">
+        {{ passwordSaving() ? 'Updating...' : 'Update Password' }}
+      </button>
+    </form>
+  </div>
+</div>

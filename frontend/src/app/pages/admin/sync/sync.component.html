@@ -1,0 +1,131 @@
+<div class="max-w-6xl mx-auto space-y-6">
+  <div>
+    <h1 class="text-2xl font-semibold text-ink-900">Sync Control</h1>
+    <p class="text-sm text-ink-500 mt-1">
+      Trigger publication sync from Scholar or ORCID. Researchers synced
+      in the last <span class="font-semibold">{{ cooldownDays() }} days</span>
+      are in cooldown — use Force to override.
+    </p>
+  </div>
+
+  @if (jobs().length > 0) {
+    <div class="bg-white rounded-2xl shadow-card p-5">
+      <h2 class="text-sm font-semibold text-ink-900 mb-3">Recent Jobs</h2>
+      <div class="space-y-2">
+        <!-- Always the latest 3 — keeps the panel compact regardless
+             of how many rows came back from the API. -->
+        @for (j of jobs().slice(0, 3); track j.JobID) {
+          <div class="flex items-center justify-between text-sm py-2 border-b border-ink-100 last:border-0">
+            <div class="flex items-center gap-3 min-w-0">
+              <span class="text-[11px] px-2 py-0.5 rounded-full font-medium" [class]="statusBadge(j.Status)">
+                {{ j.Status }}
+              </span>
+              <span class="text-ink-700 truncate" [attr.dir]="jobLabelDir(j)">
+                {{ jobLabel(j) }}
+              </span>
+              <span class="text-[10px] text-ink-400 font-mono">{{ j.Source }}</span>
+            </div>
+            <span class="text-[10px] text-ink-400 flex-shrink-0">
+              {{ formatDateTime(j.FinishedAt || j.StartedAt || j.CreatedAt) }}
+            </span>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  <div class="flex items-center justify-between gap-3 flex-wrap">
+    <input type="text"
+           [ngModel]="search()" (ngModelChange)="search.set($event)"
+           placeholder="Search researcher..."
+           class="px-4 py-2 rounded-lg border border-ink-200 text-sm w-64
+                  focus:border-accent outline-none" />
+    <span class="text-xs text-ink-400">{{ filtered().length }} researchers</span>
+  </div>
+
+  @if (loading()) {
+    <div class="text-center py-12 text-ink-400 text-sm">Loading...</div>
+  } @else {
+    <div class="bg-white rounded-2xl shadow-card overflow-hidden">
+      <table class="w-full text-sm">
+        <thead class="bg-ink-50 border-b border-ink-100">
+          <tr class="text-left text-[10px] uppercase tracking-wider text-ink-500">
+            <th class="px-4 py-3 font-medium">Researcher</th>
+            <th class="px-4 py-3 font-medium">IDs</th>
+            <th class="px-4 py-3 font-medium">Papers</th>
+            <th class="px-4 py-3 font-medium">Last Sync</th>
+            <th class="px-4 py-3 font-medium text-right">Trigger</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (r of filtered(); track r.UserID) {
+            <tr class="border-b border-ink-100 hover:bg-ink-50/50">
+              <td class="px-4 py-3">
+                <div class="text-sm font-medium text-ink-900" dir="rtl">
+                  {{ r.FullName_Ar || r.Email }}
+                </div>
+                <div class="text-xs text-ink-400">{{ r.Email }}</div>
+              </td>
+              <td class="px-4 py-3 text-[10px] text-ink-500 font-mono">
+                @if (r.Scholar_ID) { <div>S: {{ r.Scholar_ID }}</div> }
+                @if (r.Orcid_ID)   { <div>O: {{ r.Orcid_ID }}</div> }
+              </td>
+              <td class="px-4 py-3 text-sm text-ink-700 font-medium">{{ r.papers }}</td>
+              <td class="px-4 py-3 text-xs text-ink-500">
+                <div>{{ formatDate(r.LastSyncedAt) }}</div>
+                @if (r.is_in_cooldown) {
+                  <div class="text-[10px] text-amber-600 mt-0.5">
+                    cooldown · {{ daysUntil(r.cooldown_until) }}d left
+                  </div>
+                }
+              </td>
+              <td class="px-4 py-3 text-right">
+                <div class="flex gap-1.5 justify-end">
+                  @if (r.is_in_cooldown) {
+                    <!-- In cooldown: regular Sync disabled; Force only -->
+                    @if (r.Scholar_ID) {
+                      <button (click)="forceSync(r.UserID, 'scholar', r.papers)"
+                              [disabled]="triggering() !== null"
+                              title="Force re-sync — bypasses the cooldown"
+                              class="text-xs px-3 py-1 rounded-lg border border-amber-300
+                                     text-amber-700 hover:bg-amber-50 disabled:opacity-50">
+                        Force Scholar
+                      </button>
+                    }
+                    @if (r.Orcid_ID) {
+                      <button (click)="forceSync(r.UserID, 'orcid', r.papers)"
+                              [disabled]="triggering() !== null"
+                              title="Force re-sync — bypasses the cooldown"
+                              class="text-xs px-3 py-1 rounded-lg border border-amber-300
+                                     text-amber-700 hover:bg-amber-50 disabled:opacity-50">
+                        Force ORCID
+                      </button>
+                    }
+                  } @else {
+                    <!-- Eligible: standard Sync buttons -->
+                    @if (r.Scholar_ID) {
+                      <button (click)="trigger(r.UserID, 'scholar')"
+                              [disabled]="triggering() !== null"
+                              class="text-xs px-3 py-1 rounded-lg bg-ink-900 text-white
+                                     hover:bg-ink-700 disabled:opacity-50">
+                        Scholar
+                      </button>
+                    }
+                    @if (r.Orcid_ID) {
+                      <button (click)="trigger(r.UserID, 'orcid')"
+                              [disabled]="triggering() !== null"
+                              class="text-xs px-3 py-1 rounded-lg border border-ink-200
+                                     hover:bg-ink-50 disabled:opacity-50">
+                        ORCID
+                      </button>
+                    }
+                  }
+                </div>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>

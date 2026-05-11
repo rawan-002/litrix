@@ -12,10 +12,29 @@ can do GET /api/researchers/?department_id=2 etc.
 Dashboard scope: the overview/export endpoints focus on the years in
 FOCUS_YEARS. Edit this list to broaden or narrow the dashboard window.
 """
+import re
+
 from rest_framework import viewsets, filters, decorators, response
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Sum, Count, Avg
 from django.http import HttpResponse
+
+
+# Canonical Litrix-ID = "Lit-" + 6 zero-padded digits (e.g. Lit-000042).
+# We accept user input liberally (LIT-42, lit-0042, Lit-000042) and
+# normalize to canonical form before any DB lookup. This keeps URLs
+# robust to manual typing and case-insensitive path parameters.
+LITRIX_ID_PATTERN = re.compile(r'^lit-(\d+)$', re.IGNORECASE)
+
+
+def normalize_litrix_id(raw):
+    """Return canonical Lit-NNNNNN if `raw` looks like a Litrix-ID, else None."""
+    if not isinstance(raw, str):
+        return None
+    m = LITRIX_ID_PATTERN.match(raw.strip())
+    if not m:
+        return None
+    return f'Lit-{int(m.group(1)):06d}'
 
 from .models import (
     ResearcherStats, DepartmentStats, TopPaper, PublicationTrend,
@@ -27,7 +46,19 @@ from .serializers import (
     ResearchPaperSerializer,
 )
 
-FOCUS_YEARS = [2025, 2026]
+# Window of years the dashboard considers when no explicit ?year is given.
+# Lower bound is 2020 — older publications exist in the DB but the
+# dashboard intentionally focuses on the recent six-year window to keep
+# the UI tight. Upper bound is computed dynamically from the current
+# year so the window slides forward without yearly code edits.
+YEAR_FLOOR = 2020
+
+def _default_focus_years():
+    from datetime import datetime
+    current = datetime.now().year
+    return list(range(YEAR_FLOOR, current + 1))
+
+FOCUS_YEARS = _default_focus_years()
 
 
 @decorators.api_view(['GET'])
@@ -69,7 +100,8 @@ def paper_detail(request, paper_id):
                 j."ISSN_Print",
                 j."VenueType",
                 jr."Quartile",
-                jr."ImpactFactor"
+                jr."ImpactFactor",
+                rp."RawData_Log"->'authorships'   AS authorships_jsonb
             FROM "ResearchPaper" rp
             LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
             LEFT JOIN "JournalRankings" jr ON jr."JournalID" = j."JournalID"
@@ -91,6 +123,44 @@ def paper_detail(request, paper_id):
         else:
             cby = cby_raw
 
+        # Normalise the authorships blob (RawData_Log->'authorships' is
+        # the OpenAlex-shape array we now store on every scrape). For
+        # each authorship pull the display name + every institution
+        # name we can reach (display_name + raw_affiliation_strings),
+        # and flag whether any affiliation matches Al-Baha University.
+        import re as _re
+        ALBAHA = _re.compile(r'(al[\s\-]?baha|albaha|الباحة)', _re.IGNORECASE)
+        authorships_payload = []
+        raw_authorships = row[18]
+        if isinstance(raw_authorships, str):
+            try:
+                import json as _json
+                raw_authorships = _json.loads(raw_authorships)
+            except Exception:
+                raw_authorships = None
+        if isinstance(raw_authorships, list):
+            for ship in raw_authorships:
+                if not isinstance(ship, dict):
+                    continue
+                name = ((ship.get('author') or {}).get('display_name') or '').strip()
+                insts = []
+                for inst in (ship.get('institutions') or []):
+                    n = (inst or {}).get('display_name')
+                    if n:
+                        insts.append(n)
+                for raw in (ship.get('raw_affiliation_strings') or []):
+                    if raw and raw not in insts:
+                        insts.append(raw)
+                single = ship.get('raw_affiliation_string')
+                if single and single not in insts:
+                    insts.append(single)
+                at_albaha = any(ALBAHA.search(n) for n in insts)
+                authorships_payload.append({
+                    'name':         name,
+                    'institutions': insts,
+                    'at_albaha':    at_albaha,
+                })
+
         paper = {
             'paper_id':        row[0],
             'title':           row[1],
@@ -110,6 +180,10 @@ def paper_detail(request, paper_id):
             'venue_type':      row[15],
             'quartile':        row[16],
             'impact_factor':   row[17],
+            # Structured authorships: empty until backfill_authorships
+            # runs (or until new scrapes populate it). Frontend should
+            # fall back to `raw_authors` when this list is empty.
+            'authorships':     authorships_payload,
         }
 
         # Al-Baha researchers attributed to this paper
@@ -280,6 +354,18 @@ def export_excel(request):
         for col_idx, w in enumerate(widths, start=1):
             ws.column_dimensions[chr(64 + col_idx)].width = w
 
+    def wrap_column(ws, col_idx: int):
+        """
+        Apply wrap_text alignment to every body cell in the given
+        column. Used for the Abstract column so long paragraphs render
+        readably in Excel instead of overflowing into the next cell.
+        """
+        from openpyxl.styles import Alignment
+        for row in range(2, ws.max_row + 1):
+            ws.cell(row=row, column=col_idx).alignment = Alignment(
+                wrap_text=True, vertical='top',
+            )
+
     if 'summary' in sheets:
         for year in sorted(years):
             ws = wb.create_sheet(f'Summary {year}')
@@ -446,55 +532,79 @@ def export_excel(request):
     if 'journals' in sheets:
         for year in sorted(years):
             ws = wb.create_sheet(f'Journals {year}')
-            # Two author columns:
-            #   1. Al-Baha researchers only (Arabic names, NO "(جامعة الباحة)" suffix)
-            #   2. All authors combined (Arabic + foreign, no affiliations)
+            # Columns:
+            #   • Department, Title, Abstract
+            #   • Two author columns:
+            #       1. Al-Baha researchers only (Arabic names)
+            #       2. All authors combined (Arabic + foreign, no affiliations)
+            #   • Journal, Quartile, IF, Indexing, Citations, DOI
             ws.append([
-                'Department', 'Title',
+                'Department', 'Title', 'Abstract',
                 'Al-Baha Researchers', 'All Authors (raw)',
                 'Journal', 'Quartile', 'IF', 'Indexing',
                 'Citations', 'DOI'
             ])
-            style_header(ws, 10)
+            style_header(ws, 11)
             with connection.cursor() as cur:
+                # LEFT JOIN ResearchPaper to attach Abstract.
+                # v_paper_details doesn't expose paper_id, so we match
+                # by DOI when available (canonical identifier) and fall
+                # back to a case-insensitive title match for papers
+                # without a DOI on either side.
                 cur.execute('''
                     SELECT
-                        department_name, title,
-                        authors_ar,        -- Al-Baha researchers (Arabic)
-                        all_authors_en,    -- ALL authors (English)
-                        journal_name, quartile, impact_factor, indexing,
-                        citations, doi
-                    FROM v_paper_details
-                    WHERE pub_year = %s AND venue_type = 'Journal'
-                    ORDER BY department_name, citations DESC NULLS LAST
+                        v.department_name, v.title,
+                        rp."Abstract"          AS abstract,
+                        v.authors_ar,
+                        v.all_authors_en,
+                        v.journal_name, v.quartile, v.impact_factor, v.indexing,
+                        v.citations, v.doi
+                    FROM v_paper_details v
+                    LEFT JOIN "ResearchPaper" rp ON
+                        (v.doi IS NOT NULL
+                         AND LOWER(rp."DOI") = LOWER(v.doi))
+                        OR
+                        ((v.doi IS NULL OR rp."DOI" IS NULL)
+                         AND LOWER(rp."Title") = LOWER(v.title))
+                    WHERE v.pub_year = %s AND v.venue_type = 'Journal'
+                    ORDER BY v.department_name, v.citations DESC NULLS LAST
                 ''', [year])
                 for row in cur.fetchall():
                     ws.append(list(row))
-            set_widths(ws, [22, 60, 50, 50, 30, 10, 8, 12, 10, 30])
+            set_widths(ws, [22, 60, 80, 50, 50, 30, 10, 8, 12, 10, 30])
+            wrap_column(ws, 3)  # Abstract column
 
     if 'conferences' in sheets:
         for year in sorted(years):
             ws = wb.create_sheet(f'Conferences {year}')
             ws.append([
-                'Department', 'Title',
+                'Department', 'Title', 'Abstract',
                 'Al-Baha Researchers', 'All Authors (raw)',
                 'Conference', 'Indexing', 'Citations', 'DOI'
             ])
-            style_header(ws, 8)
+            style_header(ws, 9)
             with connection.cursor() as cur:
                 cur.execute('''
                     SELECT
-                        department_name, title,
-                        authors_ar,        -- Al-Baha researchers (Arabic)
-                        all_authors_en,    -- ALL authors (English)
-                        journal_name, indexing, citations, doi
-                    FROM v_paper_details
-                    WHERE pub_year = %s AND venue_type = 'Conference'
-                    ORDER BY department_name, citations DESC NULLS LAST
+                        v.department_name, v.title,
+                        rp."Abstract"          AS abstract,
+                        v.authors_ar,
+                        v.all_authors_en,
+                        v.journal_name, v.indexing, v.citations, v.doi
+                    FROM v_paper_details v
+                    LEFT JOIN "ResearchPaper" rp ON
+                        (v.doi IS NOT NULL
+                         AND LOWER(rp."DOI") = LOWER(v.doi))
+                        OR
+                        ((v.doi IS NULL OR rp."DOI" IS NULL)
+                         AND LOWER(rp."Title") = LOWER(v.title))
+                    WHERE v.pub_year = %s AND v.venue_type = 'Conference'
+                    ORDER BY v.department_name, v.citations DESC NULLS LAST
                 ''', [year])
                 for row in cur.fetchall():
                     ws.append(list(row))
-            set_widths(ws, [22, 60, 50, 50, 30, 12, 10, 30])
+            set_widths(ws, [22, 60, 80, 50, 50, 30, 12, 10, 30])
+            wrap_column(ws, 3)  # Abstract column
 
     if not wb.sheetnames:
         ws = wb.create_sheet('Empty')
@@ -542,6 +652,7 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
             cur.execute('''
                 SELECT
                     u."UserID",
+                    u."Litrix_ID",
                     u."FullName_Ar",
                     TRIM(CONCAT_WS(' ', u."FirstName", u."LastName")) AS full_name_en,
                     d."DepartmentName",
@@ -555,10 +666,11 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
             results = [
                 {
                     'user_id': r[0],
-                    'full_name_ar': r[1],
-                    'full_name_en': r[2],
-                    'department_name': r[3],
-                    'papers': r[4],
+                    'litrix_id': r[1],
+                    'full_name_ar': r[2],
+                    'full_name_en': r[3],
+                    'department_name': r[4],
+                    'papers': r[5],
                 }
                 for r in cur.fetchall()
             ]
@@ -581,6 +693,7 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
             cur.execute('''
                 SELECT
                     u."UserID",
+                    u."Litrix_ID",
                     u."FullName_Ar",
                     TRIM(CONCAT_WS(' ', u."FirstName", u."LastName")) AS full_name_en,
                     d."DepartmentName",
@@ -600,10 +713,11 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
             results = [
                 {
                     'user_id': r[0],
-                    'full_name_ar': r[1],
-                    'full_name_en': r[2],
-                    'department_name': r[3],
-                    'scholar_id': r[4],
+                    'litrix_id': r[1],
+                    'full_name_ar': r[2],
+                    'full_name_en': r[3],
+                    'department_name': r[4],
+                    'scholar_id': r[5],
                 }
                 for r in cur.fetchall()
             ]
@@ -612,7 +726,14 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
     @decorators.action(detail=True, methods=['get'])
     def profile(self, request, pk=None):
         """
-        GET /api/researchers/{user_id}/profile/
+        GET /api/researchers/{id}/profile/
+
+        `id` accepts either an internal numeric UserID or the public
+        Lit-NNNNNN identifier. We resolve Litrix_ID → UserID at the
+        boundary so the rest of the SQL can keep using the integer PK
+        (cheaper joins, established indices). Why allow both?
+          • Backward compat with any tooling that stored numeric IDs.
+          • The frontend now drives all profile URLs with Litrix_ID.
 
         One-shot payload powering the researcher profile page:
           - identity         (name, dept, scholar/orcid/openalex IDs)
@@ -626,6 +747,46 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
         flash of empty-then-filled UI.
         """
         from django.db import connection
+
+        # Resolve the public identifier → internal UserID at the boundary.
+        # Two paths:
+        #   1. Litrix-ID (case-insensitive, any digit length) → normalize
+        #      to canonical Lit-NNNNNN, then look up.
+        #   2. Pure numeric → treat as UserID directly.
+        # Any malformed input returns 400 instead of leaking a 500 from
+        # a Postgres type error.
+        canonical = normalize_litrix_id(pk)
+        if canonical is not None:
+            # Match the numeric core regardless of case or zero-padding
+            # in the stored value. This way "LIT-0001", "Lit-000001",
+            # and "lit-1" all resolve to the same user.
+            seq = int(LITRIX_ID_PATTERN.match(pk.strip()).group(1))
+            with connection.cursor() as cur:
+                cur.execute(
+                    '''
+                    SELECT "UserID" FROM "Users"
+                    WHERE "Litrix_ID" IS NOT NULL
+                      AND "Litrix_ID" ~* '^lit-[0-9]+$'
+                      AND CAST(SUBSTRING("Litrix_ID" FROM 5) AS INTEGER) = %s
+                    LIMIT 1
+                    ''',
+                    [seq],
+                )
+                row = cur.fetchone()
+                if not row:
+                    return response.Response(
+                        {'error': f'Researcher {canonical} not found'},
+                        status=404,
+                    )
+                resolved_user_id = row[0]
+        else:
+            try:
+                resolved_user_id = int(pk)
+            except (TypeError, ValueError):
+                return response.Response(
+                    {'error': 'Invalid researcher ID'}, status=400
+                )
+
         with connection.cursor() as cur:
             cur.execute('''
                 SELECT
@@ -633,14 +794,15 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                     u."FirstName", u."LastName", u."Email",
                     u."Scholar_ID", u."ORCID",
                     r."OpenAlex_AuthorID", r."LastSyncedAt",
-                    d."DepartmentID", d."DepartmentName"
+                    d."DepartmentID", d."DepartmentName",
+                    u."Litrix_ID"
                 FROM "Users" u
                 LEFT JOIN "Researcher" r ON r."UserID" = u."UserID"
                 LEFT JOIN "Works_In" w ON w."UserID" = u."UserID"
                                        AND w."IsCurrentPosition" = TRUE
                 LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
                 WHERE u."UserID" = %s
-            ''', [pk])
+            ''', [resolved_user_id])
             row = cur.fetchone()
             if not row:
                 return response.Response(
@@ -658,6 +820,7 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                 'last_synced_at':    row[8],
                 'department_id':     row[9],
                 'department_name':   row[10],
+                'litrix_id':         row[11],
             }
 
             # Aggregated stats. For citations, sum the per-paper Scholar
@@ -681,7 +844,7 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                 JOIN "Authors" a ON a."PaperID" = rp."PaperID"
                 LEFT JOIN "JournalRankings" jr ON jr."JournalID" = rp."JournalID"
                 WHERE a."UserID" = %s
-            ''', [pk])
+            ''', [resolved_user_id])
             stats_row = cur.fetchone()
 
             # If we have author-level per-year data from Scholar, prefer
@@ -689,7 +852,7 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
             try:
                 cur.execute(
                     'SELECT "CitationsByYear" FROM "Researcher" WHERE "UserID" = %s',
-                    [pk],
+                    [resolved_user_id],
                 )
                 rcby = cur.fetchone()
                 if rcby and rcby[0]:
@@ -732,7 +895,7 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                 cur.execute('''
                     SELECT "CitationsByYear" FROM "Researcher"
                     WHERE "UserID" = %s
-                ''', [pk])
+                ''', [resolved_user_id])
                 rcby = cur.fetchone()
                 if rcby and rcby[0]:
                     raw = rcby[0]
@@ -764,7 +927,7 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                           AND yr.year ~ '^[0-9]+$'
                         GROUP BY yr.year
                         ORDER BY yr.year
-                    ''', [pk])
+                    ''', [resolved_user_id])
                     citations_by_year = [
                         {'year': r[0], 'citations': r[1]}
                         for r in cur.fetchall()
@@ -797,7 +960,7 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                 LEFT JOIN "JournalRankings" jr ON jr."JournalID" = rp."JournalID"
                 WHERE a."UserID" = %s
                 ORDER BY rp."PubYear" DESC NULLS LAST, rp."PaperID" DESC
-            ''', [pk])
+            ''', [resolved_user_id])
             paper_cols = [c[0].lower() for c in cur.description]
             papers = [dict(zip([
                 'paper_id', 'title', 'doi', 'pub_year', 'source',
@@ -975,13 +1138,26 @@ def yearly_breakdown(request):
 
 def _resolve_years(request) -> list:
     """
-    Read the optional ?year= query param. Returns:
-        - [year] if a single year is requested (e.g. ?year=2025)
-        - FOCUS_YEARS otherwise (default = both 2025 and 2026)
+    Read the year filter from the request, supporting:
+      • single year   — ?year=2025
+      • multiple      — ?year=2024,2025,2026  (or ?years=...)
+      • all (default) — no param given → uses FOCUS_YEARS
+    Anything non-numeric inside the comma list is silently ignored so a
+    stray comma or trailing space won't 500 the dashboard.
     """
-    year_param = request.query_params.get('year')
-    if year_param and year_param.isdigit():
-        return [int(year_param)]
+    raw = (
+        request.query_params.get('year')
+        or request.query_params.get('years')
+        or ''
+    )
+    if raw:
+        years = []
+        for part in raw.split(','):
+            part = part.strip()
+            if part.isdigit():
+                years.append(int(part))
+        if years:
+            return years
     return list(FOCUS_YEARS)
 
 
@@ -1214,4 +1390,194 @@ def overview(request):
         ],
         'top_papers':      top_papers,
         'departments':     departments,
+    })
+
+
+# ============================================================================
+# Universal Search — Spotlight-style global search.
+# ============================================================================
+# Returns a unified payload: { profiles: [...], papers: [...] }.
+#
+# Permission gate (the key business rule):
+#   • view_all_researchers / view_dept_researchers (Admin/Dean/HoD) →
+#     full corpus, including papers whose authors are external (not
+#     registered Users). They need this for institutional oversight.
+#   • Otherwise (Researcher) → restrict to papers that have AT LEAST ONE
+#     author who is a registered system User. Researchers shouldn't be
+#     surfacing papers from authors outside the institution they don't
+#     have a relationship with.
+#
+# Both sides cap result count to keep the modal snappy.
+# ============================================================================
+@decorators.api_view(['GET'])
+def universal_search(request):
+    q = (request.query_params.get('q') or '').strip()
+    if len(q) < 2:
+        return response.Response({'profiles': [], 'papers': []})
+
+    # has_litrix_perm is on accounts.User; safe even when SimpleJWT
+    # hands us an AnonymousUser-like object — we just default to False.
+    user = getattr(request, 'user', None)
+    has_full_access = bool(
+        user
+        and user.is_authenticated
+        and (
+            user.has_litrix_perm('view_all_researchers')
+            or user.has_litrix_perm('view_dept_researchers')
+        )
+    )
+
+    from django.db import connection
+    like = f'%{q}%'
+
+    PROFILE_LIMIT = 8
+    PAPER_LIMIT   = 10
+
+    # --------------------------------------------------------------------
+    # Profile search — registered system Users matching the query.
+    # Researchers see only Researcher-type profiles; full-access roles
+    # see every UserType (so an Admin can find a Dean by name, etc).
+    # --------------------------------------------------------------------
+    user_type_filter = (
+        ''
+        if has_full_access
+        else "AND u.\"UserType\" = 'Researcher'"
+    )
+
+    with connection.cursor() as cur:
+        # ----------------------------------------------------------------
+        # Profile search — cross-script aware.
+        #
+        # We match against four signals so an English query can still
+        # find an Arabic-only profile (and vice versa):
+        #
+        #   1. Users.FullName_Ar       — Arabic side
+        #   2. Users.FirstName / LastName — English side, if registered
+        #   3. Users.Email / Litrix_ID — exact-ish identifiers
+        #   4. Authors.AuthorNameRaw   — bridge: scrapers (Scholar /
+        #      OpenAlex) populate this with the English-script author
+        #      string for every paper, so even if the user only has
+        #      FullName_Ar locally, their English transliteration lives
+        #      here and we surface it through this EXISTS subquery.
+        #
+        # No transliteration heuristics — we lean on real data captured
+        # from the academic sources of truth.
+        # ----------------------------------------------------------------
+        cur.execute(f'''
+            SELECT
+                u."UserID",
+                u."Litrix_ID",
+                u."FullName_Ar",
+                TRIM(CONCAT_WS(' ', u."FirstName", u."LastName")) AS full_name_en,
+                u."UserType",
+                d."DepartmentName",
+                (SELECT COUNT(*) FROM "Authors" a WHERE a."UserID" = u."UserID") AS papers
+            FROM "Users" u
+            LEFT JOIN "Works_In" w ON w."UserID" = u."UserID" AND w."IsCurrentPosition" = TRUE
+            LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
+            WHERE 1=1
+              {user_type_filter}
+              AND (
+                   u."FullName_Ar" ILIKE %s
+                OR u."FirstName"   ILIKE %s
+                OR u."LastName"    ILIKE %s
+                OR u."Email"       ILIKE %s
+                OR u."Litrix_ID"   ILIKE %s
+                OR EXISTS (
+                    SELECT 1 FROM "Authors" a
+                    WHERE a."UserID" = u."UserID"
+                      AND a."AuthorNameRaw" ILIKE %s
+                )
+              )
+            ORDER BY papers DESC NULLS LAST, u."FullName_Ar"
+            LIMIT %s
+        ''', [like, like, like, like, like, like, PROFILE_LIMIT])
+        profiles = [
+            {
+                'user_id':         r[0],
+                'litrix_id':       r[1],
+                'full_name_ar':    r[2],
+                'full_name_en':    r[3],
+                'user_type':       r[4],
+                'department_name': r[5],
+                'papers':          r[6],
+            }
+            for r in cur.fetchall()
+        ]
+
+        # ----------------------------------------------------------------
+        # Paper search — title match, with the permission gate baked in.
+        # The EXISTS subquery enforces "at least one system author" for
+        # restricted users; the full-access path skips it entirely.
+        # ----------------------------------------------------------------
+        if has_full_access:
+            paper_filter = ''
+        else:
+            paper_filter = '''
+                AND EXISTS (
+                    SELECT 1 FROM "Authors" a
+                    WHERE a."PaperID" = rp."PaperID"
+                      AND a."UserID" IS NOT NULL
+                )
+            '''
+
+        cur.execute(f'''
+            SELECT
+                rp."PaperID",
+                rp."Title",
+                rp."Title_En",
+                rp."PubYear",
+                rp."DOI",
+                rp."Indexing",
+                COALESCE(j."JournalName", rp."RawData_Log"->>'publication') AS journal_name,
+                jr."Quartile",
+                COALESCE(
+                    (rp."RawData_Log"->'cited_by'->>'value')::int,
+                    (rp."RawData_Log"->>'cited_by_count')::int,
+                    0
+                ) AS citations,
+                -- compact summary of the first 3 system authors, for the card
+                (
+                    SELECT STRING_AGG(u2."FullName_Ar", '  ·  ')
+                    FROM (
+                        SELECT u3."FullName_Ar" FROM "Authors" a2
+                        JOIN "Users" u3 ON u3."UserID" = a2."UserID"
+                        WHERE a2."PaperID" = rp."PaperID"
+                          AND u3."FullName_Ar" IS NOT NULL
+                        ORDER BY a2."AuthorOrder" NULLS LAST
+                        LIMIT 3
+                    ) u2
+                ) AS authors_summary
+            FROM "ResearchPaper" rp
+            LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
+            LEFT JOIN "JournalRankings" jr ON jr."JournalID" = rp."JournalID"
+            WHERE (
+                   rp."Title"    ILIKE %s
+                OR rp."Title_En" ILIKE %s
+                OR rp."DOI"      ILIKE %s
+            )
+              {paper_filter}
+            ORDER BY rp."PubYear" DESC NULLS LAST, citations DESC
+            LIMIT %s
+        ''', [like, like, like, PAPER_LIMIT])
+        papers = [
+            {
+                'paper_id':        r[0],
+                'title':           r[1],
+                'title_en':        r[2],
+                'pub_year':        r[3],
+                'doi':             r[4],
+                'indexing':        r[5],
+                'journal_name':    r[6],
+                'quartile':        r[7],
+                'citations':       r[8],
+                'authors_summary': r[9],
+            }
+            for r in cur.fetchall()
+        ]
+
+    return response.Response({
+        'profiles':         profiles,
+        'papers':           papers,
+        'has_full_access':  has_full_access,
     })

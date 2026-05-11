@@ -1,0 +1,103 @@
+<div class="max-w-6xl mx-auto">
+  <div class="mb-8">
+    <h1 class="text-2xl font-semibold text-ink-900">Roles & Permissions</h1>
+    <p class="text-sm text-ink-500 mt-1">Customize what each role can do</p>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div class="bg-white rounded-2xl shadow-card p-5">
+      <h2 class="text-sm font-semibold text-ink-900 mb-3">Roles</h2>
+
+      <div class="space-y-1 mb-4">
+        @for (r of roles(); track r.RoleID) {
+          <button (click)="selectRole(r.RoleID)"
+                  class="w-full text-left px-3 py-2 rounded-lg text-sm transition flex items-center justify-between"
+                  [class.bg-ink-100]="selectedRoleId() === r.RoleID"
+                  [class.text-ink-900]="selectedRoleId() === r.RoleID"
+                  [class.text-ink-500]="selectedRoleId() !== r.RoleID"
+                  [class.hover:bg-ink-50]="selectedRoleId() !== r.RoleID">
+            <span class="font-medium">{{ r.Name }}</span>
+            @if (r.IsSystem) {
+              <span class="text-[9px] text-ink-400 bg-ink-100 px-1.5 py-0.5 rounded">SYSTEM</span>
+            }
+          </button>
+        }
+      </div>
+
+      <div class="border-t border-ink-100 pt-4">
+        <h3 class="text-xs text-ink-500 mb-2">Create new role</h3>
+        <div class="flex gap-2">
+          <input type="text"
+                 [ngModel]="newRoleName()" (ngModelChange)="newRoleName.set($event)"
+                 placeholder="Role name"
+                 class="flex-1 px-3 py-2 rounded-lg border border-ink-200 text-sm
+                        focus:border-accent outline-none" />
+          <button (click)="createRole()"
+                  [disabled]="!newRoleName().trim() || creating()"
+                  class="px-3 py-2 rounded-lg bg-ink-900 text-white text-xs font-medium
+                         hover:bg-ink-700 disabled:opacity-50">
+            +
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-card p-5 md:col-span-2">
+      @if (selectedRole(); as role) {
+        <div class="flex items-baseline justify-between mb-5">
+          <div>
+            <h2 class="text-lg font-semibold text-ink-900">{{ role.Name }}</h2>
+            <p class="text-xs text-ink-500">{{ role.Description || 'Custom role' }}</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-ink-500">
+              {{ rolePermIds().size }} / {{ permissions().length }} permissions
+            </span>
+            @if (!role.IsSystem) {
+              <button (click)="deleteRole(role.RoleID)"
+                      class="text-xs text-red-600 hover:text-red-700 ml-2">
+                Delete
+              </button>
+            }
+          </div>
+        </div>
+
+        <div class="space-y-5 max-h-[60vh] overflow-y-auto">
+          @for (cat of permissionsByCategory() | keyvalue; track cat.key) {
+            <div>
+              <h3 class="text-xs uppercase tracking-wider text-ink-400 mb-2">
+                {{ cat.key }}
+              </h3>
+              <div class="space-y-1">
+                @for (p of cat.value; track p.PermissionID) {
+                  <label class="flex items-start gap-3 px-3 py-2 rounded-lg
+                                hover:bg-ink-50 cursor-pointer transition">
+                    <input type="checkbox"
+                           [checked]="hasPermSelected(p.PermissionID)"
+                           (change)="togglePerm(p.PermissionID)"
+                           class="mt-0.5" />
+                    <div class="flex-1 min-w-0">
+                      <div class="text-sm text-ink-900 font-mono">{{ p.Code }}</div>
+                      <div class="text-xs text-ink-500">{{ p.Description }}</div>
+                    </div>
+                  </label>
+                }
+              </div>
+            </div>
+          }
+        </div>
+
+        <div class="mt-5 pt-4 border-t border-ink-100">
+          <button (click)="save()"
+                  [disabled]="saving()"
+                  class="px-5 py-2 rounded-lg bg-ink-900 text-white text-sm font-medium
+                         hover:bg-ink-700 disabled:opacity-50">
+            {{ saving() ? 'Saving...' : 'Save Changes' }}
+          </button>
+        </div>
+      } @else {
+        <div class="text-center py-12 text-ink-400 text-sm">Select a role to edit</div>
+      }
+    </div>
+  </div>
+</div>

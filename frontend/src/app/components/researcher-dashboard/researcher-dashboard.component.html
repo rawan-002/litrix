@@ -1,0 +1,240 @@
+<div class="max-w-6xl mx-auto">
+  @if (loading()) {
+    <div class="text-center text-ink-400 py-20">
+      <div class="text-sm">Loading...</div>
+    </div>
+  } @else if (error()) {
+    <div class="text-center py-20">
+      <div class="text-ink-900 text-lg font-semibold mb-2">Error</div>
+      <div class="text-sm text-ink-500">{{ error() }}</div>
+    </div>
+  } @else if (data(); as d) {
+
+    <!-- Identity strip — short, no full profile chrome -->
+    <header class="mb-8">
+      <div class="text-xs uppercase tracking-widest text-ink-500 font-medium mb-1">
+        {{ d.identity.department_name || 'Researcher' }}
+      </div>
+      <h1 class="text-3xl font-bold text-ink-900 leading-tight">
+        {{ d.identity.full_name_ar || d.identity.last_name }}
+      </h1>
+      <div class="text-xs text-ink-400 mt-2 font-mono">
+        {{ d.identity.litrix_id }}
+      </div>
+    </header>
+
+    <!-- 2x2 grid of dashboard cards -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+      <!-- =========================================================
+           Cell 1 — KPI sub-grid (2x2 of stat cards)
+           ========================================================= -->
+      <section class="bg-white rounded-2xl border border-ink-100 p-6">
+        <h2 class="text-sm font-semibold text-ink-900 mb-4">Key Metrics</h2>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="rounded-xl bg-ink-50 p-4">
+            <div class="text-[10px] uppercase tracking-widest text-ink-500 font-medium">
+              Publications
+            </div>
+            <div class="text-3xl font-bold text-ink-900 mt-1">
+              {{ fmt(d.stats.total_papers) }}
+            </div>
+          </div>
+          <div class="rounded-xl bg-ink-50 p-4">
+            <div class="text-[10px] uppercase tracking-widest text-ink-500 font-medium">
+              Citations
+            </div>
+            <div class="text-3xl font-bold text-ink-900 mt-1">
+              {{ fmt(d.stats.total_citations) }}
+            </div>
+          </div>
+          <div class="rounded-xl bg-ink-50 p-4">
+            <div class="text-[10px] uppercase tracking-widest text-ink-500 font-medium">
+              H-Index
+            </div>
+            <div class="text-3xl font-bold text-ink-900 mt-1">
+              {{ fmt(hIndex()) }}
+            </div>
+          </div>
+          <div class="rounded-xl bg-ink-50 p-4">
+            <div class="text-[10px] uppercase tracking-widest text-ink-500 font-medium">
+              Q1 Papers
+            </div>
+            <div class="text-3xl font-bold text-ink-900 mt-1">
+              {{ fmt(d.stats.q1_papers) }}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           Cell 2 — Citations per Year
+           ========================================================= -->
+      <section class="bg-white rounded-2xl border border-ink-100 p-6">
+        <div class="flex items-baseline justify-between mb-4">
+          <h2 class="text-sm font-semibold text-ink-900">Citations per Year</h2>
+          <div class="text-[10px] text-ink-400">received each year</div>
+        </div>
+        @if (citationsChart(); as c) {
+          <svg [attr.viewBox]="'0 0 ' + c.W + ' ' + c.H"
+               class="w-full h-auto select-none" preserveAspectRatio="xMidYMid meet"
+               (mouseleave)="hoveredCitYear.set(null)">
+            @for (yl of c.yLabels; track yl.v) {
+              <text [attr.x]="c.padding.left - 8" [attr.y]="yl.y + 4"
+                    text-anchor="end" class="text-[10px] fill-ink-400">
+                {{ yl.v }}
+              </text>
+              <line [attr.x1]="c.padding.left" [attr.x2]="c.W - c.padding.right"
+                    [attr.y1]="yl.y" [attr.y2]="yl.y"
+                    stroke="#f5f5f4" stroke-width="1" />
+            }
+            @for (b of c.bars; track b.year) {
+              <g (mouseenter)="hoveredCitYear.set(b.year)">
+                <rect [attr.x]="b.x" [attr.y]="b.y"
+                      [attr.width]="b.w" [attr.height]="b.h"
+                      rx="3"
+                      [attr.fill]="hoveredCitYear() === b.year ? '#0071e3' : '#1c1917'"
+                      [attr.opacity]="hoveredCitYear() === b.year ? 1 : 0.85"
+                      class="transition-all" />
+                <text [attr.x]="b.x + b.w / 2"
+                      [attr.y]="c.H - c.padding.bottom + 16"
+                      text-anchor="middle"
+                      class="text-[10px] fill-ink-500">
+                  {{ b.year }}
+                </text>
+                @if (b.h > 18) {
+                  <text [attr.x]="b.x + b.w / 2"
+                        [attr.y]="b.y + 12"
+                        text-anchor="middle"
+                        class="text-[10px] fill-white font-medium pointer-events-none">
+                    {{ b.citations }}
+                  </text>
+                }
+              </g>
+            }
+          </svg>
+        } @else {
+          <div class="text-center py-12 text-sm text-ink-400">
+            No citations data yet
+          </div>
+        }
+      </section>
+
+      <!-- =========================================================
+           Cell 3 — Publications per Year
+           ========================================================= -->
+      <section class="bg-white rounded-2xl border border-ink-100 p-6">
+        <div class="flex items-baseline justify-between mb-4">
+          <h2 class="text-sm font-semibold text-ink-900">Publications per Year</h2>
+          <div class="text-[10px] text-ink-400">papers published each year</div>
+        </div>
+        @if (publicationsChart(); as p) {
+          <svg [attr.viewBox]="'0 0 ' + p.W + ' ' + p.H"
+               class="w-full h-auto select-none" preserveAspectRatio="xMidYMid meet"
+               (mouseleave)="hoveredPubYear.set(null)">
+            @for (yl of p.yLabels; track yl.v) {
+              <text [attr.x]="p.padding.left - 8" [attr.y]="yl.y + 4"
+                    text-anchor="end" class="text-[10px] fill-ink-400">
+                {{ yl.v }}
+              </text>
+              <line [attr.x1]="p.padding.left" [attr.x2]="p.W - p.padding.right"
+                    [attr.y1]="yl.y" [attr.y2]="yl.y"
+                    stroke="#f5f5f4" stroke-width="1" />
+            }
+            @for (b of p.bars; track b.year) {
+              <g (mouseenter)="hoveredPubYear.set(b.year)">
+                <rect [attr.x]="b.x" [attr.y]="b.y"
+                      [attr.width]="b.w" [attr.height]="b.h"
+                      rx="3"
+                      [attr.fill]="hoveredPubYear() === b.year ? '#0071e3' : '#1c1917'"
+                      [attr.opacity]="hoveredPubYear() === b.year ? 1 : 0.65"
+                      class="transition-all" />
+                <text [attr.x]="b.x + b.w / 2"
+                      [attr.y]="p.H - p.padding.bottom + 16"
+                      text-anchor="middle"
+                      class="text-[10px] fill-ink-500">
+                  {{ b.year }}
+                </text>
+                @if (b.h > 18) {
+                  <text [attr.x]="b.x + b.w / 2"
+                        [attr.y]="b.y + 12"
+                        text-anchor="middle"
+                        class="text-[10px] fill-white font-medium pointer-events-none">
+                    {{ b.count }}
+                  </text>
+                }
+              </g>
+            }
+          </svg>
+        } @else {
+          <div class="text-center py-12 text-sm text-ink-400">
+            No publication data yet
+          </div>
+        }
+      </section>
+
+      <!-- =========================================================
+           Cell 4 — Quartile Distribution (donut)
+           ========================================================= -->
+      <section class="bg-white rounded-2xl border border-ink-100 p-6">
+        <div class="flex items-baseline justify-between mb-4">
+          <h2 class="text-sm font-semibold text-ink-900">Quartile Distribution</h2>
+          <div class="text-[10px] text-ink-400">share of papers by tier</div>
+        </div>
+        @if (quartileChart(); as q) {
+          <div class="flex items-center gap-6">
+            <!-- Donut -->
+            <svg viewBox="-80 -80 160 160" class="w-44 h-44 -rotate-90">
+              <!-- Track -->
+              <circle r="56" cx="0" cy="0" fill="none"
+                      stroke="#f5f5f4" stroke-width="20" />
+              <!-- Slices -->
+              @for (s of q.slices; track s.label) {
+                <circle r="56" cx="0" cy="0" fill="none"
+                        [attr.stroke]="s.color" stroke-width="20"
+                        stroke-linecap="butt"
+                        [attr.stroke-dasharray]="s.dashLength + ' ' + (q.circumference - s.dashLength)"
+                        [attr.stroke-dashoffset]="s.dashOffset" />
+              }
+              <!-- Center label (rotated back upright) -->
+              <g class="rotate-90">
+                <text x="0" y="-3" text-anchor="middle"
+                      class="text-[20px] fill-ink-900 font-bold">
+                  {{ q.total }}
+                </text>
+                <text x="0" y="14" text-anchor="middle"
+                      class="text-[9px] fill-ink-500 uppercase tracking-widest">
+                  Papers
+                </text>
+              </g>
+            </svg>
+
+            <!-- Legend -->
+            <ul class="flex-1 space-y-2">
+              @for (s of q.slices; track s.label) {
+                <li class="flex items-center justify-between text-xs">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full inline-block"
+                          [style.background]="s.color"></span>
+                    <span class="text-ink-700 font-medium">{{ s.label }}</span>
+                  </div>
+                  <div class="text-ink-500 tabular-nums">
+                    {{ s.value }}
+                    <span class="text-ink-400 ml-1">
+                      ({{ (s.pct * 100).toFixed(0) }}%)
+                    </span>
+                  </div>
+                </li>
+              }
+            </ul>
+          </div>
+        } @else {
+          <div class="text-center py-12 text-sm text-ink-400">
+            No quartile data yet
+          </div>
+        }
+      </section>
+
+    </div>
+  }
+</div>

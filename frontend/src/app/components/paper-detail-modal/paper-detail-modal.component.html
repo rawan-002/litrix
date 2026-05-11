@@ -37,7 +37,19 @@
             </button>
           </div>
 
-          @if (p.raw_authors) {
+          <!-- Header authors: prefer the structured affiliations
+               summary if present (with accent for Al-Baha members);
+               fall back to the raw string until backfill runs. -->
+          @if (p.authorships && p.authorships.length > 0) {
+            <div class="text-sm mt-2">
+              @for (a of p.authorships; track a.name + $index; let last = $last) {
+                <span [class.text-accent]="a.at_albaha"
+                      [class.font-semibold]="a.at_albaha"
+                      [class.text-ink-600]="!a.at_albaha">
+                  {{ a.name }}</span>@if (!last) {<span class="text-ink-400">, </span>}
+              }
+            </div>
+          } @else if (p.raw_authors) {
             <div class="text-sm text-ink-600 mt-2">{{ p.raw_authors }}</div>
           }
         </div>
@@ -61,6 +73,52 @@
                   {{ abstractExpanded() ? 'Show less' : 'Show more' }}
                 </button>
               }
+            </div>
+          }
+
+          <!-- All authors with their affiliations.
+               Each authorship is one chip: name + institution(s).
+               Al-Baha-affiliated authors get the accent treatment so
+               the operator can see at a glance whether this paper
+               actually belongs to a Litrix researcher. -->
+          @if (p.authorships && p.authorships.length > 0) {
+            <div>
+              <h4 class="text-xs uppercase tracking-wide text-ink-500 font-medium mb-2
+                         flex items-center justify-between">
+                <span>Authors &amp; Affiliations</span>
+                <span class="text-[10px] normal-case tracking-normal text-ink-400 font-normal">
+                  Al-Baha highlighted
+                </span>
+              </h4>
+              <ul class="space-y-1.5">
+                @for (a of p.authorships; track a.name + $index) {
+                  <li class="text-sm leading-snug"
+                      [class.text-accent]="a.at_albaha"
+                      [class.text-ink-700]="!a.at_albaha">
+                    <span [class.font-semibold]="a.at_albaha">{{ a.name }}</span>
+                    @if (a.institutions && a.institutions.length > 0) {
+                      <span class="text-ink-400 mx-1">·</span>
+                      <span class="text-xs"
+                            [class.text-accent]="a.at_albaha"
+                            [class.text-ink-500]="!a.at_albaha">
+                        {{ a.institutions.join(' / ') }}
+                      </span>
+                    }
+                  </li>
+                }
+              </ul>
+            </div>
+          } @else if (p.raw_authors) {
+            <!-- Fallback: no structured authorships yet (paper not
+                 enriched). Show the raw author string as a hint. -->
+            <div>
+              <h4 class="text-xs uppercase tracking-wide text-ink-500 font-medium mb-2">
+                Authors
+                <span class="text-[10px] normal-case tracking-normal text-ink-400 font-normal">
+                  · affiliations not yet enriched
+                </span>
+              </h4>
+              <p class="text-sm text-ink-700">{{ p.raw_authors }}</p>
             </div>
           }
 
@@ -136,11 +194,11 @@
           }
 
           <!-- Citations over time chart -->
-          @if (chart(); as c) {
-            <div>
-              <h4 class="text-xs uppercase tracking-wide text-ink-500 font-medium mb-2">
-                Citations Over Time
-              </h4>
+          <div>
+            <h4 class="text-xs uppercase tracking-wide text-ink-500 font-medium mb-2">
+              Citations Over Time
+            </h4>
+            @if (chart(); as c) {
               <svg [attr.viewBox]="'0 0 ' + c.W + ' ' + c.H"
                    class="w-full h-auto" preserveAspectRatio="xMidYMid meet">
                 <line [attr.x1]="c.padding.left"
@@ -170,8 +228,29 @@
                   </g>
                 }
               </svg>
-            </div>
-          }
+              <!-- Per-year breakdown text — Apple-style minimal -->
+              <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-500">
+                @for (b of c.bars; track b.year) {
+                  <span class="font-mono">
+                    <span class="text-ink-400">{{ b.year }}</span>
+                    <span class="text-ink-700 font-medium ml-1">{{ b.count }}</span>
+                  </span>
+                }
+              </div>
+            } @else {
+              <div class="text-xs text-ink-400 italic py-3 px-4 bg-ink-50 rounded-lg">
+                Yearly breakdown not available for this paper.
+                @if (p.total_citations > 0) {
+                  <span class="block mt-1">
+                    Total citations: <span class="font-medium text-ink-700">{{ fmt(p.total_citations) }}</span>
+                    <span class="text-ink-400">
+                      (per-year data is missing — typically because this paper has no DOI)
+                    </span>
+                  </span>
+                }
+              </div>
+            }
+          </div>
 
           <!-- Links -->
           <div class="pt-2 flex gap-2 flex-wrap">

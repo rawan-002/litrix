@@ -28,6 +28,7 @@ from .views import (
     ResearcherViewSet, DepartmentViewSet,
     TopPaperViewSet, PublicationTrendViewSet,
     overview, yearly_breakdown, export_excel, paper_detail,
+    universal_search,
 )
 
 router = DefaultRouter()
@@ -42,4 +43,5 @@ urlpatterns = [
     path('yearly-breakdown/',   yearly_breakdown,   name='yearly-breakdown'),
     path('export/excel/',       export_excel,       name='export-excel'),
     path('papers/<int:paper_id>/detail/', paper_detail, name='paper-detail'),
+    path('search/',             universal_search,   name='universal-search'),
 ]

@@ -1,0 +1,11 @@
+<section>
+  <header class="max-w-6xl mx-auto mb-6">
+    <h2 class="text-2xl font-semibold text-ink-900">My Publications</h2>
+    <p class="text-sm text-ink-500 mt-1">
+      Your research output, citations, and journal classifications
+    </p>
+  </header>
+  @if (auth.user(); as u) {
+    <app-researcher-profile [overrideLitrixId]="u.litrix_id"></app-researcher-profile>
+  }
+</section>

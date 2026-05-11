@@ -1,0 +1,82 @@
+<div class="max-w-5xl mx-auto">
+  <div class="flex items-baseline justify-between mb-10 flex-wrap gap-3">
+    <div>
+      <h1 class="text-3xl font-semibold text-ink-900">Notifications</h1>
+      <p class="text-base text-ink-500 mt-2">
+        @if (svc.unreadCount() > 0) {
+          {{ svc.unreadCount() }} unread
+        } @else {
+          You're all caught up
+        }
+      </p>
+    </div>
+    @if (svc.unreadCount() > 0) {
+      <button (click)="markAllRead()"
+              class="text-sm text-ink-500 hover:text-ink-900 transition">
+        Mark all as read
+      </button>
+    }
+  </div>
+
+  <div class="flex items-center gap-1 bg-ink-100 rounded-full p-1 mb-8 inline-flex">
+    <button (click)="setFilter('all')"
+            class="text-sm font-medium px-5 py-2 rounded-full transition"
+            [class.bg-white]="filter() === 'all'"
+            [class.shadow-card]="filter() === 'all'"
+            [class.text-ink-700]="filter() === 'all'"
+            [class.text-ink-500]="filter() !== 'all'">
+      All
+    </button>
+    <button (click)="setFilter('unread')"
+            class="text-sm font-medium px-5 py-2 rounded-full transition"
+            [class.bg-white]="filter() === 'unread'"
+            [class.shadow-card]="filter() === 'unread'"
+            [class.text-ink-700]="filter() === 'unread'"
+            [class.text-ink-500]="filter() !== 'unread'">
+      Unread
+    </button>
+  </div>
+
+  @if (loading()) {
+    <div class="text-center py-20 text-ink-400 text-base">Loading...</div>
+  } @else if (svc.notifications().length === 0) {
+    <div class="bg-white rounded-2xl shadow-card p-20 text-center">
+      <div class="w-20 h-20 mx-auto rounded-full bg-ink-50 flex items-center justify-center mb-5">
+        <span class="text-3xl text-ink-300">◇</span>
+      </div>
+      <p class="text-base text-ink-500">No notifications</p>
+      <p class="text-sm text-ink-400 mt-2">
+        You'll see updates about registrations, syncs, and papers here
+      </p>
+    </div>
+  } @else {
+    <div class="bg-white rounded-2xl shadow-card divide-y divide-ink-100">
+      @for (n of svc.notifications(); track n.NotificationID) {
+        <div class="group px-7 py-5 hover:bg-accent-light/50 transition cursor-pointer flex items-start gap-4"
+             [class.bg-blue-50]="!n.IsRead"
+             (click)="markRead(n.NotificationID)">
+          <div class="w-12 h-12 rounded-full bg-ink-900 text-white text-base
+                      flex items-center justify-center flex-shrink-0
+                      group-hover:bg-accent transition-colors">
+            {{ iconFor(n.Type) }}
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-baseline justify-between gap-3">
+              <h3 class="text-base font-medium text-ink-900 truncate
+                         group-hover:text-accent transition-colors">{{ n.Title }}</h3>
+              <span class="text-xs text-ink-400 flex-shrink-0">
+                {{ formatDate(n.CreatedAt) }}
+              </span>
+            </div>
+            @if (n.Message) {
+              <p class="text-sm text-ink-500 mt-1.5 leading-relaxed">{{ n.Message }}</p>
+            }
+          </div>
+          @if (!n.IsRead) {
+            <div class="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0 mt-2.5"></div>
+          }
+        </div>
+      }
+    </div>
+  }
+</div>

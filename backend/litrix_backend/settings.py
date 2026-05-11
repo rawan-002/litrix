@@ -22,11 +22,37 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 load_dotenv(BASE_DIR.parent / '.env')
 
-SECRET_KEY = os.getenv(
-    'DJANGO_SECRET_KEY',
-    'dev-only-change-me-in-production-please-and-thank-you'
-)
-DEBUG = os.getenv('DJANGO_DEBUG', 'true').lower() == 'true'
+# ----------------------------------------------------------------------
+# Security-critical defaults.
+#
+# Why fail-fast in production?
+#   A missing DJANGO_SECRET_KEY in production used to silently fall back
+#   to a hardcoded dev string — which means every Django session token,
+#   password reset token, and signed cookie becomes forgeable by anyone
+#   with the source. Same story for DEBUG: a missing env var would boot
+#   the server with `DEBUG = True`, leaking stack traces with secrets.
+#
+# New behavior:
+#   • DEBUG defaults to FALSE (safe default).
+#   • SECRET_KEY: if DEBUG is True, a dev-only key is allowed (so local
+#     setup keeps working). If DEBUG is False (production), a missing
+#     SECRET_KEY raises ImproperlyConfigured — the deploy hard-stops
+#     instead of running insecurely.
+# ----------------------------------------------------------------------
+from django.core.exceptions import ImproperlyConfigured
+
+DEBUG = os.getenv('DJANGO_DEBUG', 'false').lower() == 'true'
+
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = 'dev-only-change-me-in-production-please-and-thank-you'
+    else:
+        raise ImproperlyConfigured(
+            'DJANGO_SECRET_KEY env var is required in production '
+            '(DEBUG=False). Generate one with: '
+            'python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"'
+        )
 
 ALLOWED_HOSTS = os.getenv(
     'DJANGO_ALLOWED_HOSTS',
@@ -45,11 +71,16 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
     'rest_framework',
+    'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'django_filters',
 
+    'accounts',
     'analytics',
 ]
+
+AUTH_USER_MODEL = 'accounts.User'
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
@@ -126,7 +157,34 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
+# ----------------------------------------------------------------------
+# DRF Renderers — why DEBUG-conditional?
+#   The BrowsableAPIRenderer renders the HTML "explore the API" pages
+#   that make local dev pleasant. In production it's pure attack surface:
+#   it exposes endpoint schemas, available methods, and a CSRF-bypassing
+#   POST form to anonymous users who hit a 401 URL. Keep it for dev only.
+#
+# DRF Throttling — why?
+#   The auth endpoints (login, register, password-reset) are AllowAny.
+#   Without throttling, an attacker can run credential stuffing or
+#   email enumeration at full speed. We attach two named scopes:
+#     • 'auth_anon' — 5/min for anonymous auth attempts
+#     • 'auth_user' — 60/min for authenticated mutations
+#   Views opt in via @throttle_classes(...) so the rest of the API
+#   (analytics reads, etc.) stays untouched.
+# ----------------------------------------------------------------------
+_renderers = ['rest_framework.renderers.JSONRenderer']
+if DEBUG:
+    _renderers.append('rest_framework.renderers.BrowsableAPIRenderer')
+
 REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
     'DEFAULT_PAGINATION_CLASS':
         'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 25,
@@ -135,10 +193,25 @@ REST_FRAMEWORK = {
         'rest_framework.filters.OrderingFilter',
         'rest_framework.filters.SearchFilter',
     ],
-    'DEFAULT_RENDERER_CLASSES': [
-        'rest_framework.renderers.JSONRenderer',
-        'rest_framework.renderers.BrowsableAPIRenderer',
+    'DEFAULT_RENDERER_CLASSES': _renderers,
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.ScopedRateThrottle',
     ],
+    'DEFAULT_THROTTLE_RATES': {
+        'auth_anon':  '5/min',
+        'auth_user': '60/min',
+    },
+}
+
+from datetime import timedelta
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME':  timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS':  True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'USER_ID_FIELD': 'user_id',
+    'USER_ID_CLAIM': 'user_id',
 }
 
 

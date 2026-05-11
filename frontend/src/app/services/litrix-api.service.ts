@@ -16,6 +16,7 @@ import {
   ResearcherStats, DepartmentStats, TopPaper,
   PublicationTrend, OverviewPayload, Paginated,
   YearlyBreakdownPayload, ResearcherProfilePayload,
+  SearchProfileResult, SearchPaperResult,
 } from '../models/litrix.models';
 import { environment } from '../../environments/environment';
 
@@ -52,9 +53,14 @@ export class LitrixApiService {
     );
   }
 
-  getResearcherProfile(userId: number): Observable<ResearcherProfilePayload> {
+  /**
+   * Fetch a researcher profile by either their Litrix-ID (Lit-NNNNNN)
+   * or numeric UserID. The backend resolves Litrix-ID → UserID at the
+   * boundary; we accept both so legacy callers don't break overnight.
+   */
+  getResearcherProfile(id: string | number): Observable<ResearcherProfilePayload> {
     return this.http.get<ResearcherProfilePayload>(
-      `${this.baseUrl}/researchers/${userId}/profile/`
+      `${this.baseUrl}/researchers/${id}/profile/`
     );
   }
 
@@ -69,6 +75,29 @@ export class LitrixApiService {
     return this.http.get<{ results: any[] }>(
       `${this.baseUrl}/researchers/all/`
     );
+  }
+
+  /**
+   * Universal search across profiles + papers.
+   *
+   * Backend applies the permission gate:
+   *   - Researcher           → only papers with at least one system author
+   *   - Admin / Dean / HoD   → all papers (including external authors)
+   *
+   * Profiles are always returned for matched name/email/litrix_id, with
+   * UserType filtered to "Researcher" for restricted users.
+   */
+  search(q: string): Observable<{
+    profiles: SearchProfileResult[];
+    papers:   SearchPaperResult[];
+    has_full_access: boolean;
+  }> {
+    const params = new HttpParams().set('q', q);
+    return this.http.get<{
+      profiles: SearchProfileResult[];
+      papers:   SearchPaperResult[];
+      has_full_access: boolean;
+    }>(`${this.baseUrl}/search/`, { params });
   }
 
   getPaperDetail(paperId: number): Observable<any> {
@@ -101,10 +130,22 @@ export class LitrixApiService {
     );
   }
 
-  getOverview(year?: number): Observable<OverviewPayload> {
-    const params = year
-      ? new HttpParams().set('year', year.toString())
-      : undefined;
+  /**
+   * Fetch the dashboard overview.
+   *
+   * `years` semantics:
+   *   • undefined / empty array → no filter (backend uses FOCUS_YEARS)
+   *   • single number           → filter to that year
+   *   • array of numbers        → filter to those years (CSV on the wire)
+   */
+  getOverview(years?: number | number[]): Observable<OverviewPayload> {
+    let params: HttpParams | undefined;
+    if (years != null) {
+      const list = Array.isArray(years) ? years : [years];
+      if (list.length > 0) {
+        params = new HttpParams().set('year', list.join(','));
+      }
+    }
     return this.http.get<OverviewPayload>(
       `${this.baseUrl}/stats/overview/`,
       params ? { params } : {}

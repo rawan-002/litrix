@@ -46,6 +46,17 @@ desktop.ini
 scraper_logs/
 *.log
 
+# Runtime artifacts produced by the scraper / diagnostics scripts.
+# These are local working files — never source-of-truth, never PII-safe.
+backend/.authorships_cache.json
+backend/ghost_papers_review.xlsx
+backend/*.xlsx
+
+# Large reference data that lives outside git (downloaded on demand).
+# scimagojr2025.csv is 11 MB and updated yearly by the Scimago import.
+scimagojr2025.csv
+scimagojr*.csv
+
 # Build artifacts
 *.egg-info/
 build/
