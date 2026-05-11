@@ -30,6 +30,7 @@ from .views import (
     overview, yearly_breakdown, export_excel, paper_detail,
     universal_search,
 )
+from . import campaign_views, my_reports_views
 
 router = DefaultRouter()
 router.register(r'researchers',  ResearcherViewSet,       basename='researcher')
@@ -44,4 +45,41 @@ urlpatterns = [
     path('export/excel/',       export_excel,       name='export-excel'),
     path('papers/<int:paper_id>/detail/', paper_detail, name='paper-detail'),
     path('search/',             universal_search,   name='universal-search'),
+
+    # ---- Reporting Campaigns (admin) ----
+    path('campaigns/',
+         campaign_views.campaign_list_create,
+         name='campaign-list-create'),
+    path('campaigns/<int:campaign_id>/',
+         campaign_views.campaign_detail,
+         name='campaign-detail'),
+    path('campaigns/<int:campaign_id>/open/',
+         campaign_views.campaign_open,
+         name='campaign-open'),
+    path('campaigns/<int:campaign_id>/close/',
+         campaign_views.campaign_close,
+         name='campaign-close'),
+    path('campaigns/<int:campaign_id>/submissions/',
+         campaign_views.campaign_submissions,
+         name='campaign-submissions'),
+
+    # ---- My Reports (researcher) ----
+    path('my-reports/',
+         my_reports_views.my_submissions,
+         name='my-submissions'),
+    path('my-reports/<int:submission_id>/',
+         my_reports_views.submission_detail,
+         name='submission-detail'),
+    path('my-reports/<int:submission_id>/decisions/',
+         my_reports_views.record_decision,
+         name='submission-record-decision'),
+    path('my-reports/<int:submission_id>/missing/',
+         my_reports_views.add_missing,
+         name='submission-add-missing'),
+    path('my-reports/<int:submission_id>/decisions/<int:decision_id>/',
+         my_reports_views.delete_decision,
+         name='submission-delete-decision'),
+    path('my-reports/<int:submission_id>/submit/',
+         my_reports_views.submit_submission,
+         name='submission-submit'),
 ]
