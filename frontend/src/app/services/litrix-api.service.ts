@@ -158,4 +158,136 @@ export class LitrixApiService {
       { params: new HttpParams().set('year', year) }
     );
   }
+
+  // ============================================================
+  // Reporting Campaigns — admin endpoints
+  // ============================================================
+  // The Campaign + Submission shapes are loose `any` for now; once
+  // the UI stabilises we'll lift them into ../models/litrix.models.
+  listCampaigns(status?: string): Observable<{ campaigns: any[] }> {
+    let params: HttpParams | undefined;
+    if (status) params = new HttpParams().set('status', status);
+    return this.http.get<{ campaigns: any[] }>(
+      `${this.baseUrl}/campaigns/`,
+      params ? { params } : {}
+    );
+  }
+
+  createCampaign(payload: {
+    title: string;
+    description?: string;
+    target_years: number[];
+    opens_at: string;
+    closes_at: string;
+    scope_type?: 'all' | 'department' | 'custom';
+    scope_filter?: Record<string, unknown>;
+  }): Observable<{ campaign_id: number; status: string }> {
+    return this.http.post<{ campaign_id: number; status: string }>(
+      `${this.baseUrl}/campaigns/`, payload
+    );
+  }
+
+  getCampaign(id: number): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/campaigns/${id}/`);
+  }
+
+  updateCampaign(id: number, patch: Partial<{
+    title: string; description: string;
+    target_years: number[];
+    opens_at: string; closes_at: string;
+    scope_type: string; scope_filter: Record<string, unknown>;
+  }>): Observable<{ message: string }> {
+    return this.http.patch<{ message: string }>(
+      `${this.baseUrl}/campaigns/${id}/`, patch
+    );
+  }
+
+  openCampaign(id: number): Observable<{
+    message: string; submissions_created: number; status: string;
+  }> {
+    return this.http.post<any>(
+      `${this.baseUrl}/campaigns/${id}/open/`, {}
+    );
+  }
+
+  closeCampaign(id: number): Observable<{ message: string; status: string }> {
+    return this.http.post<any>(
+      `${this.baseUrl}/campaigns/${id}/close/`, {}
+    );
+  }
+
+  listCampaignSubmissions(id: number): Observable<{ submissions: any[] }> {
+    return this.http.get<any>(
+      `${this.baseUrl}/campaigns/${id}/submissions/`
+    );
+  }
+
+  /**
+   * Download a per-campaign xlsx report. Returns the raw Blob so the
+   * caller can trigger a browser download (the streamed response is
+   * NOT a JSON payload — set `responseType: 'blob'`).
+   */
+  exportCampaign(id: number): Observable<Blob> {
+    return this.http.get(
+      `${this.baseUrl}/campaigns/${id}/export/`,
+      { responseType: 'blob' }
+    );
+  }
+
+  // ============================================================
+  // My Reports — researcher endpoints
+  // ============================================================
+  getMyReports(): Observable<{
+    submissions: any[]; pending_count: number;
+  }> {
+    return this.http.get<any>(`${this.baseUrl}/my-reports/`);
+  }
+
+  getMySubmission(submissionId: number): Observable<{
+    submission: { submission_id: number; status: string;
+                  submitted_at: string | null; is_editable: boolean };
+    campaign:   { campaign_id: number; title: string;
+                  target_years: number[]; opens_at: string;
+                  closes_at: string; status: string };
+    papers:     any[];
+    missing:    any[];
+  }> {
+    return this.http.get<any>(
+      `${this.baseUrl}/my-reports/${submissionId}/`
+    );
+  }
+
+  recordDecision(
+    submissionId: number,
+    payload: { paper_id: number; decision: 'confirmed' | 'not_mine'; note?: string }
+  ): Observable<{ decision_id: number; decision: string }> {
+    return this.http.post<any>(
+      `${this.baseUrl}/my-reports/${submissionId}/decisions/`, payload
+    );
+  }
+
+  addMissingPaper(
+    submissionId: number,
+    payload: { title: string; year: number; doi?: string; note?: string }
+  ): Observable<{ decision_id: number; decision: string }> {
+    return this.http.post<any>(
+      `${this.baseUrl}/my-reports/${submissionId}/missing/`, payload
+    );
+  }
+
+  deleteDecision(submissionId: number, decisionId: number)
+    : Observable<{ message: string }>
+  {
+    return this.http.delete<any>(
+      `${this.baseUrl}/my-reports/${submissionId}/decisions/${decisionId}/`
+    );
+  }
+
+  submitMyReport(submissionId: number): Observable<{
+    message: string; submission_id: number; submitted_at: string; is_late: boolean;
+  }> {
+    return this.http.post<any>(
+      `${this.baseUrl}/my-reports/${submissionId}/submit/`, {}
+    );
+  }
 }

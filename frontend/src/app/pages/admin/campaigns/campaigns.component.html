@@ -1,0 +1,317 @@
+<div class="max-w-6xl mx-auto">
+  <!-- ============== Header ============== -->
+  <div class="flex items-center justify-between mb-8">
+    <div>
+      <h1 class="text-2xl font-semibold text-ink-900 tracking-tight">Campaigns</h1>
+      <p class="text-sm text-ink-500 mt-1">
+        Open verification windows for researchers to confirm their publications.
+      </p>
+    </div>
+    <button (click)="openCreate()"
+            class="px-4 py-2 rounded-lg bg-ink-900 text-white text-sm font-medium
+                   hover:bg-ink-700 transition">
+      + New Campaign
+    </button>
+  </div>
+
+  <!-- ============== Filter pills ============== -->
+  <div class="flex gap-2 mb-6">
+    @for (f of ['all', 'draft', 'active', 'closed']; track f) {
+      <button (click)="statusFilter.set($any(f))"
+              [class.bg-ink-900]="statusFilter() === f"
+              [class.text-white]="statusFilter() === f"
+              [class.bg-white]="statusFilter() !== f"
+              [class.text-ink-600]="statusFilter() !== f"
+              [class.border]="statusFilter() !== f"
+              [class.border-ink-200]="statusFilter() !== f"
+              class="px-3 py-1.5 rounded-full text-xs font-medium capitalize transition">
+        {{ f }}
+      </button>
+    }
+  </div>
+
+  <!-- ============== Errors ============== -->
+  @if (error()) {
+    <div class="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200
+                text-sm text-red-700">
+      {{ error() }}
+    </div>
+  }
+
+  <!-- ============== List ============== -->
+  @if (loading()) {
+    <div class="text-center text-ink-400 py-12 text-sm">Loading...</div>
+  } @else if (filtered().length === 0) {
+    <div class="text-center text-ink-400 py-16 bg-white rounded-2xl border border-ink-200">
+      <div class="text-3xl mb-2">▦</div>
+      <div class="text-sm">No campaigns in this filter</div>
+    </div>
+  } @else {
+    <div class="space-y-3">
+      @for (c of filtered(); track c.campaign_id) {
+        <div class="bg-white rounded-2xl border border-ink-200 overflow-hidden">
+          <!-- Campaign card -->
+          <div class="p-5">
+            <div class="flex items-start justify-between gap-4">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-3 flex-wrap">
+                  <h3 class="text-base font-semibold text-ink-900">{{ c.title }}</h3>
+                  <!-- Status badge -->
+                  <span
+                    class="text-[10px] uppercase tracking-wider font-semibold
+                           px-2 py-0.5 rounded-full"
+                    [class.bg-ink-100]="c.status === 'draft'"
+                    [class.text-ink-600]="c.status === 'draft'"
+                    [class.bg-accent-light]="c.status === 'active'"
+                    [class.text-accent]="c.status === 'active'"
+                    [class.bg-ink-50]="c.status === 'closed' || c.status === 'archived'"
+                    [class.text-ink-400]="c.status === 'closed' || c.status === 'archived'">
+                    {{ c.status }}
+                  </span>
+                  @if (c.status === 'active') {
+                    <span class="text-xs text-ink-500">
+                      Closes in {{ daysUntilClose(c) }} {{ daysUntilClose(c) === 1 ? 'day' : 'days' }}
+                    </span>
+                  }
+                </div>
+                @if (c.description) {
+                  <p class="text-sm text-ink-500 mt-1">{{ c.description }}</p>
+                }
+                <div class="flex gap-4 mt-3 text-xs text-ink-400">
+                  <span>Years: {{ c.target_years.join(', ') }}</span>
+                  <span>Scope: {{ c.scope_type }}</span>
+                  <span>Created: {{ c.created_at | date:'mediumDate' }}</span>
+                </div>
+              </div>
+
+              <!-- Actions -->
+              <div class="flex gap-2 flex-shrink-0">
+                @if (c.status === 'draft') {
+                  <button (click)="open(c)"
+                          [disabled]="busyId() === c.campaign_id"
+                          class="px-3 py-1.5 rounded-lg bg-accent text-white text-xs
+                                 font-medium hover:bg-accent/90 transition disabled:opacity-50">
+                    Open Now
+                  </button>
+                } @else if (c.status === 'active') {
+                  <button (click)="close(c)"
+                          [disabled]="busyId() === c.campaign_id"
+                          class="px-3 py-1.5 rounded-lg border border-ink-300 text-ink-700 text-xs
+                                 font-medium hover:bg-ink-50 transition disabled:opacity-50">
+                    Close
+                  </button>
+                }
+                <!-- Export available for any campaign that has data
+                     (drafts have none, but the endpoint still works
+                     and returns an empty workbook — we hide the button
+                     instead to avoid empty downloads). -->
+                @if (c.status !== 'draft' && c.submissions_total > 0) {
+                  <button (click)="exportToExcel(c)"
+                          [disabled]="busyId() === c.campaign_id"
+                          class="px-3 py-1.5 rounded-lg border border-ink-300 text-ink-700 text-xs
+                                 font-medium hover:bg-ink-50 transition disabled:opacity-50">
+                    ↓ Export
+                  </button>
+                }
+                <button (click)="toggleExpand(c)"
+                        class="px-3 py-1.5 rounded-lg border border-ink-300 text-ink-700 text-xs
+                               font-medium hover:bg-ink-50 transition">
+                  {{ expandedId() === c.campaign_id ? 'Hide' : 'Submissions' }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Progress bar (only when there are submissions) -->
+            @if (c.submissions_total > 0) {
+              <div class="mt-4">
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="text-xs text-ink-500">
+                    {{ c.submissions_submitted }} / {{ c.submissions_total }} submitted
+                    @if (c.submissions_late > 0) {
+                      <span class="text-amber-600">· {{ c.submissions_late }} late</span>
+                    }
+                  </span>
+                  <span class="text-xs font-medium text-ink-700">{{ progressPct(c) }}%</span>
+                </div>
+                <div class="h-1.5 bg-ink-100 rounded-full overflow-hidden">
+                  <div class="h-full bg-accent transition-all"
+                       [style.width.%]="progressPct(c)"></div>
+                </div>
+              </div>
+            }
+          </div>
+
+          <!-- Inline submissions panel -->
+          @if (expandedId() === c.campaign_id) {
+            <div class="border-t border-ink-100 bg-ink-50/50 px-5 py-4">
+              @if (subsLoading()) {
+                <div class="text-center text-ink-400 py-4 text-sm">Loading submissions...</div>
+              } @else if (submissions().length === 0) {
+                <div class="text-center text-ink-400 py-4 text-sm">
+                  No submissions yet — campaign hasn't been opened or no researchers in scope.
+                </div>
+              } @else {
+                <table class="w-full text-sm">
+                  <thead class="text-xs text-ink-400 uppercase tracking-wider">
+                    <tr>
+                      <th class="text-right py-2 pr-3" dir="rtl">الباحث</th>
+                      <th class="text-left py-2 px-3">Department</th>
+                      <th class="text-left py-2 px-3">Status</th>
+                      <th class="text-left py-2 px-3">Decisions</th>
+                      <th class="text-left py-2 pl-3">Submitted</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-ink-100">
+                    @for (s of submissions(); track s.SubmissionID) {
+                      <tr>
+                        <td class="py-2 pr-3 text-right" dir="rtl">
+                          {{ s.FullName_Ar || s.Email }}
+                        </td>
+                        <td class="py-2 px-3 text-ink-600">
+                          {{ s.DepartmentName || '—' }}
+                        </td>
+                        <td class="py-2 px-3">
+                          <span class="text-[10px] uppercase tracking-wider font-semibold
+                                       px-2 py-0.5 rounded-full"
+                                [class.bg-ink-100]="s.Status === 'pending'"
+                                [class.text-ink-500]="s.Status === 'pending'"
+                                [class.bg-accent-light]="s.Status === 'in_progress'"
+                                [class.text-accent]="s.Status === 'in_progress'"
+                                [class.bg-green-100]="s.Status === 'submitted'"
+                                [class.text-green-700]="s.Status === 'submitted'">
+                            {{ s.Status }}
+                          </span>
+                          @if (s.IsLate) {
+                            <span class="text-[10px] text-amber-600 ml-1">late</span>
+                          }
+                        </td>
+                        <td class="py-2 px-3 text-xs text-ink-500">
+                          ✓ {{ s.confirmed_count }} ·
+                          ✗ {{ s.not_mine_count }} ·
+                          + {{ s.missing_count }}
+                        </td>
+                        <td class="py-2 pl-3 text-xs text-ink-400">
+                          {{ s.SubmittedAt ? (s.SubmittedAt | date:'short') : '—' }}
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+</div>
+
+
+<!-- ============== Create Modal ============== -->
+@if (showCreate()) {
+  <div class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center px-4"
+       (click)="showCreate.set(false)">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl"
+         (click)="$event.stopPropagation()">
+      <h2 class="text-lg font-semibold text-ink-900 mb-1">New Campaign</h2>
+      <p class="text-sm text-ink-500 mb-5">
+        Researchers in scope will get an auto-populated paper list to verify.
+      </p>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide">
+            Title *
+          </label>
+          <input type="text" [(ngModel)]="draft().title"
+                 (ngModelChange)="draft.update(d => ({ ...d, title: $event }))"
+                 placeholder="e.g. Annual Reports 2024–2025"
+                 class="w-full px-4 py-2.5 rounded-lg border border-ink-200
+                        focus:border-accent focus:ring-2 focus:ring-accent/20
+                        outline-none text-sm" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide">
+            Description
+          </label>
+          <textarea [(ngModel)]="draft().description"
+                    (ngModelChange)="draft.update(d => ({ ...d, description: $event }))"
+                    rows="2"
+                    class="w-full px-4 py-2.5 rounded-lg border border-ink-200
+                           focus:border-accent focus:ring-2 focus:ring-accent/20
+                           outline-none text-sm"></textarea>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide">
+            Target Years *
+          </label>
+          <div class="flex gap-2">
+            @for (y of yearOptions(); track y) {
+              <button (click)="toggleYear(y)"
+                      [class.bg-ink-900]="isYearSelected(y)"
+                      [class.text-white]="isYearSelected(y)"
+                      [class.bg-white]="!isYearSelected(y)"
+                      [class.text-ink-700]="!isYearSelected(y)"
+                      [class.border]="!isYearSelected(y)"
+                      [class.border-ink-200]="!isYearSelected(y)"
+                      class="px-3 py-1.5 rounded-lg text-sm font-medium transition">
+                {{ y }}
+              </button>
+            }
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide">
+              Opens At
+            </label>
+            <input type="datetime-local"
+                   [(ngModel)]="draft().opens_at"
+                   (ngModelChange)="draft.update(d => ({ ...d, opens_at: $event }))"
+                   class="w-full px-3 py-2 rounded-lg border border-ink-200 text-sm
+                          focus:border-accent outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide">
+              Closes At *
+            </label>
+            <input type="datetime-local"
+                   [(ngModel)]="draft().closes_at"
+                   (ngModelChange)="draft.update(d => ({ ...d, closes_at: $event }))"
+                   class="w-full px-3 py-2 rounded-lg border border-ink-200 text-sm
+                          focus:border-accent outline-none" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide">
+            Audience
+          </label>
+          <select [(ngModel)]="draft().scope_type"
+                  (ngModelChange)="draft.update(d => ({ ...d, scope_type: $event }))"
+                  class="w-full px-3 py-2 rounded-lg border border-ink-200 text-sm
+                         focus:border-accent outline-none bg-white">
+            <option value="all">All Researchers</option>
+            <option value="department">By Department (advanced)</option>
+            <option value="custom">Custom (advanced)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="flex gap-2 justify-end mt-6 pt-4 border-t border-ink-100">
+        <button (click)="showCreate.set(false)"
+                class="px-4 py-2 rounded-lg text-ink-600 text-sm font-medium hover:bg-ink-50">
+          Cancel
+        </button>
+        <button (click)="submitCreate()"
+                class="px-4 py-2 rounded-lg bg-ink-900 text-white text-sm font-medium
+                       hover:bg-ink-700 transition">
+          Save Draft
+        </button>
+      </div>
+    </div>
+  </div>
+}

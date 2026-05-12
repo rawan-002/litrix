@@ -62,6 +62,9 @@ urlpatterns = [
     path('campaigns/<int:campaign_id>/submissions/',
          campaign_views.campaign_submissions,
          name='campaign-submissions'),
+    path('campaigns/<int:campaign_id>/export/',
+         campaign_views.campaign_export,
+         name='campaign-export'),
 
     # ---- My Reports (researcher) ----
     path('my-reports/',
