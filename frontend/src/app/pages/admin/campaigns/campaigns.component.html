@@ -2,7 +2,7 @@
   <!-- ============== Header ============== -->
   <div class="flex items-center justify-between mb-8">
     <div>
-      <h1 class="text-2xl font-semibold text-ink-900 tracking-tight">Campaigns</h1>
+      <h1 class="text-2xl font-semibold text-ink-900 tracking-tight">Research Reports</h1>
       <p class="text-sm text-ink-500 mt-1">
         Open verification windows for researchers to confirm their publications.
       </p>
@@ -10,7 +10,7 @@
     <button (click)="openCreate()"
             class="px-4 py-2 rounded-lg bg-ink-900 text-white text-sm font-medium
                    hover:bg-ink-700 transition">
-      + New Campaign
+      + New Report
     </button>
   </div>
 
@@ -158,7 +158,8 @@
                       <th class="text-left py-2 px-3">Department</th>
                       <th class="text-left py-2 px-3">Status</th>
                       <th class="text-left py-2 px-3">Decisions</th>
-                      <th class="text-left py-2 pl-3">Submitted</th>
+                      <th class="text-left py-2 px-3">Submitted</th>
+                      <th class="text-left py-2 pl-3"></th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-ink-100">
@@ -190,8 +191,16 @@
                           ✗ {{ s.not_mine_count }} ·
                           + {{ s.missing_count }}
                         </td>
-                        <td class="py-2 pl-3 text-xs text-ink-400">
+                        <td class="py-2 px-3 text-xs text-ink-400">
                           {{ s.SubmittedAt ? (s.SubmittedAt | date:'short') : '—' }}
+                        </td>
+                        <td class="py-2 pl-3">
+                          @if (s.Status === 'submitted' || s.confirmed_count > 0 || s.not_mine_count > 0 || s.missing_count > 0) {
+                            <button (click)="showSubmissionDetail(s)"
+                                    class="text-xs text-accent hover:underline font-medium">
+                              Show
+                            </button>
+                          }
                         </td>
                       </tr>
                     }
@@ -213,7 +222,7 @@
        (click)="showCreate.set(false)">
     <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl"
          (click)="$event.stopPropagation()">
-      <h2 class="text-lg font-semibold text-ink-900 mb-1">New Campaign</h2>
+      <h2 class="text-lg font-semibold text-ink-900 mb-1">New Research Report</h2>
       <p class="text-sm text-ink-500 mb-5">
         Researchers in scope will get an auto-populated paper list to verify.
       </p>
@@ -247,7 +256,9 @@
           <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide">
             Target Years *
           </label>
-          <div class="flex gap-2">
+          <!-- Wraps to multiple rows. Newest years come first so the
+               most-likely picks sit at the top-left of the grid. -->
+          <div class="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
             @for (y of yearOptions(); track y) {
               <button (click)="toggleYear(y)"
                       [class.bg-ink-900]="isYearSelected(y)"
@@ -256,11 +267,14 @@
                       [class.text-ink-700]="!isYearSelected(y)"
                       [class.border]="!isYearSelected(y)"
                       [class.border-ink-200]="!isYearSelected(y)"
-                      class="px-3 py-1.5 rounded-lg text-sm font-medium transition">
+                      class="px-2.5 py-1 rounded-md text-xs font-medium transition">
                 {{ y }}
               </button>
             }
           </div>
+          <p class="text-[10px] text-ink-400 mt-1">
+            Anchored at 2011 (College of Computing founding year).
+          </p>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
@@ -310,6 +324,154 @@
                 class="px-4 py-2 rounded-lg bg-ink-900 text-white text-sm font-medium
                        hover:bg-ink-700 transition">
           Save Draft
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+
+<!-- ============== Submission Detail Modal ============== -->
+@if (showDetailFor(); as d) {
+  <div class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center px-4 py-8"
+       (click)="closeDetail()">
+    <div class="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl"
+         (click)="$event.stopPropagation()">
+
+      <!-- Modal header -->
+      <div class="px-6 py-5 border-b border-ink-100 flex items-start justify-between gap-4">
+        <div class="flex-1 min-w-0">
+          @if (detailLoading()) {
+            <h2 class="text-lg font-semibold text-ink-900">Loading...</h2>
+          } @else if (d.researcher) {
+            <h2 class="text-lg font-semibold text-ink-900" dir="rtl">
+              {{ d.researcher.full_name_ar || d.researcher.email }}
+            </h2>
+            <div class="flex gap-3 mt-1 text-xs text-ink-500">
+              @if (d.researcher.department_name) {
+                <span>{{ d.researcher.department_name }}</span>
+              }
+              <span>· {{ d.researcher.email }}</span>
+              @if (d.submission.submitted_at) {
+                <span>· Submitted {{ d.submission.submitted_at | date:'mediumDate' }}</span>
+              }
+              @if (d.submission.is_late) {
+                <span class="text-amber-600 font-medium">· Late</span>
+              }
+            </div>
+          }
+        </div>
+        <button (click)="closeDetail()"
+                class="text-ink-400 hover:text-ink-900 text-xl leading-none">×</button>
+      </div>
+
+      <!-- Scrollable body -->
+      <div class="flex-1 overflow-y-auto px-6 py-5">
+        @if (detailLoading()) {
+          <div class="text-center text-ink-400 py-12 text-sm">Loading papers...</div>
+        } @else {
+          <!-- Decision counts strip -->
+          <div class="flex gap-6 mb-6 pb-5 border-b border-ink-100 text-sm">
+            <div>
+              <div class="text-xl font-semibold text-green-600">
+                {{ ((d.papers || []).length ? (d.papers || []).length : 0) }}
+              </div>
+              <div class="text-xs text-ink-400">Papers in window</div>
+            </div>
+            <div>
+              <div class="text-xl font-semibold text-accent">
+                {{ (d.missing || []).length }}
+              </div>
+              <div class="text-xs text-ink-400">Missing reported</div>
+            </div>
+          </div>
+
+          <!-- Papers list -->
+          @if ((d.papers || []).length === 0) {
+            <div class="text-center text-ink-400 py-8 text-sm">
+              No papers found in this submission's window.
+            </div>
+          } @else {
+            <h3 class="text-xs font-semibold text-ink-400 uppercase tracking-wider mb-3">
+              Publications
+            </h3>
+            <div class="space-y-2 mb-6">
+              @for (p of d.papers; track p.paper_id) {
+                <div class="rounded-xl border p-3 transition"
+                     [class.border-green-300]="p.decision?.decision === 'confirmed'"
+                     [class.bg-green-50]="p.decision?.decision === 'confirmed'"
+                     [class.border-red-200]="p.decision?.decision === 'not_mine'"
+                     [class.bg-red-50]="p.decision?.decision === 'not_mine'"
+                     [class.border-ink-200]="!p.decision">
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="flex-1 min-w-0">
+                      <div class="text-sm font-medium text-ink-900 leading-snug">
+                        {{ p.title }}
+                      </div>
+                      <div class="flex flex-wrap gap-x-3 gap-y-1 mt-1.5 text-xs text-ink-500">
+                        <span>{{ p.pub_year }}</span>
+                        @if (p.journal_name) { <span>· {{ p.journal_name }}</span> }
+                        @if (p.quartile) {
+                          <span class="text-accent font-medium">· {{ p.quartile }}</span>
+                        }
+                        @if (p.citations > 0) {
+                          <span>· {{ p.citations }} cit.</span>
+                        }
+                        @if (p.doi) {
+                          <a [href]="'https://doi.org/' + p.doi" target="_blank"
+                             class="text-accent hover:underline"
+                             (click)="$event.stopPropagation()">DOI ↗</a>
+                        }
+                      </div>
+                    </div>
+                    <span class="text-[10px] uppercase tracking-wider font-semibold
+                                 px-2 py-1 rounded-full flex-shrink-0"
+                          [class.bg-green-100]="p.decision?.decision === 'confirmed'"
+                          [class.text-green-700]="p.decision?.decision === 'confirmed'"
+                          [class.bg-red-100]="p.decision?.decision === 'not_mine'"
+                          [class.text-red-700]="p.decision?.decision === 'not_mine'"
+                          [class.bg-ink-100]="!p.decision"
+                          [class.text-ink-500]="!p.decision">
+                      {{ p.decision?.decision === 'confirmed' ? '✓ Mine' :
+                         p.decision?.decision === 'not_mine'  ? '✗ Not mine' :
+                         'Undecided' }}
+                    </span>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+
+          <!-- Missing papers section -->
+          @if ((d.missing || []).length > 0) {
+            <h3 class="text-xs font-semibold text-ink-400 uppercase tracking-wider mb-3">
+              Missing Papers Reported by Researcher
+            </h3>
+            <div class="space-y-2">
+              @for (m of d.missing; track m.decision_id) {
+                <div class="rounded-xl border border-accent/20 bg-accent-light/30 p-3">
+                  <div class="text-sm text-ink-700">{{ m.title }}</div>
+                  <div class="flex gap-3 mt-1 text-xs text-ink-500">
+                    <span>{{ m.year }}</span>
+                    @if (m.doi) { <span>· {{ m.doi }}</span> }
+                    @if (m.resolved_at) {
+                      <span class="text-green-600">· Resolved</span>
+                    } @else {
+                      <span class="text-amber-600">· Pending</span>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        }
+      </div>
+
+      <!-- Modal footer -->
+      <div class="px-6 py-4 border-t border-ink-100 flex justify-end">
+        <button (click)="closeDetail()"
+                class="px-4 py-2 rounded-lg text-ink-600 text-sm font-medium hover:bg-ink-50">
+          Close
         </button>
       </div>
     </div>

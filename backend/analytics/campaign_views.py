@@ -472,23 +472,29 @@ def campaign_open(request, campaign_id):
             target_json = json.dumps(audience_with_type)
 
             campaign_title = title  # already a str
+            # Notification copy is intentionally in English — the
+            # Litrix UI labels this surface as "Research Reports", so
+            # the user-facing language stays consistent across the
+            # sidebar, the page, and the inbox.
             schedule_rows = [
                 # Open immediately
                 ('campaign_open',
-                 f'تم فتح نافذة التقارير: {campaign_title}',
-                 f'تم فتح نافذة التقارير لـ "{campaign_title}". '
-                 f'الرجاء مراجعة قائمة أبحاثك وتسليم تقريرك قبل تاريخ الإغلاق.',
+                 f'Research report opened: {campaign_title}',
+                 f'The research report "{campaign_title}" is now open. '
+                 f'Please review your publications list and submit your '
+                 f'report before the closing date.',
                  now),
                 # 3-day reminder (only if there's room)
                 ('campaign_reminder',
-                 f'تذكير: تقريرك ينتهي خلال 3 أيام — {campaign_title}',
-                 f'لم تقم بعد بتسليم تقريرك لـ "{campaign_title}". '
-                 f'النافذة تغلق بعد 3 أيام.',
+                 f'Reminder: 3 days left to submit — {campaign_title}',
+                 f'You have not submitted your report for '
+                 f'"{campaign_title}" yet. The window closes in 3 days.',
                  closes_at - timedelta(days=3)),
                 # Final 24h warning
                 ('campaign_final',
-                 f'تذكير أخير: التقرير ينتهي خلال 24 ساعة — {campaign_title}',
-                 f'الفرصة الأخيرة لتسليم تقريرك لـ "{campaign_title}".',
+                 f'Final reminder: 24 hours left — {campaign_title}',
+                 f'Last chance to submit your report for '
+                 f'"{campaign_title}".',
                  closes_at - timedelta(hours=24)),
             ]
 
@@ -888,6 +894,153 @@ def campaign_export(request, campaign_id):
         request=request,
     )
     return response
+
+
+# ----------------------------------------------------------------------
+# Admin view of a single researcher's submission
+# ----------------------------------------------------------------------
+@api_view(['GET'])
+def campaign_submission_detail(request, campaign_id, submission_id):
+    """
+    GET /api/campaigns/<campaign_id>/submissions/<submission_id>/
+
+    Mirror of /api/my-reports/<id>/ but for admins. Returns the same
+    payload shape (submission + campaign + papers + missing) so the
+    frontend can reuse rendering logic.
+
+    Why an admin-side mirror instead of widening my-reports?
+        The researcher endpoint scopes by `request.user.user_id` for
+        safety — every query in there hard-filters to "MY UserID". An
+        admin shouldn't have to authenticate-as-the-researcher to look
+        at a submitted report. Cleaner to keep the two surfaces
+        separate and verify perms here at the boundary.
+    """
+    if not _can_view(request.user):
+        return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+
+    with connection.cursor() as cur:
+        cur.execute(
+            '''SELECT s."SubmissionID", s."CampaignID", s."UserID", s."Status",
+                      s."StartedAt", s."SubmittedAt", s."IsLate",
+                      c."Title", c."TargetYears", c."OpensAt", c."ClosesAt",
+                      c."Status" AS campaign_status,
+                      u."FullName_Ar", u."Email", u."Litrix_ID",
+                      d."DepartmentName"
+               FROM "ReportSubmission" s
+               JOIN "ReportCampaign"   c ON c."CampaignID" = s."CampaignID"
+               JOIN "Users"            u ON u."UserID"     = s."UserID"
+               LEFT JOIN "Works_In" w ON w."UserID" = u."UserID"
+                                     AND w."IsCurrentPosition" = TRUE
+               LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
+               WHERE s."SubmissionID" = %s
+                 AND s."CampaignID"   = %s
+                 AND c."TenantID"     = %s''',
+            [submission_id, campaign_id, request.user.tenant_id],
+        )
+        row = cur.fetchone()
+        if not row:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        (_, _, user_id, sub_status, started_at, submitted_at, is_late,
+         c_title, target_years, c_opens, c_closes, c_status,
+         name_ar, email, litrix_id, dept_name) = row
+
+        # Paper list (same shape as my-reports endpoint)
+        cur.execute(
+            '''SELECT
+                 rp."PaperID", rp."Title", rp."Title_En", rp."DOI",
+                 rp."PubYear", rp."Source", rp."Indexing",
+                 COALESCE(j."JournalName", rp."RawData_Log"->>'publication')
+                     AS journal_name,
+                 jr."Quartile",
+                 COALESCE(
+                     ("RawData_Log"->'cited_by'->>'value')::int,
+                     ("RawData_Log"->>'cited_by_count')::int,
+                     0
+                 ) AS citations,
+                 d."DecisionID", d."Decision", d."Note", d."DecidedAt"
+               FROM "Authors" a
+               JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
+               LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
+               LEFT JOIN "JournalRankings" jr ON jr."JournalID" = rp."JournalID"
+               LEFT JOIN "ReportPaperDecision" d
+                 ON d."SubmissionID" = %s AND d."PaperID" = rp."PaperID"
+               WHERE a."UserID" = %s
+                 AND rp."PubYear" = ANY(%s)
+               ORDER BY rp."PubYear" DESC NULLS LAST, rp."Title"''',
+            [submission_id, user_id, target_years],
+        )
+        papers = []
+        for r in cur.fetchall():
+            papers.append({
+                'paper_id':     r[0],
+                'title':        r[1],
+                'title_en':     r[2],
+                'doi':          r[3],
+                'pub_year':     r[4],
+                'source':       r[5],
+                'indexing':     r[6],
+                'journal_name': r[7],
+                'quartile':     r[8],
+                'citations':    r[9],
+                'decision': {
+                    'decision_id': r[10],
+                    'decision':    r[11],
+                    'note':        r[12],
+                    'decided_at':  r[13],
+                } if r[10] else None,
+            })
+
+        # Missing-paper entries
+        cur.execute(
+            '''SELECT "DecisionID", "MissingTitle", "MissingDOI",
+                      "MissingYear", "Note", "DecidedAt",
+                      "MissingResolvedAt", "MissingResolvedToPaperID"
+               FROM "ReportPaperDecision"
+               WHERE "SubmissionID" = %s AND "Decision" = 'missing'
+               ORDER BY "DecidedAt" DESC''',
+            [submission_id],
+        )
+        missing = [
+            {
+                'decision_id':  r[0],
+                'title':        r[1],
+                'doi':          r[2],
+                'year':         r[3],
+                'note':         r[4],
+                'decided_at':   r[5],
+                'resolved_at':  r[6],
+                'resolved_to_paper_id': r[7],
+            }
+            for r in cur.fetchall()
+        ]
+
+    return Response({
+        'submission': {
+            'submission_id': submission_id,
+            'user_id':       user_id,
+            'status':        sub_status,
+            'started_at':    started_at,
+            'submitted_at':  submitted_at,
+            'is_late':       is_late,
+        },
+        'researcher': {
+            'full_name_ar':    name_ar,
+            'email':           email,
+            'litrix_id':       litrix_id,
+            'department_name': dept_name,
+        },
+        'campaign': {
+            'campaign_id':   campaign_id,
+            'title':         c_title,
+            'target_years':  target_years,
+            'opens_at':      c_opens,
+            'closes_at':     c_closes,
+            'status':        c_status,
+        },
+        'papers':  papers,
+        'missing': missing,
+    })
 
 
 @api_view(['GET'])

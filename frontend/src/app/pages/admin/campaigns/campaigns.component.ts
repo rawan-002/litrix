@@ -68,6 +68,10 @@ export class CampaignsComponent {
   readonly submissions = signal<SubmissionRow[]>([]);
   readonly subsLoading = signal(false);
 
+  // Modal — single researcher's papers
+  readonly showDetailFor = signal<any | null>(null);
+  readonly detailLoading = signal(false);
+
   // Create modal state
   readonly showCreate = signal(false);
   readonly draft = signal({
@@ -196,6 +200,32 @@ export class CampaignsComponent {
   }
 
   /**
+   * Open the read-only modal that lists a researcher's papers and
+   * decisions inside a single submission.
+   */
+  showSubmissionDetail(s: SubmissionRow) {
+    const campaignId = this.expandedId();
+    if (!campaignId) return;
+    this.detailLoading.set(true);
+    this.showDetailFor.set({ loading: true });
+    this.api.getCampaignSubmissionDetail(campaignId, s.SubmissionID).subscribe({
+      next: r => {
+        this.showDetailFor.set(r);
+        this.detailLoading.set(false);
+      },
+      error: e => {
+        this.detailLoading.set(false);
+        this.showDetailFor.set(null);
+        this.error.set(this.errMsg(e));
+      },
+    });
+  }
+
+  closeDetail() {
+    this.showDetailFor.set(null);
+  }
+
+  /**
    * Trigger the xlsx download. We read the response as a Blob, build a
    * temporary object URL, and click a synthetic <a download> — the
    * standard browser pattern for save-as-file from XHR.
@@ -241,9 +271,18 @@ export class CampaignsComponent {
   }
 
   // -- helpers ----------------------------------------------------------
+  /**
+   * Years offered when creating a campaign. Anchored at 2011 (College
+   * of Computing founding year) and slides forward with the current
+   * year. Reversed so the most recent year sits left — admins almost
+   * always pick recent years first.
+   */
   yearOptions(): number[] {
     const cur = new Date().getFullYear();
-    return [cur - 1, cur, cur + 1];
+    const FLOOR = 2011;
+    const years: number[] = [];
+    for (let y = cur + 1; y >= FLOOR; y--) years.push(y);
+    return years;
   }
 
   defaultYears(): number[] {

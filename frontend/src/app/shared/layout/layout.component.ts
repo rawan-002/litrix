@@ -5,6 +5,7 @@ import { CommonModule } from '@angular/common';
 import { RouterOutlet, RouterLink, RouterLinkActive, Router } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { NotificationsService } from '../../core/services/notifications.service';
+import { LitrixApiService } from '../../services/litrix-api.service';
 
 
 interface NavItem {
@@ -12,6 +13,12 @@ interface NavItem {
   icon: string;
   route: string;
   permission?: string;
+  /**
+   * Optional reactive badge count (e.g. pending reports). Signals so the
+   * template can recompute when the count changes without forcing a
+   * full nav rebuild.
+   */
+  badge?: () => number;
 }
 
 
@@ -24,12 +31,32 @@ interface NavItem {
 export class LayoutComponent implements OnInit {
   protected auth = inject(AuthService);
   protected notifs = inject(NotificationsService);
+  private api = inject(LitrixApiService);
   private router = inject(Router);
 
   readonly userMenuOpen = signal(false);
 
+  /**
+   * Number of campaign submissions the current researcher hasn't
+   * finished yet (status ∈ pending / in_progress / reopened). Powers
+   * the badge next to the "My Reports" sidebar entry.
+   *
+   * Loaded once on layout init — cheap (single endpoint, single int).
+   * For instant updates after a submit, the my-reports page itself
+   * should call `reloadPendingReports()`.
+   */
+  readonly pendingReports = signal(0);
+
   ngOnInit() {
     this.notifs.load(true).subscribe({ error: () => {} });
+    this.reloadPendingReports();
+  }
+
+  reloadPendingReports() {
+    this.api.getMyReports().subscribe({
+      next: r => this.pendingReports.set(r.pending_count ?? 0),
+      error: () => this.pendingReports.set(0),
+    });
   }
 
   /**
@@ -48,16 +75,30 @@ export class LayoutComponent implements OnInit {
     const items: NavItem[] = [
       { label: 'Dashboard',     icon: '⌂',  route: '/' },
       { label: 'Search',        icon: '⌕',  route: '/search' },
+
+      // My Reports — permanent entry. The page is an empty state if
+      // there are no active campaigns; the badge surfaces pending work
+      // without the user needing to remember to look.
+      {
+        label: 'My Reports',
+        icon:  '▤',
+        route: '/my-reports',
+        badge: () => this.pendingReports(),
+      },
     ];
 
+    // Departments — the single drill-down surface for institutional
+    // data. Visible to anyone with a "view researchers" perm (Admin,
+    // Dean, HoD) — the page itself scopes data by role.
     if (this.auth.hasPermission('view_all_researchers') ||
-        this.auth.hasPermission('view_dept_researchers')) {
-      items.push({ label: 'Researchers', icon: '◉', route: '/researchers' });
-    }
-
-    if (this.auth.hasPermission('manage_departments')) {
+        this.auth.hasPermission('view_dept_researchers') ||
+        this.auth.hasPermission('manage_departments')) {
       items.push({ label: 'Departments', icon: '◫', route: '/departments' });
     }
+
+    // Research Network — collaboration graph. Available to every
+    // authenticated user; each one is centred on themselves by default.
+    items.push({ label: 'Network', icon: '◉', route: '/network' });
 
     if (this.auth.hasPermission('approve_registrations')) {
       items.push({ label: 'Registrations', icon: '✓', route: '/admin/registrations' });
@@ -70,6 +111,16 @@ export class LayoutComponent implements OnInit {
 
     if (this.auth.hasPermission('manage_roles')) {
       items.push({ label: 'Roles & Permissions', icon: '◈', route: '/admin/roles' });
+    }
+
+    // Admin-facing reports dashboard. Visible to anyone who can
+    // manage campaigns OR view their reports (HoD-style read access).
+    // Internal route stays `/admin/campaigns` to avoid a refactor —
+    // the user-facing label is the only thing that needs to feel
+    // "official" for academic operations.
+    if (this.auth.hasPermission('manage_campaigns') ||
+        this.auth.hasPermission('view_campaign_reports')) {
+      items.push({ label: 'Research Reports', icon: '▦', route: '/admin/campaigns' });
     }
 
     if (this.auth.hasPermission('trigger_sync')) {

@@ -21,6 +21,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { LitrixApiService } from '../../services/litrix-api.service';
+import { AuthService } from '../../core/services/auth.service';
 import {
   OverviewPayload, YearlyBreakdownPayload, PaperDetail,
 } from '../../models/litrix.models';
@@ -51,6 +52,16 @@ interface DonutSlice {
 })
 export class OverviewDashboardComponent implements OnInit {
   private readonly api = inject(LitrixApiService);
+  /** Used to hide HoD-specific sections from the dashboard. */
+  protected readonly auth = inject(AuthService);
+
+  /** True when the user has view_dept_researchers but NOT
+   *  view_all_researchers - i.e. a HoD. Used to hide the
+   *  multi-department panels that don't apply to a HoD view.
+   */
+  readonly isHoD = computed(() =>
+    !this.auth.hasPermission('view_all_researchers')
+  );
   private readonly host = inject(ElementRef);
   private readonly http = inject(HttpClient);
 

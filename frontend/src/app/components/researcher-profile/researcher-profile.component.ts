@@ -51,6 +51,13 @@ export class ResearcherProfileComponent implements OnInit {
   // Quartile filter — multi-select. Empty Set = no filter (show all).
   readonly activeQuartiles = signal<Set<string>>(new Set());
 
+  /**
+   * Chart window floor — matches the admin dashboard CHART_YEAR_FLOOR.
+   * Anything before this is clipped from the citations chart for visual
+   * parity across the app.
+   */
+  private readonly CHART_YEAR_FLOOR = 2019;
+
   setSort(field: 'year' | 'citations') {
     if (this.sortField() === field) {
       this.sortDir.update(d => d === 'desc' ? 'asc' : 'desc');
@@ -120,9 +127,11 @@ export class ResearcherProfileComponent implements OnInit {
       .sort((a, b) => a.year.localeCompare(b.year));
   }
 
-  // Chart geometry: convert citations_by_year into bar coordinates
+  // Chart geometry: convert citations_by_year into bar coordinates.
+  // Clipped to CHART_YEAR_FLOOR for parity with the admin dashboard.
   readonly chart = computed(() => {
-    const cby = this.data()?.citations_by_year ?? [];
+    const cby = (this.data()?.citations_by_year ?? [])
+      .filter(c => c.year >= this.CHART_YEAR_FLOOR);
     if (!cby.length) return null;
     const max = Math.max(...cby.map(c => c.citations), 1);
     // Compact chart — about 1/3 the visual weight of the previous size

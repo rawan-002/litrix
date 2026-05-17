@@ -471,6 +471,8 @@ def submit_submission(request, submission_id):
             # Notify the campaign creator (admin who opened it). The
             # message includes the researcher's display name so the
             # admin's inbox is informative without a click-through.
+            # English copy throughout — matches the "Research Reports"
+            # label in the UI.
             full_name = (request.user.full_name_ar
                          or request.user.get_full_name()
                          or request.user.email)
@@ -482,9 +484,9 @@ def submit_submission(request, submission_id):
                            %s, %s, %s::jsonb)''',
                 [
                     tenant_id, admin_id,
-                    f'تم استلام تقرير من {full_name}',
-                    f'سلّم {full_name} تقريره لحملة "{c_title}".'
-                    + (' (متأخر)' if is_late else ''),
+                    f'Report received from {full_name}',
+                    f'{full_name} submitted their report for "{c_title}".'
+                    + (' (Late)' if is_late else ''),
                     json.dumps({
                         'campaign_id':   campaign_id,
                         'submission_id': submission_id,

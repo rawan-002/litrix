@@ -1,0 +1,181 @@
+<div class="max-w-6xl mx-auto">
+  <!-- ============== Header ============== -->
+  <div class="mb-8">
+    <h1 class="text-2xl font-semibold text-ink-900 tracking-tight">Departments</h1>
+    <p class="text-sm text-ink-500 mt-1">
+      Institutional research output by department.
+    </p>
+  </div>
+
+  <!-- ============== Totals strip ============== -->
+  @if (!loading()) {
+    <div class="grid grid-cols-4 gap-4 mb-8">
+      <div class="bg-white rounded-2xl border border-ink-200 p-4">
+        <div class="text-2xl font-semibold text-ink-900">{{ totals().depts }}</div>
+        <div class="text-xs text-ink-400 mt-1 uppercase tracking-wider">Departments</div>
+      </div>
+      <div class="bg-white rounded-2xl border border-ink-200 p-4">
+        <div class="text-2xl font-semibold text-ink-900">{{ totals().researchers }}</div>
+        <div class="text-xs text-ink-400 mt-1 uppercase tracking-wider">Researchers</div>
+      </div>
+      <div class="bg-white rounded-2xl border border-ink-200 p-4">
+        <div class="text-2xl font-semibold text-ink-900">{{ totals().papers | number }}</div>
+        <div class="text-xs text-ink-400 mt-1 uppercase tracking-wider">Papers</div>
+      </div>
+      <div class="bg-white rounded-2xl border border-ink-200 p-4">
+        <div class="text-2xl font-semibold text-ink-900">{{ totals().citations | number }}</div>
+        <div class="text-xs text-ink-400 mt-1 uppercase tracking-wider">Citations</div>
+      </div>
+    </div>
+  }
+
+  <!-- ============== Controls ============== -->
+  <div class="flex items-center justify-between mb-5 gap-3 flex-wrap">
+    <div class="flex gap-2 flex-wrap">
+      @for (k of ['total_papers', 'total_citations', 'avg_h_index', 'total_researchers']; track k) {
+        <button (click)="setSort($any(k))"
+                [class.bg-ink-900]="sortBy() === k"
+                [class.text-white]="sortBy() === k"
+                [class.bg-white]="sortBy() !== k"
+                [class.text-ink-600]="sortBy() !== k"
+                [class.border]="sortBy() !== k"
+                [class.border-ink-200]="sortBy() !== k"
+                class="px-3 py-1.5 rounded-full text-xs font-medium transition">
+          {{ sortLabel($any(k)) }}
+        </button>
+      }
+    </div>
+    <input type="text"
+           placeholder="Search department..."
+           [value]="search()"
+           (input)="search.set($any($event.target).value)"
+           class="px-3 py-1.5 rounded-lg border border-ink-200 text-sm
+                  focus:border-accent outline-none w-56" />
+  </div>
+
+  <!-- ============== Errors ============== -->
+  @if (error()) {
+    <div class="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200
+                text-sm text-red-700">
+      {{ error() }}
+    </div>
+  }
+
+  <!-- ============== List ============== -->
+  @if (loading()) {
+    <div class="text-center text-ink-400 py-12 text-sm">Loading...</div>
+  } @else if (sorted().length === 0) {
+    <div class="text-center text-ink-400 py-16 bg-white rounded-2xl border border-ink-200">
+      <div class="text-3xl mb-2">◫</div>
+      <div class="text-sm">No departments match your filter</div>
+    </div>
+  } @else {
+    <div class="space-y-3">
+      @for (d of sorted(); track d.department_id) {
+        <div class="bg-white rounded-2xl border border-ink-200 overflow-hidden">
+          <!-- Card -->
+          <button (click)="toggleExpand(d)"
+                  class="w-full p-5 text-left hover:bg-ink-50/50 transition">
+            <div class="flex items-center justify-between gap-4">
+              <div class="flex-1 min-w-0">
+                <h3 class="text-base font-semibold text-ink-900" dir="rtl">
+                  {{ d.department_name }}
+                </h3>
+                <div class="grid grid-cols-5 gap-6 mt-3 max-w-2xl">
+                  <div>
+                    <div class="text-lg font-semibold text-ink-900">{{ d.total_researchers }}</div>
+                    <div class="text-[10px] uppercase tracking-wider text-ink-400 mt-0.5">
+                      Researchers
+                    </div>
+                  </div>
+                  <div>
+                    <div class="text-lg font-semibold text-ink-900">{{ d.total_papers }}</div>
+                    <div class="text-[10px] uppercase tracking-wider text-ink-400 mt-0.5">
+                      Papers
+                    </div>
+                  </div>
+                  <div>
+                    <div class="text-lg font-semibold text-ink-900">{{ d.total_citations | number }}</div>
+                    <div class="text-[10px] uppercase tracking-wider text-ink-400 mt-0.5">
+                      Citations
+                    </div>
+                  </div>
+                  <div>
+                    <div class="text-lg font-semibold text-accent">{{ d.total_q1_papers }}</div>
+                    <div class="text-[10px] uppercase tracking-wider text-ink-400 mt-0.5">
+                      Q1 papers
+                    </div>
+                  </div>
+                  <div>
+                    <div class="text-lg font-semibold text-ink-900">{{ d.avg_h_index | number:'1.1-1' }}</div>
+                    <div class="text-[10px] uppercase tracking-wider text-ink-400 mt-0.5">
+                      Avg h-index
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <span class="text-ink-300 text-lg flex-shrink-0">
+                {{ expandedId() === d.department_id ? '▾' : '▸' }}
+              </span>
+            </div>
+          </button>
+
+          <!-- Inline researchers panel -->
+          @if (expandedId() === d.department_id) {
+            <div class="border-t border-ink-100 bg-ink-50/40 px-5 py-4">
+              @if (resLoading()) {
+                <div class="text-center text-ink-400 py-4 text-sm">Loading researchers...</div>
+              } @else if (researchers().length === 0) {
+                <div class="text-center text-ink-400 py-4 text-sm">
+                  No researchers in this department.
+                </div>
+              } @else {
+                <table class="w-full text-sm">
+                  <thead class="text-xs text-ink-400 uppercase tracking-wider">
+                    <tr>
+                      <th class="text-right py-2 pr-3" dir="rtl">الباحث</th>
+                      <th class="text-left py-2 px-3">Rank</th>
+                      <th class="text-right py-2 px-3">Papers</th>
+                      <th class="text-right py-2 px-3">Citations</th>
+                      <th class="text-right py-2 px-3">h-index</th>
+                      <th class="text-right py-2 px-3">Q1</th>
+                      <th class="text-left py-2 pl-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-ink-100">
+                    @for (r of researchers(); track r.user_id) {
+                      <tr class="hover:bg-white">
+                        <td class="py-2 pr-3 text-right" dir="rtl">
+                          {{ r.full_name_ar || r.full_name_en || '—' }}
+                        </td>
+                        <td class="py-2 px-3 text-ink-600">{{ r.academic_rank || '—' }}</td>
+                        <td class="py-2 px-3 text-right text-ink-700 font-medium">
+                          {{ r.total_papers }}
+                        </td>
+                        <td class="py-2 px-3 text-right text-ink-700">
+                          {{ r.total_citations | number }}
+                        </td>
+                        <td class="py-2 px-3 text-right text-ink-700 font-medium">
+                          {{ r.h_index }}
+                        </td>
+                        <td class="py-2 px-3 text-right text-accent font-medium">
+                          {{ r.q1_papers }}
+                        </td>
+                        <td class="py-2 pl-3">
+                          @if (r.litrix_id) {
+                            <a [routerLink]="['/profile', r.litrix_id]"
+                               class="text-xs text-accent hover:underline">View →</a>
+                          }
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+</div>

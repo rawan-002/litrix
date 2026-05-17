@@ -399,6 +399,38 @@ def public_departments(request):
     return Response({'departments': rows})
 
 
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def public_stats(request):
+    """
+    Headline counts for the public landing page. No auth required, no
+    PII surfaced - only aggregates. Cached intent: cheap to compute,
+    safe to expose, refreshed on every page load.
+    """
+    with connection.cursor() as cur:
+        cur.execute("""
+            SELECT
+                (SELECT COUNT(*) FROM "Users"
+                 WHERE "UserType" = 'Researcher')                AS researchers,
+                (SELECT COUNT(*) FROM "ResearchPaper")           AS papers,
+                (SELECT COUNT(DISTINCT "JournalID")
+                 FROM "JournalRankings"
+                 WHERE "Quartile" = 'Q1')                        AS q1_journals,
+                (SELECT COUNT(*) FROM "Department"
+                 WHERE "TenantID" = 1)                           AS departments,
+                (SELECT COUNT(*) FROM "ResearchPaper"
+                 WHERE "PubYear" = EXTRACT(YEAR FROM NOW())::int) AS papers_this_year
+        """)
+        r = cur.fetchone()
+    return Response({
+        'researchers':      r[0],
+        'papers':           r[1],
+        'q1_journals':      r[2],
+        'departments':      r[3],
+        'papers_this_year': r[4],
+    })
+
+
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
 @throttle_classes([AuthAnonThrottle])
@@ -491,8 +523,42 @@ def register(request):
     # Invitation fast path: provision the User directly, skip the
     # awaiting-email-verification queue, and skip the admin-approval
     # step. The invite IS the approval (admin issued it explicitly).
+    #
+    # SECURITY GATE: even with a valid invitation, the researcher
+    # cannot claim a profile under a different department than the
+    # one already recorded. We re-run the mismatch check here and
+    # reject HIGH-severity department mismatches before any account
+    # is created. (The invite vetting only covers email + role, not
+    # the identity claim against existing scraped data.)
     # ------------------------------------------------------------------
     if invite_payload:
+        inv_verification = _lookup_existing_for_registration(
+            scholar_id    = d.get('scholar_id'),
+            orcid_id      = d.get('orcid_id'),
+            email         = email,
+            department_id = d.get('department_id'),
+            academic_rank = d.get('academic_rank'),
+            full_name_ar  = d.get('full_name_ar'),
+        )
+        dept_blocking = [
+            m for m in inv_verification.get('mismatches', [])
+            if m.get('severity') == 'high'
+               and m.get('field') == 'department_id'
+        ]
+        if dept_blocking:
+            return Response(
+                {
+                    'error':       'department_mismatch',
+                    'message':     (
+                        'The department you selected does not match '
+                        'the one on record for this researcher. Please '
+                        'pick the correct department or contact the '
+                        'administrator.'
+                    ),
+                    'mismatches':  dept_blocking,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
         return _provision_invited_user(
             request, d, metadata, pwd_hash, email, invite_payload,
         )
@@ -566,21 +632,79 @@ def _provision_invited_user(request, d, metadata, pwd_hash, email, invite):
 
     with transaction.atomic():
         with connection.cursor() as cur:
-            cur.execute('''
-                INSERT INTO "Users"
-                  ("Email", "PasswordHash", "FullName_Ar", "FirstName", "LastName",
-                   "UserType", "AccountStatus", "TenantID", "RoleID",
-                   "EmailVerified", "IsActive", "Scholar_ID", "Orcid_ID", "Scopus_ID",
-                   "CreatedAt")
-                VALUES (%s, %s, %s, %s, %s, %s, 'Active', %s, %s,
-                        TRUE, TRUE, %s, %s, %s, NOW())
-                RETURNING "UserID"
-            ''', [
-                email, pwd_hash, name_ar, first_name, last_name,
-                user_type, tenant_id, role_id,
-                sid, oid, scopus,
-            ])
-            new_user_id = cur.fetchone()[0]
+            # ----------------------------------------------------------
+            # CLAIM-PROFILE FLOW
+            # Before INSERT-ing a brand-new Users row, check if there's
+            # already a 'Pending' row with the same Scholar_ID or ORCID.
+            # That row was created earlier by an admin import / cleanup
+            # and is waiting for the real owner to register. We UPDATE
+            # it in-place so the existing Authors links + Researcher
+            # row keep their UserID - the new user inherits all their
+            # papers automatically.
+            # ----------------------------------------------------------
+            claimed_user_id = None
+            if sid:
+                cur.execute(
+                    'SELECT "UserID" FROM "Users" '
+                    'WHERE "Scholar_ID" = %s AND "AccountStatus" = %s '
+                    'LIMIT 1',
+                    [sid, 'Pending'],
+                )
+                row = cur.fetchone()
+                if row:
+                    claimed_user_id = row[0]
+            if claimed_user_id is None and oid:
+                cur.execute(
+                    'SELECT "UserID" FROM "Users" '
+                    'WHERE "Orcid_ID" = %s AND "AccountStatus" = %s '
+                    'LIMIT 1',
+                    [oid, 'Pending'],
+                )
+                row = cur.fetchone()
+                if row:
+                    claimed_user_id = row[0]
+
+            if claimed_user_id is not None:
+                # Claim path: update the existing Pending row.
+                cur.execute('''
+                    UPDATE "Users"
+                    SET "Email"         = %s,
+                        "PasswordHash"  = %s,
+                        "FullName_Ar"   = COALESCE(%s, "FullName_Ar"),
+                        "FirstName"     = COALESCE(%s, "FirstName"),
+                        "LastName"      = COALESCE(%s, "LastName"),
+                        "UserType"      = %s,
+                        "AccountStatus" = 'Active',
+                        "TenantID"      = %s,
+                        "RoleID"        = %s,
+                        "EmailVerified" = TRUE,
+                        "IsActive"      = TRUE,
+                        "Scopus_ID"     = COALESCE(%s, "Scopus_ID")
+                    WHERE "UserID" = %s
+                    RETURNING "UserID"
+                ''', [
+                    email, pwd_hash, name_ar, first_name, last_name,
+                    user_type, tenant_id, role_id, scopus,
+                    claimed_user_id,
+                ])
+                new_user_id = cur.fetchone()[0]
+            else:
+                # Fresh INSERT path: no matching profile to claim.
+                cur.execute('''
+                    INSERT INTO "Users"
+                      ("Email", "PasswordHash", "FullName_Ar", "FirstName", "LastName",
+                       "UserType", "AccountStatus", "TenantID", "RoleID",
+                       "EmailVerified", "IsActive", "Scholar_ID", "Orcid_ID", "Scopus_ID",
+                       "CreatedAt")
+                    VALUES (%s, %s, %s, %s, %s, %s, 'Active', %s, %s,
+                            TRUE, TRUE, %s, %s, %s, NOW())
+                    RETURNING "UserID"
+                ''', [
+                    email, pwd_hash, name_ar, first_name, last_name,
+                    user_type, tenant_id, role_id,
+                    sid, oid, scopus,
+                ])
+                new_user_id = cur.fetchone()[0]
 
             # Researcher row exists for everyone — even Dean/HoD may
             # eventually have publications; the row is the join anchor.
@@ -603,7 +727,7 @@ def _provision_invited_user(request, d, metadata, pwd_hash, email, invite):
             from .invitation_views import mark_invitation_used
             mark_invitation_used(invite['invitation_id'], new_user_id)
 
-            # Welcome notification.
+            # Welcome notification (English — matches the rest of the UI).
             cur.execute('''
                 INSERT INTO "Notification"
                   ("TenantID", "UserID", "Type", "Title", "Message")
@@ -822,9 +946,13 @@ def list_pending_registrations(request):
     where = '"Status" = %s'
     params = ['pending']
     if not request.user.has_litrix_perm('manage_users') and request.user.has_litrix_perm('approve_registrations'):
+        # Scope HoD to the department they HEAD, not the one they work in.
+        # A HoD can work in one department but be the head of another;
+        # registration approval authority follows Department.HeadID.
         with connection.cursor() as cur:
             cur.execute(
-                'SELECT "DepartmentID" FROM "Works_In" WHERE "UserID" = %s AND "IsCurrentPosition" = TRUE LIMIT 1',
+                'SELECT "DepartmentID" FROM "Department" '
+                'WHERE "HeadID" = %s LIMIT 1',
                 [request.user.user_id],
             )
             r = cur.fetchone()
@@ -1070,7 +1198,9 @@ def list_users(request):
         # to HoD. LATERAL prefers IsCurrentPosition but falls back to
         # any Works_In row, mirroring the registration-match lookup.
         cur.execute(f'''
-            SELECT u."UserID", u."Email", u."FullName_Ar", u."UserType",
+            SELECT u."UserID", u."Email",
+                   u."FullName_Ar", u."FirstName", u."MiddleName", u."LastName",
+                   u."UserType",
                    u."AccountStatus", u."IsActive", u."EmailVerified",
                    u."Scholar_ID", u."Orcid_ID", u."Scopus_ID",
                    u."LastLoginAt", u."CreatedAt",
@@ -1104,17 +1234,32 @@ def update_user(request, user_id):
     if request.method == 'DELETE':
         return _delete_user(request, user_id)
 
-    fields = []
-    params = []
-    if 'role_id' in request.data:
-        fields.append('"RoleID" = %s')
-        params.append(request.data['role_id'])
-    if 'is_active' in request.data:
-        fields.append('"IsActive" = %s')
-        params.append(bool(request.data['is_active']))
-    if 'user_type' in request.data:
-        fields.append('"UserType" = %s')
-        params.append(request.data['user_type'])
+    # ------------------------------------------------------------
+    # Whitelist of editable Users columns. Anything outside this list
+    # is silently ignored — protects sensitive cols (UserID, TenantID,
+    # PasswordHash, Litrix_ID, Scholar_ID, CreatedAt) from being
+    # mutated via this endpoint. To change those, build a dedicated
+    # endpoint with stricter checks.
+    # ------------------------------------------------------------
+    EDITABLE = {
+        # admin/role
+        'role_id':         ('RoleID',         lambda v: v),
+        'is_active':       ('IsActive',       lambda v: bool(v)),
+        'user_type':       ('UserType',       lambda v: str(v).strip() or None),
+        'account_status':  ('AccountStatus',  lambda v: str(v).strip() or None),
+        # personal data
+        'email':           ('Email',          lambda v: (str(v).strip().lower() or None)),
+        'first_name':      ('FirstName',      lambda v: str(v).strip()),
+        'middle_name':     ('MiddleName',     lambda v: str(v).strip() or None),
+        'last_name':       ('LastName',       lambda v: str(v).strip()),
+        'full_name_ar':    ('FullName_Ar',    lambda v: str(v).strip() or None),
+    }
+
+    fields, params = [], []
+    for key, (column, cleaner) in EDITABLE.items():
+        if key in request.data:
+            fields.append(f'"{column}" = %s')
+            params.append(cleaner(request.data[key]))
 
     if not fields:
         return Response({'error': 'Nothing to update'}, status=400)
@@ -1478,7 +1623,8 @@ def reject_registration(request, request_id):
         row = cur.fetchone()
 
     if not row:
-        return Response({'error': 'Not found or not pending'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({'error': 'Not found or not pending'},
+                        status=status.HTTP_404_NOT_FOUND)
 
     from .email_service import send_registration_rejected
     send_registration_rejected(row[0], reason)
@@ -1487,4 +1633,3 @@ def reject_registration(request, request_id):
           {'reason': reason}, request=request)
 
     return Response({'message': 'Registration rejected'})
-

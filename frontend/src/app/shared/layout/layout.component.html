@@ -24,7 +24,14 @@
                       hover:bg-accent-light hover:text-accent
                       transition-colors">
               <span class="text-base w-5 text-center">{{ item.icon }}</span>
-              <span>{{ item.label }}</span>
+              <span class="flex-1">{{ item.label }}</span>
+              @if (item.badge && item.badge() > 0) {
+                <span class="min-w-[20px] h-5 px-1.5 rounded-full bg-accent
+                             text-white text-[10px] font-semibold
+                             flex items-center justify-center">
+                  {{ item.badge() }}
+                </span>
+              }
             </a>
           </li>
         }

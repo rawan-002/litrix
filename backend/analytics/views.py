@@ -46,17 +46,37 @@ from .serializers import (
     ResearchPaperSerializer,
 )
 
-# Window of years the dashboard considers when no explicit ?year is given.
-# Lower bound is 2020 — older publications exist in the DB but the
-# dashboard intentionally focuses on the recent six-year window to keep
-# the UI tight. Upper bound is computed dynamically from the current
-# year so the window slides forward without yearly code edits.
-YEAR_FLOOR = 2020
+# Two windows, two different purposes:
+#
+#   YEAR_FLOOR (2011) — the institutional "all-time" floor.
+#       College of Computing was founded in 2011, so any meaningful
+#       cumulative KPI (total papers, total citations, h-index avg)
+#       starts here. Used for the totals strip and the per-dept tables.
+#
+#   CHART_YEAR_FLOOR (2019) — the time-series chart floor.
+#       The trend/area charts on the dashboard render one data point
+#       per year. Stretching them back to 2011 makes a sparse, crowded
+#       X-axis and the recent growth signal gets lost. 2019 gives a
+#       readable 7–8 point window that still captures the post-sync
+#       era.
+#
+# Both upper bounds slide forward with the current year automatically.
+YEAR_FLOOR        = 2011
+CHART_YEAR_FLOOR  = 2019
+
 
 def _default_focus_years():
     from datetime import datetime
     current = datetime.now().year
     return list(range(YEAR_FLOOR, current + 1))
+
+
+def _default_chart_years():
+    """Used by the time-series chart payload — see CHART_YEAR_FLOOR."""
+    from datetime import datetime
+    current = datetime.now().year
+    return list(range(CHART_YEAR_FLOOR, current + 1))
+
 
 FOCUS_YEARS = _default_focus_years()
 
@@ -104,7 +124,7 @@ def paper_detail(request, paper_id):
                 rp."RawData_Log"->'authorships'   AS authorships_jsonb
             FROM "ResearchPaper" rp
             LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
-            LEFT JOIN "JournalRankings" jr ON jr."JournalID" = j."JournalID"
+            LEFT JOIN LATERAL (    SELECT "Quartile", "ImpactFactor"    FROM "JournalRankings"    WHERE "JournalID" = j."JournalID"    ORDER BY "RankingYear" DESC NULLS LAST, "Source"    LIMIT 1) jr ON TRUE
             WHERE rp."PaperID" = %s
         ''', [paper_id])
         row = cur.fetchone()
@@ -234,6 +254,45 @@ def export_excel(request):
     from openpyxl.styles import Font, Alignment, PatternFill
     from django.db import connection
 
+    # ------------------------------------------------------------------
+    # SAFETY GUARD: HoD scope check
+    # HoDs (view_dept_researchers without view_all_researchers) can only
+    # export their own department. We need to ALSO scope every query
+    # to their department; until that fine-grained scoping lands, we
+    # refuse the export to avoid a data leak across departments.
+    # Admins/Deans (view_all_researchers) are unaffected.
+    # ------------------------------------------------------------------
+    _u = getattr(request, 'user', None)
+    if _u and _u.is_authenticated:
+        _is_hod_scope = (
+            _u.has_litrix_perm('view_dept_researchers')
+            and not _u.has_litrix_perm('view_all_researchers')
+        )
+        if _is_hod_scope:
+            # Lookup HoD's department for use in scoped queries below.
+            with connection.cursor() as _cur:
+                _cur.execute(
+                    'SELECT "DepartmentID" FROM "Department" '
+                    'WHERE "HeadID" = %s LIMIT 1',
+                    [_u.user_id]
+                )
+                _r = _cur.fetchone()
+            _hod_dept_id = _r[0] if _r else None
+            if _hod_dept_id is None:
+                return response.Response(
+                    {'error': 'You are not assigned to any department. '
+                              'Contact an admin to set Department.HeadID.'},
+                    status=403,
+                )
+            # Block the export until scoped queries land. This prevents
+            # leaking other departments' data to HoDs.
+            return response.Response(
+                {'error': 'Department-scoped export for HoDs is being '
+                          'prepared. For now, please ask an Admin or Dean '
+                          'to export your department\'s data.'},
+                status=403,
+            )
+
     years_param = request.query_params.get('years', '').strip()
     if years_param:
         try:
@@ -287,7 +346,7 @@ def export_excel(request):
                 WITH window_papers AS (
                     SELECT DISTINCT rp."PaperID", jr."Quartile", rp."Indexing"
                     FROM "ResearchPaper" rp
-                    LEFT JOIN "JournalRankings" jr ON jr."JournalID" = rp."JournalID"
+                    LEFT JOIN LATERAL (    SELECT "Quartile", "ImpactFactor"    FROM "JournalRankings"    WHERE "JournalID" = rp."JournalID"    ORDER BY "RankingYear" DESC NULLS LAST, "Source"    LIMIT 1) jr ON TRUE
                     WHERE rp."PubYear" = ANY(%s)
                       AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID")
                 ),
@@ -384,7 +443,7 @@ def export_excel(request):
                         COUNT(DISTINCT rp."PaperID") FILTER (WHERE j."VenueType" = 'Conference')
                     FROM "ResearchPaper" rp
                     LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
-                    LEFT JOIN "JournalRankings" jr ON jr."JournalID" = rp."JournalID"
+                    LEFT JOIN LATERAL (    SELECT "Quartile", "ImpactFactor"    FROM "JournalRankings"    WHERE "JournalID" = rp."JournalID"    ORDER BY "RankingYear" DESC NULLS LAST, "Source"    LIMIT 1) jr ON TRUE
                     WHERE rp."PubYear" = %s
                       AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID")
                 ''', [year])
@@ -458,7 +517,7 @@ def export_excel(request):
                     LEFT JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
                                                AND rp."PubYear" = %s
                     LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
-                    LEFT JOIN "JournalRankings" jr ON jr."JournalID" = rp."JournalID"
+                    LEFT JOIN LATERAL (    SELECT "Quartile", "ImpactFactor"    FROM "JournalRankings"    WHERE "JournalID" = rp."JournalID"    ORDER BY "RankingYear" DESC NULLS LAST, "Source"    LIMIT 1) jr ON TRUE
                     LEFT JOIN dept_cites dc ON dc."DepartmentID" = d."DepartmentID"
                     GROUP BY d."DepartmentName"
                     ORDER BY 5 DESC
@@ -842,7 +901,7 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                         FILTER (WHERE rp."Indexing" = 'ISI')             AS isi_papers
                 FROM "ResearchPaper" rp
                 JOIN "Authors" a ON a."PaperID" = rp."PaperID"
-                LEFT JOIN "JournalRankings" jr ON jr."JournalID" = rp."JournalID"
+                LEFT JOIN LATERAL (    SELECT "Quartile", "ImpactFactor"    FROM "JournalRankings"    WHERE "JournalID" = rp."JournalID"    ORDER BY "RankingYear" DESC NULLS LAST, "Source"    LIMIT 1) jr ON TRUE
                 WHERE a."UserID" = %s
             ''', [resolved_user_id])
             stats_row = cur.fetchone()
@@ -932,6 +991,15 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                         {'year': r[0], 'citations': r[1]}
                         for r in cur.fetchall()
                     ]
+
+                # Clip to CHART_YEAR_FLOOR (2019) to match the admin chart
+                # window. Years before 2019 stretch the X-axis and the
+                # recent-growth signal gets lost. Same logic as the
+                # admin yearly_breakdown view (see line ~1353).
+                citations_by_year = [
+                    pt for pt in citations_by_year
+                    if pt['year'] >= CHART_YEAR_FLOOR
+                ]
             except Exception:
                 citations_by_year = []
 
@@ -957,7 +1025,7 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                 FROM "ResearchPaper" rp
                 JOIN "Authors" a ON a."PaperID" = rp."PaperID"
                 LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
-                LEFT JOIN "JournalRankings" jr ON jr."JournalID" = rp."JournalID"
+                LEFT JOIN LATERAL (    SELECT "Quartile", "ImpactFactor"    FROM "JournalRankings"    WHERE "JournalID" = rp."JournalID"    ORDER BY "RankingYear" DESC NULLS LAST, "Source"    LIMIT 1) jr ON TRUE
                 WHERE a."UserID" = %s
                 ORDER BY rp."PubYear" DESC NULLS LAST, rp."PaperID" DESC
             ''', [resolved_user_id])
@@ -1168,33 +1236,74 @@ def overview(request):
     GET /api/stats/overview/?year=2025  → just 2025
     GET /api/stats/overview/?year=2026  → just 2026
 
-    A one-shot payload that powers the Admin/Dean landing page. Combines
-    multiple views into a single response so the frontend doesn't have
-    to make 5 round-trips on first load.
+    A one-shot payload that powers the Admin/Dean/HoD landing page.
+    HoDs are auto-scoped to their own department (detected via
+    Department.HeadID = current user).
     """
     years = _resolve_years(request)
-    dept_agg = DepartmentStats.objects.aggregate(
-        researchers=Sum('total_researchers'),
-        active=Sum('active_researchers'),
-        avg_h=Avg('avg_h_index'),
-    )
+
+    # --- HoD scoping ---
+    # Admin/Dean keep the full institution view (perm: view_all_researchers).
+    # HoD has perm view_dept_researchers but NOT view_all_researchers.
+    # For HoDs we look up Department.HeadID = current user and silently
+    # add a dept filter to every query + the aggregate.
+    hod_dept_id = None
+    u_obj = getattr(request, "user", None)
+    if u_obj and u_obj.is_authenticated and not u_obj.has_litrix_perm("view_all_researchers"):
+        from django.db import connection as _c
+        with _c.cursor() as _cur:
+            _cur.execute(
+                'SELECT "DepartmentID" FROM "Department" WHERE "HeadID" = %s LIMIT 1',
+                [u_obj.user_id]
+            )
+            _r = _cur.fetchone()
+            if _r:
+                hod_dept_id = _r[0]
+
+    if hod_dept_id:
+        # Scope the institution-wide aggregate to just this department.
+        dept_agg = DepartmentStats.objects.filter(
+            department_id=hod_dept_id
+        ).aggregate(
+            researchers=Sum('total_researchers'),
+            active=Sum('active_researchers'),
+            avg_h=Avg('avg_h_index'),
+        )
+    else:
+        dept_agg = DepartmentStats.objects.aggregate(
+            researchers=Sum('total_researchers'),
+            active=Sum('active_researchers'),
+            avg_h=Avg('avg_h_index'),
+        )
 
     from django.db import connection
     with connection.cursor() as cur:
         # Papers count: papers PUBLISHED in window (sets the denominator
         # for "publications" KPI).
-        cur.execute('''
-            SELECT
-                COUNT(DISTINCT rp."PaperID") AS papers,
-                COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q1') AS q1,
-                COUNT(DISTINCT rp."PaperID")
-                    FILTER (WHERE rp."Indexing" = 'Scopus' OR jr."Quartile" IS NOT NULL) AS scopus,
-                COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = 'ISI') AS isi
-            FROM "ResearchPaper" rp
-            LEFT JOIN "JournalRankings" jr ON jr."JournalID" = rp."JournalID"
-            WHERE rp."PubYear" = ANY(%s)
-              AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID")
-        ''', [years])
+        # KPI papers + Q1/Scopus/ISI counts. Author-in-dept clause added
+        # at the end for HoDs only.
+        kpi_sql = (
+            'SELECT COUNT(DISTINCT rp."PaperID") AS papers, '
+            '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q1\') AS q1, '
+            '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = \'Scopus\' OR jr."Quartile" IS NOT NULL) AS scopus, '
+            '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = \'ISI\') AS isi '
+            'FROM "ResearchPaper" rp '
+            'LEFT JOIN LATERAL (SELECT "Quartile","ImpactFactor" FROM "JournalRankings" '
+            '  WHERE "JournalID" = rp."JournalID" ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1) jr ON TRUE '
+            'WHERE rp."PubYear" = ANY(%s) '
+            '  AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"'
+        )
+        kpi_params = [years]
+        if hod_dept_id:
+            kpi_sql += (
+                ' AND EXISTS (SELECT 1 FROM "Works_In" w2 '
+                '              WHERE w2."UserID" = a."UserID" '
+                '                AND w2."DepartmentID" = %s '
+                '                AND w2."IsCurrentPosition" = TRUE)'
+            )
+            kpi_params.append(hod_dept_id)
+        kpi_sql += ')'
+        cur.execute(kpi_sql, kpi_params)
         paper_count_row = cur.fetchone()
 
         # Citations: SUM Researcher.CitationsByYear for the requested years.
@@ -1206,11 +1315,20 @@ def overview(request):
             f"COALESCE((r.\"CitationsByYear\"->>%s)::int, 0)"
             for _ in years
         ])
+        # HoD-scoped: restrict the citations sum to researchers whose
+        # current Works_In matches the HoD's department. For Admin/Dean,
+        # the filter is bypassed (%s IS NULL).
         cur.execute(f'''
             SELECT COALESCE(SUM({year_keys_expr}), 0) AS citations
             FROM "Researcher" r
             WHERE r."CitationsByYear" IS NOT NULL
-        ''', [str(y) for y in years])
+              AND (%s::int IS NULL OR EXISTS (
+                    SELECT 1 FROM "Works_In" w_cit
+                    WHERE w_cit."UserID" = r."UserID"
+                      AND w_cit."DepartmentID" = %s::int
+                      AND w_cit."IsCurrentPosition" = TRUE
+              ))
+        ''', [str(y) for y in years] + [hod_dept_id, hod_dept_id])
         citations_row = cur.fetchone()
 
         # Combine into the (papers, citations, q1, scopus, isi) shape
@@ -1257,9 +1375,10 @@ def overview(request):
             LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
             WHERE u."UserType" = 'Researcher'
               AND COALESCE(p.focus_papers, 0) > 0
+              AND (%s::int IS NULL OR w."DepartmentID" = %s::int)
             ORDER BY focus_papers DESC, focus_citations DESC
             LIMIT 5
-        ''', [years] + [str(y) for y in years])
+        ''', [years] + [str(y) for y in years] + [hod_dept_id, hod_dept_id])
         top_researchers_rows = cur.fetchall()
 
         cur.execute('''
@@ -1308,13 +1427,30 @@ def overview(request):
             LEFT JOIN "Researcher" r ON r."UserID" = u."UserID"
             LEFT JOIN "Authors" a ON a."UserID" = u."UserID"
             LEFT JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID" AND rp."PubYear" = ANY(%s)
-            LEFT JOIN "JournalRankings" jr ON jr."JournalID" = rp."JournalID"
+            LEFT JOIN LATERAL (    SELECT "Quartile", "ImpactFactor"    FROM "JournalRankings"    WHERE "JournalID" = rp."JournalID"    ORDER BY "RankingYear" DESC NULLS LAST, "Source"    LIMIT 1) jr ON TRUE
             LEFT JOIN dept_citations dc ON dc."DepartmentID" = d."DepartmentID"
             GROUP BY d."DepartmentID", d."DepartmentName", d."CollegeID"
+            HAVING (%s::int IS NULL OR d."DepartmentID" = %s::int)
             ORDER BY total_papers DESC NULLS LAST
-        ''', [str(y) for y in years] + [years])
+        ''', [str(y) for y in years] + [years] + [hod_dept_id, hod_dept_id])
         dept_cols = [c[0] for c in cur.description]
         departments = [dict(zip(dept_cols, row)) for row in cur.fetchall()]
+
+        # ----------------------------------------------------------------
+        # Time-series chart window.
+        #
+        # The KPI strip and per-department table use `years` (the full
+        # 2011-present floor — every paper that's ever been written by
+        # an Al-Baha researcher counts). The trend chart is different:
+        # rendering 16 sparse data points crushes the recent-growth
+        # signal. We clip to CHART_YEAR_FLOOR (2019) for that surface.
+        #
+        # If the caller explicitly filtered to a narrower window via
+        # ?year=, honor it — the intersection is just whatever overlap
+        # exists. Empty intersection falls back to `years` so we never
+        # send back an empty chart.
+        # ----------------------------------------------------------------
+        chart_years = [y for y in years if y >= CHART_YEAR_FLOOR] or years
 
         # Per-year breakdown per department.
         # Papers: published count per (dept, year) — DISTINCT to avoid
@@ -1329,8 +1465,9 @@ def overview(request):
             JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
             WHERE w."IsCurrentPosition" = TRUE
               AND rp."PubYear" = ANY(%s)
+              AND (%s::int IS NULL OR w."DepartmentID" = %s::int)
             GROUP BY w."DepartmentID", rp."PubYear"
-        ''', [years])
+        ''', [chart_years, hod_dept_id, hod_dept_id])
         papers_by_dept_year = {}
         for did, yr, n in cur.fetchall():
             papers_by_dept_year.setdefault(did, {})[int(yr)] = int(n)
@@ -1347,13 +1484,15 @@ def overview(request):
             WHERE w."IsCurrentPosition" = TRUE
               AND year_kv.value ~ '^[0-9]+$'
               AND year_kv.key::int = ANY(%s)
+              AND (%s::int IS NULL OR w."DepartmentID" = %s::int)
             GROUP BY w."DepartmentID", year_kv.key::int
-        ''', [years])
+        ''', [chart_years, hod_dept_id, hod_dept_id])
         cites_by_dept_year = {}
         for did, yr, n in cur.fetchall():
             cites_by_dept_year.setdefault(did, {})[int(yr)] = int(n)
 
-        # Inject by_year into each department row
+        # Inject by_year into each department row — uses chart_years
+        # so the chart axis is reasonable, even when the KPIs span 2011+.
         for d in departments:
             did = d['department_id']
             d['by_year'] = [
@@ -1362,11 +1501,14 @@ def overview(request):
                     'papers':    papers_by_dept_year.get(did, {}).get(y, 0),
                     'citations': cites_by_dept_year.get(did, {}).get(y, 0),
                 }
-                for y in sorted(years)
+                for y in sorted(chart_years)
             ]
 
     return response.Response({
         'focus_years': years,
+        # Separate axis-year list for any frontend chart so it doesn't
+        # have to re-derive the window from the by_year length.
+        'chart_years': sorted(chart_years),
         'totals': {
             'researchers':         dept_agg['researchers'] or 0,
             'active_researchers':  dept_agg['active'] or 0,
@@ -1438,11 +1580,9 @@ def universal_search(request):
     # Researchers see only Researcher-type profiles; full-access roles
     # see every UserType (so an Admin can find a Dean by name, etc).
     # --------------------------------------------------------------------
-    user_type_filter = (
-        ''
-        if has_full_access
-        else "AND u.\"UserType\" = 'Researcher'"
-    )
+    # All roles see all UserTypes - the search is intentionally
+    # unrestricted now (was: Researchers saw only Researcher-type).
+    user_type_filter = ''
 
     with connection.cursor() as cur:
         # ----------------------------------------------------------------
@@ -1473,7 +1613,20 @@ def universal_search(request):
                 d."DepartmentName",
                 (SELECT COUNT(*) FROM "Authors" a WHERE a."UserID" = u."UserID") AS papers
             FROM "Users" u
-            LEFT JOIN "Works_In" w ON w."UserID" = u."UserID" AND w."IsCurrentPosition" = TRUE
+            -- Pick ONE current Works_In per user. If the user is HoD
+            -- of a department, that row is deprioritized so the
+            -- researcher-side department wins. Stable tiebreak on
+            -- StartDate ASC (oldest position first).
+            LEFT JOIN LATERAL (
+                SELECT wx."DepartmentID", dx."DepartmentName"
+                FROM "Works_In" wx
+                LEFT JOIN "Department" dx ON dx."DepartmentID" = wx."DepartmentID"
+                WHERE wx."UserID" = u."UserID"
+                  AND wx."IsCurrentPosition" = TRUE
+                ORDER BY (dx."HeadID" = u."UserID") ASC NULLS FIRST,
+                         wx."StartDate" ASC NULLS LAST
+                LIMIT 1
+            ) w ON TRUE
             LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
             WHERE 1=1
               {user_type_filter}
@@ -1521,6 +1674,7 @@ def universal_search(request):
                 )
             '''
 
+
         cur.execute(f'''
             SELECT
                 rp."PaperID",
@@ -1550,7 +1704,7 @@ def universal_search(request):
                 ) AS authors_summary
             FROM "ResearchPaper" rp
             LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
-            LEFT JOIN "JournalRankings" jr ON jr."JournalID" = rp."JournalID"
+            LEFT JOIN LATERAL (    SELECT "Quartile", "ImpactFactor"    FROM "JournalRankings"    WHERE "JournalID" = rp."JournalID"    ORDER BY "RankingYear" DESC NULLS LAST, "Source"    LIMIT 1) jr ON TRUE
             WHERE (
                    rp."Title"    ILIKE %s
                 OR rp."Title_En" ILIKE %s
@@ -1566,7 +1720,8 @@ def universal_search(request):
                 'title':           r[1],
                 'title_en':        r[2],
                 'pub_year':        r[3],
-                'doi':             r[4],
+                'doi':
+           r[4],
                 'indexing':        r[5],
                 'journal_name':    r[6],
                 'quartile':        r[7],

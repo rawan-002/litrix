@@ -106,9 +106,23 @@ export class LitrixApiService {
     );
   }
 
-  listDepartments(): Observable<Paginated<DepartmentStats>> {
+  listDepartments(opts?: { ordering?: string }):
+    Observable<Paginated<DepartmentStats>>
+  {
+    let params = new HttpParams();
+    if (opts?.ordering) params = params.set('ordering', opts.ordering);
     return this.http.get<Paginated<DepartmentStats>>(
-      `${this.baseUrl}/departments/`
+      `${this.baseUrl}/departments/`, { params }
+    );
+  }
+
+  /**
+   * GET /api/departments/<id>/researchers/
+   * Returns researchers in this department with their full stats.
+   */
+  getDepartmentResearchers(departmentId: number): Observable<any> {
+    return this.http.get<any>(
+      `${this.baseUrl}/departments/${departmentId}/researchers/`
     );
   }
 
@@ -219,6 +233,22 @@ export class LitrixApiService {
   listCampaignSubmissions(id: number): Observable<{ submissions: any[] }> {
     return this.http.get<any>(
       `${this.baseUrl}/campaigns/${id}/submissions/`
+    );
+  }
+
+  /**
+   * Admin view of a single researcher's submission — papers + missing
+   * entries, with each paper's decision status. Same shape as the
+   * researcher's `getMySubmission()` so the modal can render either.
+   */
+  getCampaignSubmissionDetail(campaignId: number, submissionId: number)
+    : Observable<{
+        submission: any; researcher: any; campaign: any;
+        papers: any[]; missing: any[];
+      }>
+  {
+    return this.http.get<any>(
+      `${this.baseUrl}/campaigns/${campaignId}/submissions/${submissionId}/`
     );
   }
 

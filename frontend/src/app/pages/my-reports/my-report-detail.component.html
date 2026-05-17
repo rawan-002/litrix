@@ -1,0 +1,280 @@
+<div class="max-w-4xl mx-auto pb-32">
+  <a routerLink="/my-reports"
+     class="inline-flex items-center gap-1.5 text-xs text-ink-500 hover:text-ink-900 mb-6">
+    ← Back to reports
+  </a>
+
+  @if (loading()) {
+    <div class="text-center text-ink-400 py-12 text-sm">Loading...</div>
+  } @else if (campaign()) {
+    <!-- ============== Header ============== -->
+    <div class="bg-white rounded-2xl border border-ink-200 p-6 mb-6">
+      <div class="flex items-start justify-between gap-4">
+        <div class="flex-1 min-w-0">
+          <h1 class="text-xl font-semibold text-ink-900 tracking-tight">
+            {{ campaign().title }}
+          </h1>
+          @if (campaign().description) {
+            <p class="text-sm text-ink-500 mt-1">{{ campaign().description }}</p>
+          }
+          <div class="flex flex-wrap gap-3 mt-3 text-xs text-ink-400">
+            <span>Years: <strong class="text-ink-700">{{ campaign().target_years.join(', ') }}</strong></span>
+            @if (submission().is_editable) {
+              <span class="text-amber-600 font-medium">
+                Closes in {{ daysLeft() }} {{ daysLeft() === 1 ? 'day' : 'days' }}
+              </span>
+            }
+          </div>
+        </div>
+
+        <!-- Status badge -->
+        <span class="text-[10px] uppercase tracking-wider font-semibold
+                     px-2 py-1 rounded-full flex-shrink-0"
+              [class.bg-accent-light]="submission().is_editable"
+              [class.text-accent]="submission().is_editable"
+              [class.bg-green-100]="submission().status === 'submitted'"
+              [class.text-green-700]="submission().status === 'submitted'"
+              [class.bg-ink-100]="!submission().is_editable && submission().status !== 'submitted'"
+              [class.text-ink-500]="!submission().is_editable && submission().status !== 'submitted'">
+          {{ submission().status }}
+        </span>
+      </div>
+
+      <!-- Live counts strip -->
+      <div class="flex gap-6 mt-5 pt-5 border-t border-ink-100 text-sm">
+        <div>
+          <div class="text-2xl font-semibold text-green-600">{{ summary().confirmed }}</div>
+          <div class="text-xs text-ink-400">Confirmed</div>
+        </div>
+        <div>
+          <div class="text-2xl font-semibold text-red-500">{{ summary().not_mine }}</div>
+          <div class="text-xs text-ink-400">Not mine</div>
+        </div>
+        <div>
+          <div class="text-2xl font-semibold text-accent">{{ summary().missing }}</div>
+          <div class="text-xs text-ink-400">Missing added</div>
+        </div>
+        <div>
+          <div class="text-2xl font-semibold text-ink-400">{{ summary().undecided }}</div>
+          <div class="text-xs text-ink-400">Undecided</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============== Errors ============== -->
+    @if (error()) {
+      <div class="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200
+                  text-sm text-red-700">
+        {{ error() }}
+      </div>
+    }
+
+    <!-- ============== Auto-populated paper list ============== -->
+    <h2 class="text-xs font-semibold text-ink-400 uppercase tracking-wider mb-3">
+      Your Publications in This Window
+    </h2>
+
+    @if (papers().length === 0) {
+      <div class="text-center text-ink-400 py-12 bg-white rounded-2xl border border-ink-200 mb-8">
+        <div class="text-sm">No publications found for {{ campaign().target_years.join(', ') }}.</div>
+        <p class="text-xs text-ink-400 mt-2 max-w-sm mx-auto">
+          If you have papers from this window that aren't shown, add them
+          using the "Missing papers" section below.
+        </p>
+      </div>
+    } @else {
+      <div class="space-y-3 mb-8">
+        @for (p of papers(); track p.paper_id) {
+          <div class="bg-white rounded-xl border p-4 transition"
+               [class.border-green-300]="p.decision?.decision === 'confirmed'"
+               [class.bg-green-50/30]="p.decision?.decision === 'confirmed'"
+               [class.border-red-200]="p.decision?.decision === 'not_mine'"
+               [class.bg-red-50/30]="p.decision?.decision === 'not_mine'"
+               [class.border-ink-200]="!p.decision">
+            <div class="flex items-start justify-between gap-4">
+              <div class="flex-1 min-w-0">
+                <h3 class="text-sm font-medium text-ink-900 leading-snug">
+                  {{ p.title }}
+                </h3>
+                <div class="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-xs text-ink-500">
+                  <span>{{ p.pub_year }}</span>
+                  @if (p.journal_name) {
+                    <span class="text-ink-600">· {{ p.journal_name }}</span>
+                  }
+                  @if (p.quartile) {
+                    <span class="text-accent font-medium">· {{ p.quartile }}</span>
+                  }
+                  @if (p.citations > 0) {
+                    <span>· {{ p.citations }} citation{{ p.citations === 1 ? '' : 's' }}</span>
+                  }
+                  @if (p.doi) {
+                    <a [href]="'https://doi.org/' + p.doi" target="_blank"
+                       class="text-accent hover:underline">DOI ↗</a>
+                  }
+                </div>
+              </div>
+
+              <!-- Decision buttons -->
+              @if (submission().is_editable) {
+                <div class="flex gap-1.5 flex-shrink-0">
+                  <button (click)="decide(p, 'confirmed')"
+                          [disabled]="busyPaperId() === p.paper_id"
+                          [class.bg-green-600]="p.decision?.decision === 'confirmed'"
+                          [class.text-white]="p.decision?.decision === 'confirmed'"
+                          [class.bg-white]="p.decision?.decision !== 'confirmed'"
+                          [class.text-ink-600]="p.decision?.decision !== 'confirmed'"
+                          [class.border]="p.decision?.decision !== 'confirmed'"
+                          [class.border-ink-200]="p.decision?.decision !== 'confirmed'"
+                          class="px-3 py-1.5 rounded-lg text-xs font-medium
+                                 hover:border-green-400 transition disabled:opacity-50">
+                    ✓ Mine
+                  </button>
+                  <button (click)="decide(p, 'not_mine')"
+                          [disabled]="busyPaperId() === p.paper_id"
+                          [class.bg-red-500]="p.decision?.decision === 'not_mine'"
+                          [class.text-white]="p.decision?.decision === 'not_mine'"
+                          [class.bg-white]="p.decision?.decision !== 'not_mine'"
+                          [class.text-ink-600]="p.decision?.decision !== 'not_mine'"
+                          [class.border]="p.decision?.decision !== 'not_mine'"
+                          [class.border-ink-200]="p.decision?.decision !== 'not_mine'"
+                          class="px-3 py-1.5 rounded-lg text-xs font-medium
+                                 hover:border-red-300 transition disabled:opacity-50">
+                    ✗ Not mine
+                  </button>
+                  @if (p.decision) {
+                    <button (click)="undecide(p)"
+                            [disabled]="busyPaperId() === p.paper_id"
+                            class="px-2 py-1.5 rounded-lg text-xs text-ink-400
+                                   hover:text-ink-700 transition disabled:opacity-50"
+                            title="Clear decision">
+                      ↺
+                    </button>
+                  }
+                </div>
+              } @else {
+                <!-- Read-only badge -->
+                <span class="text-[10px] uppercase tracking-wider font-semibold
+                             px-2 py-1 rounded-full flex-shrink-0"
+                      [class.bg-green-100]="p.decision?.decision === 'confirmed'"
+                      [class.text-green-700]="p.decision?.decision === 'confirmed'"
+                      [class.bg-red-100]="p.decision?.decision === 'not_mine'"
+                      [class.text-red-700]="p.decision?.decision === 'not_mine'"
+                      [class.bg-ink-100]="!p.decision"
+                      [class.text-ink-500]="!p.decision">
+                  {{ p.decision?.decision || 'undecided' }}
+                </span>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    }
+
+    <!-- ============== Missing papers section ============== -->
+    <h2 class="text-xs font-semibold text-ink-400 uppercase tracking-wider mb-3 flex items-center justify-between">
+      <span>Missing Papers</span>
+      @if (submission().is_editable) {
+        <button (click)="showMissingForm.set(!showMissingForm())"
+                class="text-xs text-accent hover:underline font-normal normal-case tracking-normal">
+          {{ showMissingForm() ? 'Cancel' : '+ Add a paper not listed above' }}
+        </button>
+      }
+    </h2>
+
+    @if (showMissingForm()) {
+      <div class="bg-white rounded-xl border border-ink-200 p-4 mb-4">
+        <div class="grid grid-cols-12 gap-3">
+          <input type="text"
+                 placeholder="Paper title *"
+                 [(ngModel)]="missingDraft().title"
+                 (ngModelChange)="missingDraft.update(d => ({ ...d, title: $event }))"
+                 class="col-span-7 px-3 py-2 rounded-lg border border-ink-200 text-sm
+                        focus:border-accent outline-none" />
+          <select [(ngModel)]="missingDraft().year"
+                  (ngModelChange)="missingDraft.update(d => ({ ...d, year: $event }))"
+                  class="col-span-2 px-3 py-2 rounded-lg border border-ink-200 text-sm
+                         focus:border-accent outline-none bg-white">
+            @for (y of campaign().target_years; track y) {
+              <option [ngValue]="y">{{ y }}</option>
+            }
+          </select>
+          <input type="text"
+                 placeholder="DOI"
+                 [(ngModel)]="missingDraft().doi"
+                 (ngModelChange)="missingDraft.update(d => ({ ...d, doi: $event }))"
+                 class="col-span-3 px-3 py-2 rounded-lg border border-ink-200 text-sm
+                        focus:border-accent outline-none" />
+        </div>
+        <div class="flex justify-end mt-3">
+          <button (click)="addMissing()"
+                  class="px-4 py-2 rounded-lg bg-ink-900 text-white text-xs font-medium
+                         hover:bg-ink-700 transition">
+            Add
+          </button>
+        </div>
+      </div>
+    }
+
+    @if (missing().length > 0) {
+      <div class="space-y-2 mb-8">
+        @for (m of missing(); track m.decision_id) {
+          <div class="bg-white rounded-xl border border-accent/20 p-3 flex items-start justify-between gap-3">
+            <div class="flex-1 min-w-0">
+              <div class="text-sm text-ink-700">{{ m.title }}</div>
+              <div class="flex gap-3 mt-1 text-xs text-ink-400">
+                <span>{{ m.year }}</span>
+                @if (m.doi) { <span>· {{ m.doi }}</span> }
+                @if (m.resolved_at) {
+                  <span class="text-green-600">· Resolved by admin</span>
+                } @else {
+                  <span class="text-amber-600">· Pending admin review</span>
+                }
+              </div>
+            </div>
+            @if (submission().is_editable && !m.resolved_at) {
+              <button (click)="removeMissing(m)"
+                      class="text-ink-300 hover:text-red-500 text-sm"
+                      title="Remove">×</button>
+            }
+          </div>
+        }
+      </div>
+    } @else {
+      <div class="text-xs text-ink-400 mb-8">
+        No missing papers reported. The list above is auto-populated from
+        all papers attributed to you in {{ campaign().target_years.join(', ') }}.
+      </div>
+    }
+
+    <!-- ============== Sticky submit bar ============== -->
+    @if (submission().is_editable) {
+      <div class="fixed bottom-0 left-64 right-0 bg-white border-t border-ink-200 px-8 py-4 z-30">
+        <div class="max-w-4xl mx-auto flex items-center justify-between gap-4">
+          <div class="text-xs text-ink-500">
+            <strong class="text-ink-700">{{ summary().confirmed + summary().not_mine }}</strong>
+            of {{ summary().total }} decided
+            @if (summary().missing > 0) {
+              · {{ summary().missing }} missing reported
+            }
+          </div>
+          <button (click)="submit()"
+                  [disabled]="busySubmit()"
+                  class="px-6 py-2.5 rounded-lg bg-ink-900 text-white text-sm font-medium
+                         hover:bg-ink-700 transition disabled:opacity-50">
+            {{ busySubmit() ? 'Submitting...' : 'Submit Report' }}
+          </button>
+        </div>
+      </div>
+    } @else if (submission().status === 'submitted') {
+      <div class="bg-green-50 border border-green-200 rounded-xl p-4 text-sm text-green-700">
+        <strong>Submitted.</strong> Your report is locked. If you need to
+        revise it, contact your administrator.
+        @if (submission().submitted_at) {
+          <span class="text-xs text-green-600 ml-2">
+            ({{ submission().submitted_at | date:'medium' }})
+          </span>
+        }
+      </div>
+    }
+  }
+</div>

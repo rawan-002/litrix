@@ -1,0 +1,167 @@
+<div class="welcome">
+
+  <!-- ============================================================== -->
+  <!-- TOP NAV                                                          -->
+  <!-- ============================================================== -->
+  <header class="welcome__nav">
+    <div class="welcome__nav-inner">
+      <span class="brand">Litrix</span>
+      <nav class="nav-actions">
+        <a href="#about"    class="link" (click)="scrollTo('about',    $event)">About</a>
+        <a href="#features" class="link" (click)="scrollTo('features', $event)">Features</a>
+        <a href="#impact"   class="link" (click)="scrollTo('impact',   $event)">Impact</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ============================================================== -->
+  <!-- HERO                                                             -->
+  <!-- ============================================================== -->
+  <section class="hero">
+    <h1 class="hero__title">
+      Automating Research Data
+      <span class="hero__title-accent">
+        with Precision &amp; Intelligence.
+      </span>
+    </h1>
+
+    <p class="hero__lede">
+      A single, verified view of your institution&rsquo;s research output
+      from papers and citations to journal quartiles and
+      department-level trends.
+    </p>
+  </section>
+
+  <!-- ============================================================== -->
+  <!-- ABOUT US                                                         -->
+  <!-- ============================================================== -->
+  <section id="about" class="about">
+    <div class="section__head">
+      <span class="section__eyebrow">About Us</span>
+      <h2 class="section__title">
+        Built for the way researchers actually work.
+      </h2>
+    </div>
+
+    <div class="about__body">
+      <p>
+        <strong>Litrix</strong> is a cutting-edge platform designed to
+        automate and streamline research data management. Our system
+        helps researchers collect, organize, and analyze their academic
+        publications and citations with unprecedented precision and
+        intelligence.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================================== -->
+  <!-- FEATURES                                                         -->
+  <!-- ============================================================== -->
+  <section id="features" class="features">
+    <div class="section__head">
+      <span class="section__eyebrow">Features</span>
+      <h2 class="section__title">
+        Everything you need, nothing you don&rsquo;t.
+      </h2>
+    </div>
+
+    <div class="features__grid">
+
+      <article class="feature">
+        <div class="feature__icon">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h3 class="feature__title">Automated Data Collection</h3>
+        <p class="feature__copy">
+          Our platform automatically collects research data from
+          trusted academic sources, keeping every publication record
+          complete and effortlessly up-to-date.
+        </p>
+      </article>
+
+      <article class="feature">
+        <div class="feature__icon">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M4 20V8M10 20V4M16 20V12M22 20V6" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h3 class="feature__title">Citation Analysis</h3>
+        <p class="feature__copy">
+          Advanced analytics turn raw citation data into clear insights,
+          showing how your research impact grows and evolves over time.
+        </p>
+      </article>
+
+      <article class="feature">
+        <div class="feature__icon">
+          <svg viewBox="0 0 24 24" fill="none">
+            <circle cx="9"  cy="9"  r="4" stroke="currentColor" stroke-width="1.8"/>
+            <circle cx="15" cy="15" r="4" stroke="currentColor" stroke-width="1.8"/>
+          </svg>
+        </div>
+        <h3 class="feature__title">Duplicate Detection</h3>
+        <p class="feature__copy">
+          Smart algorithms recognize and merge duplicate entries,
+          keeping every researcher&rsquo;s profile clean, accurate,
+          and trustworthy.
+        </p>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- ============================================================== -->
+  <!-- IMPACT                                                           -->
+  <!-- ============================================================== -->
+  <section id="impact" class="impact">
+    <div class="section__head">
+      <span class="section__eyebrow">Impact</span>
+      <h2 class="section__title">
+        Helping researchers focus on what matters most.
+      </h2>
+    </div>
+
+    <p class="impact__copy">
+      By automating tedious data management tasks, Litrix lets
+      researchers spend less time on administrative work and more on
+      their research &mdash; increasing their productivity and
+      visibility in the academic community.
+    </p>
+
+    <div class="stats" *ngIf="!loading()">
+      <div class="stat">
+        <div class="stat__value">
+          {{ fmt(displayedStats().researchers) }}<span class="stat__plus">+</span>
+        </div>
+        <div class="stat__label">Active Researchers</div>
+      </div>
+      <div class="stat">
+        <div class="stat__value">
+          {{ fmt(displayedStats().papers) }}<span class="stat__plus">+</span>
+        </div>
+        <div class="stat__label">Publications Managed</div>
+      </div>
+      <div class="stat">
+        <div class="stat__value">
+          {{ fmt(displayedStats().departments) }}<span class="stat__plus">+</span>
+        </div>
+        <div class="stat__label">Departments</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================== -->
+  <!-- FOOTER                                                           -->
+  <!-- ============================================================== -->
+  <footer class="footer">
+    <div class="footer__inner">
+      <span class="footer__brand">Litrix</span>
+      <span class="footer__meta">Research analytics &middot; {{ year }}</span>
+    </div>
+  </footer>
+
+</div>

@@ -1,0 +1,116 @@
+<!--
+  Author Reconciliation — single-decision view.
+  Layout philosophy: one focused card, everything else fades back.
+-->
+
+<section class="reconciliation">
+
+  <!-- Header — quiet, informational -->
+  <header class="reconciliation__header">
+    <h1 class="reconciliation__title">Author Reconciliation</h1>
+    <p class="reconciliation__subtitle" *ngIf="remaining() > 0">
+      {{ remaining() }} pending review<span *ngIf="remaining() !== 1">s</span>
+    </p>
+  </header>
+
+  <!-- Loading state -->
+  <div class="reconciliation__loading" *ngIf="isLoading()">
+    Loading queue&hellip;
+  </div>
+
+  <!-- Empty state — celebrate the inbox-zero moment -->
+  <div class="reconciliation__empty" *ngIf="!isLoading() && remaining() === 0">
+    <div class="reconciliation__empty-mark">✓</div>
+    <h2>All caught up</h2>
+    <p>Every scraped author has been linked or reviewed.</p>
+  </div>
+
+  <!-- The decision card -->
+  <article class="card" *ngIf="!isLoading() && current() as item">
+
+    <!-- Paper context, dimmed -->
+    <div class="card__paper">
+      <span class="card__paper-label">Paper</span>
+      <h3 class="card__paper-title">{{ item.paperTitle }}</h3>
+    </div>
+
+    <div class="card__divider"></div>
+
+    <!-- Scraped vs. Suggested, side-by-side -->
+    <div class="card__compare">
+
+      <div class="compare-col">
+        <span class="compare-col__label">Scraped from source</span>
+        <p class="compare-col__name">{{ item.scrapedName }}</p>
+        <p class="compare-col__meta" *ngIf="item.scrapedAffiliation">
+          {{ item.scrapedAffiliation }}
+        </p>
+      </div>
+
+      <div class="compare-col compare-col--suggested" *ngIf="item.suggestedUserId; else noSuggestion">
+        <span class="compare-col__label">Suggested match</span>
+        <p class="compare-col__name">{{ item.suggestedName }}</p>
+        <p class="compare-col__meta" *ngIf="item.suggestedDepartment">
+          {{ item.suggestedDepartment }}
+        </p>
+
+        <!-- Confidence — soft bar, not a number jockey -->
+        <div class="confidence" [attr.data-tone]="confidenceTone(item)">
+          <div class="confidence__track">
+            <div class="confidence__fill" [style.width.%]="confidencePct(item)"></div>
+          </div>
+          <span class="confidence__label">
+            {{ confidencePct(item) }}% match · {{ item.suggestedCriteria }}
+          </span>
+        </div>
+      </div>
+
+      <ng-template #noSuggestion>
+        <div class="compare-col compare-col--empty">
+          <span class="compare-col__label">No suggestion</span>
+          <p class="compare-col__meta">
+            No registered researcher matched. Reject to keep as external author.
+          </p>
+        </div>
+      </ng-template>
+
+    </div>
+
+    <!-- Actions -->
+    <div class="card__actions">
+      <button
+        type="button"
+        class="btn btn--ghost"
+        (click)="skip()"
+        [disabled]="isSubmitting()"
+        title="Press S">
+        Skip
+      </button>
+
+      <button
+        type="button"
+        class="btn btn--secondary"
+        (click)="reject()"
+        [disabled]="isSubmitting()"
+        title="Press R">
+        Reject
+      </button>
+
+      <button
+        type="button"
+        class="btn btn--primary"
+        (click)="confirm()"
+        [disabled]="isSubmitting() || !item.suggestedUserId"
+        title="Press C">
+        Confirm link
+      </button>
+    </div>
+
+    <!-- Subtle keyboard hint -->
+    <p class="card__shortcut-hint">
+      Tip&nbsp;&middot;&nbsp; <kbd>C</kbd> confirm &middot; <kbd>R</kbd> reject &middot; <kbd>S</kbd> skip
+    </p>
+
+  </article>
+
+</section>

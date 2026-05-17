@@ -1,0 +1,292 @@
+<div class="network">
+
+  <!-- ============================================================ -->
+  <!-- HEADER                                                       -->
+  <!-- ============================================================ -->
+  <header class="network__header">
+    <div>
+      <h1 class="network__title">Research Network</h1>
+      <p class="network__subtitle">
+        Explore how researchers collaborate across Al-Baha
+      </p>
+    </div>
+
+    @if (data(); as d) {
+      <div class="header-actions">
+        <div class="centre-pill" (click)="resetCentre()">
+          <span class="centre-pill__label">Centered on</span>
+          <span class="centre-pill__name">
+            {{ d.center.name_ar || d.center.name_en }}
+          </span>
+          <span class="centre-pill__dept">{{ d.center.dept }}</span>
+        </div>
+        <button class="export-btn" type="button" (click)="exportPNG()" title="Download as PNG">
+          ↓ PNG
+        </button>
+      </div>
+    }
+  </header>
+
+  <!-- ============================================================ -->
+  <!-- MODE TOGGLE                                                  -->
+  <!-- ============================================================ -->
+  <div class="mode-toggle">
+    <button type="button"
+            class="mode-toggle__btn"
+            [class.is-active]="mode() === 'coauthors'"
+            (click)="setMode('coauthors')">
+      <span class="mode-toggle__dot mode-toggle__dot--coauthors"></span>
+      Co-authors
+    </button>
+    <button type="button"
+            class="mode-toggle__btn"
+            [class.is-active]="mode() === 'interests'"
+            (click)="setMode('interests')">
+      <span class="mode-toggle__dot mode-toggle__dot--interests"></span>
+      Interests
+    </button>
+    <button type="button"
+            class="mode-toggle__btn"
+            [class.is-active]="mode() === 'both'"
+            (click)="setMode('both')">
+      <span class="mode-toggle__dot mode-toggle__dot--both"></span>
+      Both
+    </button>
+    <p class="mode-toggle__hint">
+      @if (mode() === 'coauthors') { Connections based on co-authored papers. }
+      @else if (mode() === 'interests') { Connections based on shared research topics — even when no paper was written together. }
+      @else { Both kinds of links — solid = co-authored, dashed = shared interests. }
+    </p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- BODY: graph (left) + insights/filters (right)                -->
+  <!-- ============================================================ -->
+  <div class="network__body">
+
+    <!-- ===== GRAPH ===== -->
+    <section class="graph-card">
+      <div class="graph-card__legend">
+        <span class="legend-dot legend-dot--self"></span>You
+        <span class="legend-dot legend-dot--same"></span>Same dept
+        <span class="legend-dot legend-dot--cross"></span>Other dept
+        <span class="legend-dot legend-dot--external"></span>External
+        @if (mode() !== 'coauthors') {
+          <span class="legend-dot legend-dot--interest"></span>Interest match
+        }
+      </div>
+
+      @if (loading()) {
+        <div class="graph-card__state">Loading the network&hellip;</div>
+      } @else if (error()) {
+        <div class="graph-card__state graph-card__state--error">
+          {{ error() }}
+        </div>
+      } @else if (data() && data()!.nodes.length <= 1) {
+        <div class="graph-card__state">
+          @if (mode() === 'interests') {
+            No researchers share enough topics with this researcher yet.
+          } @else {
+            No collaborations yet for this researcher within the chosen filters.
+          }
+        </div>
+      } @else {
+        <svg #svgRoot class="graph-card__svg"></svg>
+      }
+
+      <!-- Selected-node detail strip (shows shared interests) -->
+      @if (selectedNode(); as n) {
+        <div class="selected-node">
+          <div class="selected-node__head">
+            <div>
+              <div class="selected-node__name">{{ n.label }}</div>
+              <div class="selected-node__sub">{{ n.dept }}</div>
+            </div>
+            <button class="selected-node__close" (click)="selectedNode.set(null)">×</button>
+          </div>
+          @if (n.interests?.length) {
+            <div class="selected-node__row">
+              <span class="selected-node__rowlabel">Top interests</span>
+              <div>
+                @for (i of n.interests; track i) {
+                  <span class="chip">{{ i }}</span>
+                }
+              </div>
+            </div>
+          }
+          @if (n.shared_interests?.length) {
+            <div class="selected-node__row">
+              <span class="selected-node__rowlabel">Shared with you</span>
+              <div>
+                @for (i of n.shared_interests; track i) {
+                  <span class="chip chip--match">{{ i }}</span>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      <div class="graph-card__hint">
+        Drag to rearrange &middot; scroll to zoom &middot; click a node
+        to see details &middot; double-click to recentre
+      </div>
+    </section>
+
+
+    <!-- ===== SIDE RAIL ===== -->
+    <aside class="rail">
+
+      <!-- INSIGHTS -->
+      @if (data(); as d) {
+        <div class="rail__card">
+          <h2 class="rail__title">Insights</h2>
+
+          <div class="kpi-row">
+            <div class="kpi">
+              <div class="kpi__value">{{ d.insights.total_collaborators }}</div>
+              <div class="kpi__label">Collaborators</div>
+            </div>
+            <div class="kpi">
+              <div class="kpi__value">{{ d.insights.internal }}</div>
+              <div class="kpi__label">Internal</div>
+            </div>
+            <div class="kpi">
+              <div class="kpi__value">{{ d.insights.external }}</div>
+              <div class="kpi__label">External</div>
+            </div>
+          </div>
+
+          <!-- TOP INTERESTS — the researcher's thematic fingerprint -->
+          @if (d.insights.top_interests?.length) {
+            <div class="insight-row">
+              <span class="insight-row__icon">◎</span>
+              <div>
+                <div class="insight-row__title">Your research interests</div>
+                <div class="insight-row__detail">
+                  @for (i of d.insights.top_interests; track i) {
+                    <span class="chip chip--interest">{{ i }}</span>
+                  }
+                </div>
+              </div>
+            </div>
+          }
+
+          @if (d.insights.top_coauthor; as t) {
+            <div class="insight-row">
+              <span class="insight-row__icon">★</span>
+              <div>
+                <div class="insight-row__title">Top co-author</div>
+                <div class="insight-row__detail">
+                  {{ t.name }} &middot;
+                  <span class="muted">{{ t.dept }}</span> &middot;
+                  <strong>{{ t.shared }}</strong> shared papers
+                </div>
+              </div>
+            </div>
+          }
+
+          @if (d.insights.most_connected_dept) {
+            <div class="insight-row">
+              <span class="insight-row__icon">⌂</span>
+              <div>
+                <div class="insight-row__title">Most-connected department</div>
+                <div class="insight-row__detail">
+                  {{ d.insights.most_connected_dept }}
+                </div>
+              </div>
+            </div>
+          }
+
+          @if (d.insights.top_external; as e) {
+            <div class="insight-row">
+              <span class="insight-row__icon">◌</span>
+              <div>
+                <div class="insight-row__title">Top external partner</div>
+                <div class="insight-row__detail">
+                  {{ e.name }}
+                  @if (e.affil) { <span class="muted"> &middot; {{ e.affil }}</span> }
+                  &middot; <strong>{{ e.shared }}</strong> papers
+                </div>
+              </div>
+            </div>
+          }
+
+          @if (d.insights.top_institutions?.length) {
+            <div class="insight-row">
+              <span class="insight-row__icon">⌘</span>
+              <div>
+                <div class="insight-row__title">External institutions</div>
+                <div class="insight-row__detail">
+                  @for (inst of d.insights.top_institutions; track inst[0]) {
+                    <span class="chip">{{ inst[0] }} · {{ inst[1] }}</span>
+                  }
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+
+        <!-- HIDDEN GEMS — high-overlap, zero-coauthor researchers -->
+        @if (d.insights.hidden_gems?.length) {
+          <div class="rail__card">
+            <h2 class="rail__title">
+              Hidden Gems
+              <span class="rail__title-hint">researchers you should probably meet</span>
+            </h2>
+            @for (g of d.insights.hidden_gems; track g.litrix_id) {
+              <div class="gem" (click)="goToProfile(g.litrix_id)">
+                <div class="gem__head">
+                  <span class="gem__name">{{ g.name }}</span>
+                  <span class="gem__overlap">{{ g.overlap }} shared</span>
+                </div>
+                <div class="gem__sub">{{ g.dept }} &middot; {{ g.papers }} papers</div>
+                <div class="gem__chips">
+                  @for (s of g.shared_interests; track s) {
+                    <span class="chip chip--match">{{ s }}</span>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        }
+      }
+
+      <!-- FILTERS -->
+      <div class="rail__card">
+        <h2 class="rail__title">Filters</h2>
+
+        @if (mode() !== 'interests') {
+          <label class="filter-row">
+            <input type="checkbox"
+                   [checked]="internalOnly()"
+                   (change)="internalOnly.set($any($event.target).checked); onFilterChange()">
+            <span>Internal only (hide externals)</span>
+          </label>
+
+          <div class="filter-row">
+            <span class="filter-row__label">Min shared papers</span>
+            <input type="number" min="1" max="20"
+                   [value]="minPapers()"
+                   (input)="minPapers.set(+($any($event.target).value)); onFilterChange()">
+          </div>
+        }
+
+        <div class="filter-row">
+          <span class="filter-row__label">Year range</span>
+          <div class="filter-row__inputs">
+            <input type="number" placeholder="From" min="2000" max="2030"
+                   [value]="yearFrom() ?? ''"
+                   (input)="yearFrom.set(($any($event.target).value || null) && +$any($event.target).value); onFilterChange()">
+            <span>&ndash;</span>
+            <input type="number" placeholder="To" min="2000" max="2030"
+                   [value]="yearTo() ?? ''"
+                   (input)="yearTo.set(($any($event.target).value || null) && +$any($event.target).value); onFilterChange()">
+          </div>
+        </div>
+      </div>
+
+    </aside>
+
+  </div>
+</div>

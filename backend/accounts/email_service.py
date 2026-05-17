@@ -63,12 +63,21 @@ def send_email(to, subject, body):
     backend = os.getenv('EMAIL_BACKEND', 'console').lower()
 
     if backend == 'console':
-        # Use logger so the message respects whatever LOGGING config the
-        # caller has set up. Falls back to console output as long as
-        # Django's default root handler is active (DEBUG=True case).
-        logger.info(
-            'EMAIL [console] → %s | subject=%r\n%s', to, subject, body,
-        )
+        # Use plain print() here on purpose. The 'console' backend is
+        # dev-only and its whole job is to make verification codes,
+        # password-reset tokens, and invitation links visible to the
+        # developer running `manage.py runserver`. Routing through
+        # `logger.info` would respect Django's default WARNING root
+        # level and silently swallow these messages — exactly what
+        # broke this in 2026-05. Logger is reserved for real email
+        # backends (SMTP/Resend/SendGrid) where structured logging
+        # actually helps.
+        print(f"\n{'='*60}")
+        print(f"EMAIL → {to}")
+        print(f"Subject: {subject}")
+        print(f"{'-'*60}")
+        print(body)
+        print(f"{'='*60}\n", flush=True)
         return True
 
     if backend == 'smtp':

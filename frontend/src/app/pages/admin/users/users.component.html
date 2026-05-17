@@ -89,6 +89,13 @@
               </td>
               <td class="px-4 py-3 text-right">
                 <div class="flex items-center justify-end gap-1.5">
+                  <button (click)="askEdit(u)"
+                          [disabled]="deletingId() === u.UserID"
+                          title="Edit this user's profile"
+                          class="text-xs px-3 py-1 rounded-lg border border-ink-200
+                                 hover:bg-ink-50 transition disabled:opacity-50">
+                    Edit
+                  </button>
                   <button (click)="toggleActive(u)"
                           [disabled]="deletingId() === u.UserID"
                           class="text-xs px-3 py-1 rounded-lg border border-ink-200
@@ -113,6 +120,156 @@
         </tbody>
       </table>
     </div>
+  }
+
+  <!-- ============================================================ -->
+  <!-- Edit user modal                                              -->
+  <!-- ============================================================ -->
+  @if (editingUser(); as eu) {
+    @if (editForm(); as f) {
+      <div class="fixed inset-0 z-50 flex items-center justify-center px-4
+                  bg-ink-900/40 backdrop-blur-sm"
+           (click)="cancelEdit()">
+        <div class="bg-white rounded-2xl shadow-hover max-w-xl w-full p-6 max-h-[90vh] overflow-y-auto"
+             (click)="$event.stopPropagation()">
+
+          <div class="flex items-start justify-between mb-5">
+            <div>
+              <h3 class="text-lg font-semibold text-ink-900">Edit user</h3>
+              <p class="text-xs text-ink-400 mt-1">
+                Litrix ID: <span class="font-mono">{{ eu.UserID }}</span>
+                @if (eu.Scholar_ID) {
+                  &nbsp;·&nbsp; Scholar: <span class="font-mono">{{ eu.Scholar_ID }}</span>
+                }
+              </p>
+            </div>
+            <button (click)="cancelEdit()"
+                    class="text-ink-400 hover:text-ink-700 text-xl leading-none">×</button>
+          </div>
+
+          <div class="space-y-4">
+            <!-- Email -->
+            <div>
+              <label class="block text-xs font-medium text-ink-600 mb-1">Email</label>
+              <input type="email"
+                     [ngModel]="f.email"
+                     (ngModelChange)="patchForm('email', $event)"
+                     class="w-full px-3 py-2 rounded-lg border border-ink-200 text-sm
+                            focus:border-accent outline-none">
+            </div>
+
+            <!-- Arabic full name -->
+            <div>
+              <label class="block text-xs font-medium text-ink-600 mb-1">
+                الاسم الرباعي بالعربي
+              </label>
+              <input type="text" dir="rtl"
+                     [ngModel]="f.full_name_ar"
+                     (ngModelChange)="patchForm('full_name_ar', $event)"
+                     class="w-full px-3 py-2 rounded-lg border border-ink-200 text-sm
+                            focus:border-accent outline-none">
+            </div>
+
+            <!-- English name parts -->
+            <div class="grid grid-cols-3 gap-3">
+              <div>
+                <label class="block text-xs font-medium text-ink-600 mb-1">First name</label>
+                <input type="text"
+                       [ngModel]="f.first_name"
+                       (ngModelChange)="patchForm('first_name', $event)"
+                       class="w-full px-3 py-2 rounded-lg border border-ink-200 text-sm
+                              focus:border-accent outline-none">
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-ink-600 mb-1">Middle name</label>
+                <input type="text"
+                       [ngModel]="f.middle_name"
+                       (ngModelChange)="patchForm('middle_name', $event)"
+                       class="w-full px-3 py-2 rounded-lg border border-ink-200 text-sm
+                              focus:border-accent outline-none">
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-ink-600 mb-1">Last name</label>
+                <input type="text"
+                       [ngModel]="f.last_name"
+                       (ngModelChange)="patchForm('last_name', $event)"
+                       class="w-full px-3 py-2 rounded-lg border border-ink-200 text-sm
+                              focus:border-accent outline-none">
+              </div>
+            </div>
+
+            <!-- Role + Status row -->
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-medium text-ink-600 mb-1">User Type</label>
+                <select [ngModel]="f.user_type"
+                        (ngModelChange)="patchForm('user_type', $event)"
+                        class="w-full px-3 py-2 rounded-lg border border-ink-200 text-sm bg-white">
+                  <option value="Admin">Admin</option>
+                  <option value="Dean">Dean</option>
+                  <option value="HoD">HoD</option>
+                  <option value="Researcher">Researcher</option>
+                  <option value="Pending">Pending</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-ink-600 mb-1">Account Status</label>
+                <select [ngModel]="f.account_status"
+                        (ngModelChange)="patchForm('account_status', $event)"
+                        class="w-full px-3 py-2 rounded-lg border border-ink-200 text-sm bg-white">
+                  <option value="Active">Active</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Suspended">Suspended</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Role assignment -->
+            <div>
+              <label class="block text-xs font-medium text-ink-600 mb-1">Role</label>
+              <select [ngModel]="f.role_id"
+                      (ngModelChange)="patchForm('role_id', $event ? +$event : null)"
+                      class="w-full px-3 py-2 rounded-lg border border-ink-200 text-sm bg-white">
+                <option [ngValue]="null">— No role —</option>
+                @for (r of roles(); track r.RoleID) {
+                  <option [ngValue]="r.RoleID">{{ r.Name }}</option>
+                }
+              </select>
+            </div>
+
+            <!-- Active toggle -->
+            <label class="flex items-center gap-2 text-sm text-ink-700 cursor-pointer">
+              <input type="checkbox"
+                     [ngModel]="f.is_active"
+                     (ngModelChange)="patchForm('is_active', $event)"
+                     class="rounded border-ink-300 text-accent focus:ring-accent">
+              Account is active (can log in)
+            </label>
+          </div>
+
+          <!-- Note about what's NOT editable here -->
+          <div class="mt-5 rounded-xl bg-ink-50 px-4 py-3 text-[11px] text-ink-500 leading-relaxed">
+            <strong>Not editable here:</strong> Litrix_ID, Scholar_ID, OpenAlex_AuthorID,
+            ORCID, and password. Those need dedicated flows
+            (re-sync, profile-claim, or password reset).
+          </div>
+
+          <div class="flex justify-end gap-2 mt-5">
+            <button (click)="cancelEdit()"
+                    class="px-4 py-2 rounded-lg text-sm text-ink-700
+                           hover:bg-ink-100 transition">
+              Cancel
+            </button>
+            <button (click)="saveEdit()"
+                    [disabled]="savingEdit()"
+                    class="px-4 py-2 rounded-lg bg-ink-900 text-white text-sm font-medium
+                           hover:bg-ink-700 transition disabled:opacity-50">
+              {{ savingEdit() ? 'Saving…' : 'Save changes' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    }
   }
 
   <!-- Confirm-delete modal — destructive action gets a deliberate stop. -->

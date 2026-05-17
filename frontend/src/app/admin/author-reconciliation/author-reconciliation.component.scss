@@ -1,0 +1,261 @@
+// =============================================================================
+//  Author Reconciliation — Minimalist, Apple-style stylesheet
+// =============================================================================
+//  Design tokens (extract to a global _tokens.scss in production)
+// -----------------------------------------------------------------------------
+
+$color-ink:        #1d1d1f;
+$color-ink-muted:  #6e6e73;
+$color-line:       #e5e5e7;
+$color-canvas:     #fbfbfd;
+$color-surface:    #ffffff;
+$color-accent:     #0071e3;   // SF blue
+$color-success:    #34c759;
+$color-warning:    #ff9f0a;
+$color-danger:     #ff3b30;
+
+$radius-lg: 16px;
+$radius-md: 10px;
+$radius-sm: 6px;
+
+$shadow-card: 0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.04);
+
+$font-stack: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+             "Helvetica Neue", Helvetica, Arial, sans-serif;
+
+// -----------------------------------------------------------------------------
+//  Layout
+// -----------------------------------------------------------------------------
+
+.reconciliation {
+  font-family: $font-stack;
+  color: $color-ink;
+  background: $color-canvas;
+  min-height: 100vh;
+  padding: 64px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+
+  &__header {
+    text-align: center;
+    max-width: 640px;
+  }
+
+  &__title {
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin: 0 0 8px;
+  }
+
+  &__subtitle {
+    color: $color-ink-muted;
+    font-size: 15px;
+    margin: 0;
+  }
+
+  &__loading,
+  &__empty {
+    color: $color-ink-muted;
+    text-align: center;
+    margin-top: 80px;
+  }
+
+  &__empty {
+    h2 {
+      font-size: 22px;
+      font-weight: 600;
+      margin: 16px 0 4px;
+      color: $color-ink;
+    }
+    p { font-size: 15px; margin: 0; }
+  }
+
+  &__empty-mark {
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    background: rgba($color-success, 0.12);
+    color: $color-success;
+    font-size: 32px;
+    line-height: 64px;
+    margin: 0 auto;
+  }
+}
+
+// -----------------------------------------------------------------------------
+//  The decision card
+// -----------------------------------------------------------------------------
+
+.card {
+  width: 100%;
+  max-width: 720px;
+  background: $color-surface;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-card;
+  padding: 40px 44px 32px;
+
+  &__paper-label,
+  .compare-col__label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: $color-ink-muted;
+    margin-bottom: 6px;
+  }
+
+  &__paper-title {
+    font-size: 17px;
+    font-weight: 500;
+    line-height: 1.4;
+    margin: 0;
+    color: $color-ink;
+  }
+
+  &__divider {
+    height: 1px;
+    background: $color-line;
+    margin: 28px 0;
+  }
+
+  &__compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+  }
+
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 36px;
+  }
+
+  &__shortcut-hint {
+    text-align: center;
+    color: $color-ink-muted;
+    font-size: 12px;
+    margin: 24px 0 0;
+
+    kbd {
+      font-family: $font-stack;
+      background: $color-canvas;
+      border: 1px solid $color-line;
+      border-radius: $radius-sm;
+      padding: 1px 6px;
+      font-size: 11px;
+      color: $color-ink;
+    }
+  }
+}
+
+// -----------------------------------------------------------------------------
+//  Compare columns
+// -----------------------------------------------------------------------------
+
+.compare-col {
+  &__name {
+    font-size: 17px;
+    font-weight: 500;
+    margin: 0 0 4px;
+  }
+  &__meta {
+    font-size: 13px;
+    color: $color-ink-muted;
+    margin: 0 0 16px;
+  }
+
+  &--empty &__meta {
+    margin-top: 4px;
+  }
+}
+
+// -----------------------------------------------------------------------------
+//  Confidence bar
+// -----------------------------------------------------------------------------
+
+.confidence {
+  margin-top: 12px;
+
+  &__track {
+    height: 4px;
+    background: $color-line;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  &__fill {
+    height: 100%;
+    background: $color-accent;
+    transition: width 0.4s ease;
+  }
+
+  &__label {
+    display: block;
+    font-size: 12px;
+    color: $color-ink-muted;
+    margin-top: 6px;
+    letter-spacing: 0.01em;
+  }
+
+  &[data-tone="high"]   .confidence__fill { background: $color-success; }
+  &[data-tone="medium"] .confidence__fill { background: $color-warning; }
+  &[data-tone="low"]    .confidence__fill { background: $color-danger; }
+}
+
+// -----------------------------------------------------------------------------
+//  Buttons — soft, pill-shaped, Apple-like
+// -----------------------------------------------------------------------------
+
+.btn {
+  font-family: $font-stack;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 22px;
+  border-radius: 980px;     // pill
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.05s ease;
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  &:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+
+  &--primary {
+    background: $color-accent;
+    color: #fff;
+    &:hover:not(:disabled) { background: darken($color-accent, 6%); }
+  }
+
+  &--secondary {
+    background: rgba($color-danger, 0.10);
+    color: $color-danger;
+    &:hover:not(:disabled) { background: rgba($color-danger, 0.16); }
+  }
+
+  &--ghost {
+    background: transparent;
+    color: $color-ink-muted;
+    &:hover:not(:disabled) { background: $color-canvas; color: $color-ink; }
+  }
+}
+
+// -----------------------------------------------------------------------------
+//  Responsive
+// -----------------------------------------------------------------------------
+
+@media (max-width: 600px) {
+  .reconciliation { padding: 32px 16px; }
+  .card { padding: 24px 20px; }
+  .card__compare { grid-template-columns: 1fr; gap: 20px; }
+  .card__actions { justify-content: stretch; }
+  .btn { flex: 1; }
+}

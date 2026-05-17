@@ -56,6 +56,13 @@ export class ResearcherDashboardComponent implements OnInit {
   readonly hoveredPubYear = signal<number | null>(null);
   readonly hoveredQuartile = signal<string | null>(null);
 
+  /**
+   * Chart window floor — matches the admin dashboard CHART_YEAR_FLOOR.
+   * Years before this are clipped from both bar charts so the X-axis
+   * stays compact and the recent-growth signal stays readable.
+   */
+  private readonly CHART_YEAR_FLOOR = 2019;
+
   ngOnInit() {
     this.load();
   }
@@ -111,7 +118,10 @@ export class ResearcherDashboardComponent implements OnInit {
   // Citations-per-year chart geometry (bar chart).
   // --------------------------------------------------------------------------
   readonly citationsChart = computed(() => {
-    const cby = this.data()?.citations_by_year ?? [];
+    // Clip to CHART_YEAR_FLOOR for parity with the admin trend chart.
+    // (Backend now clips too, but double-clipping is harmless.)
+    const cby = (this.data()?.citations_by_year ?? [])
+      .filter(c => c.year >= this.CHART_YEAR_FLOOR);
     if (!cby.length) return null;
     const max = Math.max(...cby.map(c => c.citations), 1);
     const W = 500, H = 220, padding = { top: 16, right: 12, bottom: 32, left: 36 };
@@ -146,10 +156,12 @@ export class ResearcherDashboardComponent implements OnInit {
   readonly publicationsChart = computed(() => {
     const papers = this.data()?.papers ?? [];
     if (!papers.length) return null;
-    // Bucket by pub_year, ignoring papers without a year.
+    // Bucket by pub_year, ignoring papers without a year AND papers
+    // older than CHART_YEAR_FLOOR (matches admin chart window).
     const buckets = new Map<number, number>();
     for (const p of papers) {
       if (p.pub_year == null) continue;
+      if (p.pub_year < this.CHART_YEAR_FLOOR) continue;
       buckets.set(p.pub_year, (buckets.get(p.pub_year) ?? 0) + 1);
     }
     if (!buckets.size) return null;

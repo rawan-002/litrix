@@ -4,6 +4,7 @@ from . import views, sync_views, invitation_views
 
 urlpatterns = [
     path('departments-public/',      views.public_departments,        name='public-departments'),
+    path('public-stats/',            views.public_stats,              name='public-stats'),
     path('register/',                views.register,                  name='register'),
     path('registration-match/',      views.registration_match,        name='registration-match'),
     path('verify-email/',            views.verify_email,              name='verify-email'),

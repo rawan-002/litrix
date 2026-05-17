@@ -30,7 +30,7 @@ from .views import (
     overview, yearly_breakdown, export_excel, paper_detail,
     universal_search,
 )
-from . import campaign_views, my_reports_views
+from . import campaign_views, my_reports_views, reconciliation_views, network_views
 
 router = DefaultRouter()
 router.register(r'researchers',  ResearcherViewSet,       basename='researcher')
@@ -62,6 +62,9 @@ urlpatterns = [
     path('campaigns/<int:campaign_id>/submissions/',
          campaign_views.campaign_submissions,
          name='campaign-submissions'),
+    path('campaigns/<int:campaign_id>/submissions/<int:submission_id>/',
+         campaign_views.campaign_submission_detail,
+         name='campaign-submission-detail'),
     path('campaigns/<int:campaign_id>/export/',
          campaign_views.campaign_export,
          name='campaign-export'),
@@ -85,4 +88,24 @@ urlpatterns = [
     path('my-reports/<int:submission_id>/submit/',
          my_reports_views.submit_submission,
          name='submission-submit'),
+
+    # ---- Research Network (collaboration graph) ----
+    path('researchers/<str:pk>/network/',
+         network_views.researcher_network,
+         name='researcher-network'),
+    # ---- Researcher-editable interests (Scholar-style labels) ----
+    path('researchers/<str:pk>/interests/',
+         network_views.researcher_interests,
+         name='researcher-interests'),
+
+    # ---- Author Reconciliation (admin) ----
+    path('admin/author-review-queue/',
+         reconciliation_views.review_queue_list,
+         name='author-review-queue-list'),
+    path('admin/author-review-queue/stats/',
+         reconciliation_views.review_queue_stats,
+         name='author-review-queue-stats'),
+    path('admin/author-review-queue/<int:review_id>/decide/',
+         reconciliation_views.review_queue_decide,
+         name='author-review-queue-decide'),
 ]

@@ -115,7 +115,6 @@ export class RegisterComponent implements OnInit, OnDestroy {
     academic_rank:   [''],
     scholar_id:      [''],
     orcid_id:        [''],
-    scopus_id:       [''],
   });
 
   /** Concatenated full names — what the backend currently expects. */
@@ -243,7 +242,6 @@ export class RegisterComponent implements OnInit, OnDestroy {
       academic_rank: v.academic_rank,
       scholar_id:    v.scholar_id,
       orcid_id:      v.orcid_id,
-      scopus_id:     v.scopus_id,
     };
     // Carry the invite token through if we have one — the backend uses
     // it to skip the awaiting-email-verification queue entirely.

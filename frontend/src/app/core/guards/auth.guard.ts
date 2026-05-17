@@ -10,7 +10,11 @@ export const authGuard: CanActivateFn = (route, state) => {
   if (auth.isAuthenticated()) {
     return true;
   }
-  return router.createUrlTree(['/login'], {
+  // Unauthenticated visitors land on /welcome (the public landing page)
+  // so they see what the product is before being prompted to sign in.
+  // returnUrl is preserved so the post-login flow can resume the
+  // originally requested route.
+  return router.createUrlTree(['/welcome'], {
     queryParams: { returnUrl: state.url },
   });
 };

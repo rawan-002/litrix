@@ -23,8 +23,18 @@ import { SettingsComponent } from './pages/settings/settings.component';
 import { SearchComponent } from './pages/search/search.component';
 import { NotificationsComponent } from './pages/notifications/notifications.component';
 import { InvitationsComponent } from './pages/admin/invitations/invitations.component';
+import { CampaignsComponent } from './pages/admin/campaigns/campaigns.component';
+import { MyReportsComponent } from './pages/my-reports/my-reports.component';
+import { MyReportDetailComponent } from './pages/my-reports/my-report-detail.component';
+import { DepartmentsComponent } from './pages/departments/departments.component';
+import { WelcomeComponent } from './pages/welcome/welcome.component';
+import { NetworkComponent } from './pages/network/network.component';
 
 export const routes: Routes = [
+  // Public landing page - shown to anyone not signed in.
+  // guestGuard bounces already-authenticated users straight to /.
+  { path: 'welcome',          component: WelcomeComponent,        canActivate: [guestGuard] },
+
   { path: 'login',            component: LoginComponent,          canActivate: [guestGuard] },
   { path: 'register',         component: RegisterComponent,       canActivate: [guestGuard] },
   { path: 'forgot-password',  component: ForgotPasswordComponent, canActivate: [guestGuard] },
@@ -70,6 +80,28 @@ export const routes: Routes = [
         component: RolesComponent,
         canActivate: [permissionGuard('manage_roles')],
       },
+      {
+        // Admin campaigns dashboard — visible to anyone who can
+        // manage campaigns OR view their reports.
+        path: 'admin/campaigns',
+        component: CampaignsComponent,
+        canActivate: [permissionGuard('manage_campaigns', 'view_campaign_reports')],
+      },
+      // My Reports — permanent entry for every authenticated user.
+      // The page renders a friendly empty state when there are no
+      // active campaigns, so no extra guard needed beyond authGuard.
+      { path: 'my-reports',         component: MyReportsComponent },
+      { path: 'my-reports/:id',     component: MyReportDetailComponent },
+      {
+        path: 'departments',
+        component: DepartmentsComponent,
+        canActivate: [permissionGuard(
+          'view_all_researchers', 'view_dept_researchers', 'manage_departments',
+        )],
+      },
+      // Research Network - collaboration graph, accessible to all
+      // authenticated users (each one centred on themselves by default).
+      { path: 'network', component: NetworkComponent },
       {
         // Dynamic redirect to the user's own /profile/Lit-NNNNNN URL.
         // Why a function: Angular needs to read the current AuthUser at
