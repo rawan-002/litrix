@@ -28,7 +28,9 @@ export const jwtInterceptor: HttpInterceptorFn = (req, next) => {
         return auth.refreshToken().pipe(
           switchMap(res => {
             if (!res.access) {
-              router.navigate(['/login']);
+              // Token completely dead — send to the public landing
+              // page so users don't get dropped onto a bare login form.
+              router.navigate(['/welcome']);
               return throwError(() => err);
             }
             const retry = req.clone({
@@ -37,7 +39,7 @@ export const jwtInterceptor: HttpInterceptorFn = (req, next) => {
             return next(retry);
           }),
           catchError(() => {
-            router.navigate(['/login']);
+            router.navigate(['/welcome']);
             return throwError(() => err);
           }),
         );

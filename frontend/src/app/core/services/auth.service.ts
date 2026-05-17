@@ -121,7 +121,10 @@ export class AuthService {
       });
     }
     this.clearSession();
-    this.router.navigate(['/login']);
+    // Send signed-out users to the public landing page, not to the
+    // bare /login form. They'll still see "Sign in" in the top nav
+    // if they want to go straight to login.
+    this.router.navigate(['/welcome']);
   }
 
   getAccessToken(): string | null {

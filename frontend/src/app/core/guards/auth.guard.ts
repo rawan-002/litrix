@@ -26,7 +26,9 @@ export const permissionGuard = (...required: string[]): CanActivateFn => {
     const router = inject(Router);
 
     if (!auth.isAuthenticated()) {
-      return router.createUrlTree(['/login']);
+      // Unauthenticated visitors get the public landing page, not the
+      // bare /login form — consistent with authGuard + jwt interceptor.
+      return router.createUrlTree(['/welcome']);
     }
     if (!auth.hasAnyPermission(...required)) {
       return router.createUrlTree(['/forbidden']);
