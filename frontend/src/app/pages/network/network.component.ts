@@ -210,7 +210,7 @@ export class NetworkComponent implements OnInit, AfterViewInit, OnDestroy {
 
     const zoomBehaviour = d3.zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.4, 3])
-      .on('zoom', (ev) => g.attr('transform', ev.transform.toString()));
+      .on('zoom', (ev: any) => g.attr('transform', ev.transform.toString()));
     svg.call(zoomBehaviour as any);
 
     // ---- Edges (different styling for coauthor vs interest) ----
@@ -244,11 +244,11 @@ export class NetworkComponent implements OnInit, AfterViewInit, OnDestroy {
       .data(nodes)
       .enter().append('g')
       .style('cursor', 'pointer')
-      .on('click', (_, d) => {
+      .on('click', (_: any, d: NetNode) => {
         // Single click — show details
         this.selectedNode.set(d);
       })
-      .on('dblclick', (_, d) => {
+      .on('dblclick', (_: any, d: NetNode) => {
         // Double click — recentre on this node
         if (d.kind !== 'external' && d.litrix_id) {
           this.centreLitrixId.set(d.litrix_id);
@@ -337,10 +337,13 @@ export class NetworkComponent implements OnInit, AfterViewInit, OnDestroy {
       .style('pointer-events', 'none');   // text never blocks click on the circle
 
     this.simulation = d3.forceSimulation<NetNode>(nodes)
-      .force('link', d3.forceLink<NetNode, NetEdge>(edges).id(n => n.id).distance(120).strength(0.4))
+      .force('link', d3.forceLink<NetNode, NetEdge>(edges)
+                       .id((n: NetNode) => n.id)
+                       .distance(120)
+                       .strength(0.4))
       .force('charge', d3.forceManyBody().strength(-260))
       .force('centre', d3.forceCenter(W / 2, H / 2))
-      .force('collide', d3.forceCollide<NetNode>().radius(n => radiusFor(n) + 6))
+      .force('collide', d3.forceCollide<NetNode>().radius((n: NetNode) => radiusFor(n) + 6))
       .on('tick', () => {
         link
           .attr('x1', d => (d.source as NetNode).x!)
@@ -350,13 +353,19 @@ export class NetworkComponent implements OnInit, AfterViewInit, OnDestroy {
         nodeG.attr('transform', d => `translate(${d.x},${d.y})`);
       });
 
+    // Explicit `any` types on the d3 drag callbacks — Angular's
+    // production build runs TS in strict mode, which rejects the
+    // implicit `any` that d3's overload resolution leaves behind.
+    // Casting at the call site keeps the rest of the code typed.
     const drag = d3.drag<SVGGElement, NetNode>()
-      .on('start', (event, d) => {
+      .on('start', (event: any, d: NetNode) => {
         if (!event.active) this.simulation!.alphaTarget(0.3).restart();
         d.fx = d.x; d.fy = d.y;
       })
-      .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y; })
-      .on('end', (event, d) => {
+      .on('drag', (event: any, d: NetNode) => {
+        d.fx = event.x; d.fy = event.y;
+      })
+      .on('end', (event: any, d: NetNode) => {
         if (!event.active) this.simulation!.alphaTarget(0);
         d.fx = null; d.fy = null;
       });
