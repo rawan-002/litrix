@@ -1,11 +1,15 @@
-
+/*
+ * CSS rule: every @import must come BEFORE any other rule.
+ * Tailwind's @tailwind directives expand into thousands of rules at
+ * build time, so the Inter @import has to sit above all of them or
+ * the bundler emits an "invalid-@import" warning (and some browsers
+ * silently ignore the font).
+ */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 html, body {
   @apply bg-ink-100 text-ink-700 font-sans antialiased;
