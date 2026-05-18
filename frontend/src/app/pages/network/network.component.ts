@@ -45,6 +45,16 @@ interface NetNode extends d3.SimulationNodeDatum {
   interests?: string[];
   shared_interests?: string[];
   shared_interests_count?: number;
+
+  // Repeat the SimulationNodeDatum fields explicitly. Some Vercel
+  // build configs don't resolve d3's inherited `x/y/fx/fy` cleanly,
+  // so we restate them here to make strict mode happy.
+  x?:  number;
+  y?:  number;
+  vx?: number;
+  vy?: number;
+  fx?: number | null;
+  fy?: number | null;
 }
 
 interface NetEdge extends d3.SimulationLinkDatum<NetNode> {
