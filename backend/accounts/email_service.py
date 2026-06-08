@@ -56,9 +56,14 @@ def send_email(to, subject, body):
 
     Pick a backend via the EMAIL_BACKEND env var:
       • console  — prints to stdout (dev default)
-      • smtp     — generic SMTP (Gmail, Outlook, Brevo, any host)
+      • smtp     — generic SMTP (Gmail, Outlook, Brevo, any host).
+                   NOTE: Render blocks outbound SMTP ports, so this
+                   fails in production there — use an HTTPS API backend.
       • sendgrid — SendGrid REST API
-      • resend   — Resend REST API (modern SendGrid alternative)
+      • resend   — Resend REST API (needs a verified domain to send
+                   to anyone but yourself)
+      • brevo    — Brevo (ex-Sendinblue) REST API. HTTPS, free 300/day,
+                   sends from a verified address without owning a domain.
     """
     backend = os.getenv('EMAIL_BACKEND', 'console').lower()
 
@@ -88,6 +93,9 @@ def send_email(to, subject, body):
 
     if backend == 'resend':
         return _send_via_resend(to, subject, body)
+
+    if backend == 'brevo':
+        return _send_via_brevo(to, subject, body)
 
     logger.warning('unknown EMAIL_BACKEND=%s', backend)
     return False
@@ -177,6 +185,58 @@ def _send_via_resend(to, subject, body):
         return True
     except Exception:
         logger.exception('[resend] send failed')
+        return False
+
+
+def _send_via_brevo(to, subject, body):
+    """
+    Brevo (brevo.com, formerly Sendinblue) — transactional email over
+    HTTPS. Picked over SMTP because Render blocks outbound SMTP ports,
+    and over Resend/SendGrid because Brevo's free tier (300/day) lets us
+    send from a verified sender address WITHOUT owning a custom domain —
+    which Litrix doesn't have yet (still on *.vercel.app).
+
+    Required env: BREVO_API_KEY (starts with 'xkeysib-').
+    Optional env: BREVO_FROM       sender address (defaults to SMTP_USER)
+                  BREVO_FROM_NAME  display name (defaults to 'Litrix')
+
+    BREVO_FROM may be a bare address or a full 'Name <addr>' form — we
+    parse it either way so we never repeat the From double-wrap bug.
+    """
+    from email.utils import parseaddr
+
+    api_key = os.getenv('BREVO_API_KEY')
+    if not api_key:
+        logger.error('[brevo] missing BREVO_API_KEY')
+        return False
+
+    raw_from = os.getenv('BREVO_FROM') or os.getenv('SMTP_USER') or ''
+    name, addr = parseaddr(raw_from)
+    sender = {
+        'name':  name or os.getenv('BREVO_FROM_NAME', 'Litrix'),
+        'email': addr or raw_from,
+    }
+
+    try:
+        import httpx
+        r = httpx.post(
+            'https://api.brevo.com/v3/smtp/email',
+            headers={'api-key': api_key, 'accept': 'application/json'},
+            json={
+                'sender':      sender,
+                'to':          [{'email': to}],
+                'subject':     subject,
+                'textContent': body,
+            },
+            timeout=10,
+        )
+        # Brevo returns 201 Created (with a messageId) on success.
+        if r.status_code not in (200, 201, 202):
+            logger.error('[brevo] %s %s', r.status_code, r.text[:500])
+            return False
+        return True
+    except Exception:
+        logger.exception('[brevo] send failed')
         return False
 
 
