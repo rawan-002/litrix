@@ -64,6 +64,9 @@ def send_email(to, subject, body):
                    to anyone but yourself)
       • brevo    — Brevo (ex-Sendinblue) REST API. HTTPS, free 300/day,
                    sends from a verified address without owning a domain.
+      • gmail    — Gmail API (HTTPS) as the litrix.team@gmail.com account
+                   itself. No third-party provider / phone / domain / trial.
+                   OAuth2 refresh token minted once via tools/gmail_oauth.py.
     """
     backend = os.getenv('EMAIL_BACKEND', 'console').lower()
 
@@ -96,6 +99,9 @@ def send_email(to, subject, body):
 
     if backend == 'brevo':
         return _send_via_brevo(to, subject, body)
+
+    if backend == 'gmail':
+        return _send_via_gmail(to, subject, body)
 
     logger.warning('unknown EMAIL_BACKEND=%s', backend)
     return False
@@ -185,6 +191,87 @@ def _send_via_resend(to, subject, body):
         return True
     except Exception:
         logger.exception('[resend] send failed')
+        return False
+
+
+def _send_via_gmail(to, subject, body):
+    """
+    Gmail API over HTTPS (port 443 — works on Render, which blocks SMTP).
+    Sends as the litrix.team@gmail.com account itself, so there is no
+    third-party provider and no phone / domain / trial gate.
+
+    Auth is OAuth2: a long-lived refresh token (minted once with
+    tools/gmail_oauth.py) is exchanged for a short-lived access token on
+    each send. The refresh token stays valid as long as the OAuth consent
+    screen is published "In production" (Testing status expires it in 7d).
+
+    Required env:
+        GMAIL_CLIENT_ID
+        GMAIL_CLIENT_SECRET
+        GMAIL_REFRESH_TOKEN
+    Optional env:
+        GMAIL_FROM       sender address (defaults to SMTP_USER)
+        GMAIL_FROM_NAME  display name (defaults to 'Litrix')
+    """
+    import base64
+    from email.message import EmailMessage
+    from email.utils import parseaddr
+
+    client_id     = os.getenv('GMAIL_CLIENT_ID')
+    client_secret = os.getenv('GMAIL_CLIENT_SECRET')
+    refresh_token = os.getenv('GMAIL_REFRESH_TOKEN')
+    if not (client_id and client_secret and refresh_token):
+        logger.error('[gmail] missing GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET / GMAIL_REFRESH_TOKEN')
+        return False
+
+    raw_from = os.getenv('GMAIL_FROM') or os.getenv('SMTP_USER') or ''
+    name, addr = parseaddr(raw_from)
+    from_name = name or os.getenv('GMAIL_FROM_NAME', 'Litrix')
+    from_addr = addr or raw_from
+
+    try:
+        import httpx
+        # 1) Trade the refresh token for a short-lived access token.
+        tok = httpx.post(
+            'https://oauth2.googleapis.com/token',
+            data={
+                'client_id':     client_id,
+                'client_secret': client_secret,
+                'refresh_token': refresh_token,
+                'grant_type':    'refresh_token',
+            },
+            timeout=10,
+        )
+        if tok.status_code != 200:
+            logger.error('[gmail] token refresh failed %s %s', tok.status_code, tok.text[:500])
+            return False
+        access_token = tok.json().get('access_token')
+        if not access_token:
+            logger.error('[gmail] no access_token in refresh response')
+            return False
+
+        # 2) Build the RFC-822 message and base64url-encode it (Gmail API
+        #    wants the whole message in a single url-safe base64 "raw" field).
+        msg = EmailMessage()
+        msg['From']    = f'{from_name} <{from_addr}>' if from_name else from_addr
+        msg['To']      = to
+        msg['Subject'] = subject
+        msg.set_content(body)
+        raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+
+        # 3) Send via the Gmail API.
+        r = httpx.post(
+            'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
+            headers={'Authorization': f'Bearer {access_token}'},
+            json={'raw': raw},
+            timeout=15,
+        )
+        if r.status_code not in (200, 202):
+            logger.error('[gmail] send failed %s %s', r.status_code, r.text[:500])
+            return False
+        return True
+    except Exception:
+        logger.exception('[gmail] send failed')
         return False
 
 
