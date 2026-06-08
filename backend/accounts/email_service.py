@@ -112,14 +112,21 @@ def _send_via_smtp(to, subject, body):
     port = int(os.getenv('SMTP_PORT', '587'))
     user = os.getenv('SMTP_USER')
     pwd  = os.getenv('SMTP_PASSWORD')
-    sender = os.getenv('SMTP_FROM') or user
 
     if not (host and user and pwd):
         logger.error('[smtp] missing SMTP_HOST / SMTP_USER / SMTP_PASSWORD')
         return False
 
+    # SMTP_FROM may be a bare address (litrix.team@gmail.com) OR a full
+    # display form (Litrix <litrix.team@gmail.com>). Use it verbatim and
+    # only add the "Litrix" display name when it's a bare address — never
+    # wrap a value that already has angle brackets, or the From collapses
+    # to a malformed "Litrix <Litrix>" that Gmail rejects / spam-folders.
+    from_value = os.getenv('SMTP_FROM') or user
+    from_header = from_value if '<' in from_value else f'Litrix <{from_value}>'
+
     msg = EmailMessage()
-    msg['From']    = f'Litrix <{sender}>'
+    msg['From']    = from_header
     msg['To']      = to
     msg['Subject'] = subject
     msg.set_content(body)
