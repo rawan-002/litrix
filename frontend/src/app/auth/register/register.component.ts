@@ -155,6 +155,11 @@ export class RegisterComponent implements OnInit, OnDestroy {
   });
 
   readonly registeredEmail = signal<string>('');
+  // Email-delivery state for the verify step: false means the code email
+  // failed to send, so we warn and surface a resend button.
+  readonly emailSent   = signal<boolean>(true);
+  readonly resending   = signal<boolean>(false);
+  readonly resendNote  = signal<string | null>(null);
 
   isStepDone(s: string, i: number): boolean {
     const order = ['profile', 'verify', 'done'];
@@ -287,6 +292,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
           return;
         }
         this.registeredEmail.set(payload.email);
+        this.emailSent.set(res?.email_sent !== false);
         this.step.set('verify');
       },
       error: err => {
@@ -326,6 +332,28 @@ export class RegisterComponent implements OnInit, OnDestroy {
       error: err => {
         this.loading.set(false);
         this.error.set(err.error?.error || 'Invalid verification code');
+      },
+    });
+  }
+
+  /** Re-send the verification code (delivery failed, lost, or spam-foldered). */
+  resend() {
+    if (this.resending()) return;
+    this.resending.set(true);
+    this.resendNote.set(null);
+    this.auth.resendVerification(this.registeredEmail()).subscribe({
+      next: (res: any) => {
+        this.resending.set(false);
+        this.emailSent.set(res?.email_sent !== false);
+        this.resendNote.set(
+          res?.email_sent === false
+            ? 'Still could not send. Please contact your administrator.'
+            : 'A new code has been sent. Check your inbox (and spam).',
+        );
+      },
+      error: () => {
+        this.resending.set(false);
+        this.resendNote.set('Could not resend right now. Try again shortly.');
       },
     });
   }

@@ -298,10 +298,19 @@
 
       @if (step() === 'verify') {
         <h2 class="text-xl font-semibold text-ink-900 mb-1">Verify your email</h2>
-        <p class="text-sm text-ink-500 mb-6">
+        <p class="text-sm text-ink-500 mb-4">
           Step 2 of 2 — We sent a 6-digit code to
           <span class="text-ink-700 font-medium">{{ registeredEmail() }}</span>
         </p>
+
+        <!-- Delivery failed warning -->
+        @if (!emailSent()) {
+          <div class="text-xs text-amber-700 bg-amber-50 border border-amber-200
+                      px-3 py-2 rounded-lg mb-4">
+            We couldn't send the email just now. Try “Resend code” below, or
+            contact your administrator if it keeps failing.
+          </div>
+        }
 
         <form [formGroup]="verifyForm" (ngSubmit)="submitVerify()" class="space-y-4">
           <div>
@@ -327,6 +336,18 @@
                          hover:bg-ink-700 transition disabled:opacity-50">
             {{ loading() ? 'Verifying...' : 'Verify' }}
           </button>
+
+          <!-- Resend code -->
+          <div class="text-center pt-1">
+            <button type="button" (click)="resend()" [disabled]="resending()"
+                    class="text-xs font-medium text-accent hover:text-accent-hover
+                           transition-colors disabled:opacity-50">
+              {{ resending() ? 'Sending…' : "Didn't get it? Resend code" }}
+            </button>
+            @if (resendNote()) {
+              <p class="text-[11px] text-ink-500 mt-1.5">{{ resendNote() }}</p>
+            }
+          </div>
         </form>
       }
 

@@ -62,14 +62,21 @@ export class AuthService {
     );
   }
 
-  register(payload: any): Observable<{ message: string; request_id: number }> {
-    return this.http.post<{ message: string; request_id: number }>(
+  register(payload: any): Observable<{ message: string; request_id: number; email_sent?: boolean; user_id?: number }> {
+    return this.http.post<{ message: string; request_id: number; email_sent?: boolean; user_id?: number }>(
       `${this.API}/register/`, payload,
     );
   }
 
   verifyEmail(email: string, token: string): Observable<any> {
     return this.http.post(`${this.API}/verify-email/`, { email, token });
+  }
+
+  /** Re-send the registration verification code to an unverified email. */
+  resendVerification(email: string): Observable<{ message: string; email_sent: boolean }> {
+    return this.http.post<{ message: string; email_sent: boolean }>(
+      `${this.API}/resend-verification/`, { email },
+    );
   }
 
   passwordResetRequest(email: string): Observable<any> {

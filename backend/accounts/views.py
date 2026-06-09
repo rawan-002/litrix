@@ -594,11 +594,17 @@ def register(request):
         req_id = cur.fetchone()[0]
 
     token = create_verification(email, purpose='registration')
-    send_verification_email(email, token)
+    # Surface the delivery result so the client can warn + offer a resend
+    # instead of silently parking the user on "we sent a code" when the
+    # email never actually went out.
+    sent = send_verification_email(email, token)
 
     return Response({
-        'message': 'Verification code sent to your email',
+        'message': 'Verification code sent to your email' if sent
+                   else 'Account created, but we could not send the '
+                        'verification email. Use “Resend code”.',
         'request_id': req_id,
+        'email_sent': bool(sent),
     }, status=status.HTTP_201_CREATED)
 
 
@@ -823,6 +829,48 @@ def verify_email(request):
         'message': 'Email verified. Awaiting admin approval.',
         'request_id': req_id,
         'status': 'pending',
+    })
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+@throttle_classes([AuthAnonThrottle])
+def resend_verification(request):
+    """
+    POST /api/auth/resend-verification/  { "email": "..." }
+
+    Re-mint and re-send the registration verification code for an email
+    that is still awaiting verification. Used when the first email never
+    arrived (delivery failure, spam, lost). Returns the same opaque shape
+    whether or not a matching pending request exists, so the endpoint
+    can't be used to enumerate which emails have registered — except we
+    do report `email_sent` so a legitimate user knows to retry.
+    """
+    email = (request.data.get('email') or '').strip().lower()
+    if not email:
+        return Response({'error': 'email is required'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    with connection.cursor() as cur:
+        cur.execute('''
+            SELECT 1 FROM "RegistrationRequest"
+            WHERE LOWER("Email") = LOWER(%s)
+              AND "Status" = 'awaiting_email_verification'
+            LIMIT 1
+        ''', [email])
+        pending = cur.fetchone() is not None
+
+    sent = False
+    if pending:
+        token = create_verification(email, purpose='registration')
+        sent = send_verification_email(email, token)
+
+    # Opaque message (don't confirm/deny the email exists); still surface
+    # whether the send succeeded so a real user can react.
+    return Response({
+        'message': 'If an unverified registration exists for this email, '
+                   'a new code has been sent.',
+        'email_sent': bool(sent),
     })
 
 

@@ -8,6 +8,7 @@ urlpatterns = [
     path('register/',                views.register,                  name='register'),
     path('registration-match/',      views.registration_match,        name='registration-match'),
     path('verify-email/',            views.verify_email,              name='verify-email'),
+    path('resend-verification/',     views.resend_verification,       name='resend-verification'),
     path('login/',                   views.login,                     name='login'),
     path('logout/',                  views.logout,                    name='logout'),
     path('refresh/',                 TokenRefreshView.as_view(),      name='refresh'),
@@ -38,6 +39,8 @@ urlpatterns = [
     path('sync/researchers/',                         sync_views.list_syncable_researchers, name='sync-researchers'),
     path('sync/jobs/',                                sync_views.list_sync_jobs,        name='sync-jobs'),
     path('sync/trigger/',                             sync_views.trigger_sync,          name='sync-trigger'),
+    path('sync/refresh-citations/',                   sync_views.trigger_citation_refresh, name='sync-refresh-citations'),
+    path('sync/scrape-new/',                          sync_views.trigger_new_papers_scrape, name='sync-scrape-new'),
 
     # Role-scoped invitations
     path('invitations/',                              invitation_views.list_or_create_invitation, name='invitations-list-create'),
