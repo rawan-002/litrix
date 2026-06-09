@@ -58,7 +58,12 @@ export class AuthService {
 
   login(email: string, password: string): Observable<LoginResponse> {
     return this.http.post<LoginResponse>(`${this.API}/login/`, { email, password }).pipe(
-      tap(res => this.persistSession(res)),
+      tap(res => {
+        this.persistSession(res);
+        // Reset one-per-session UI flags so a fresh login re-triggers them
+        // (e.g. the supervisor's welcome fireworks on the dashboard).
+        try { sessionStorage.removeItem('litrix_welcome_v1'); } catch { /* ignore */ }
+      }),
     );
   }
 
