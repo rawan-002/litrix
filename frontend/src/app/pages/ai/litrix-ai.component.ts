@@ -31,7 +31,7 @@ interface ChatMessage {
         <div>
           <h1 class="text-lg font-semibold text-ink-900 leading-tight">Litrix AI</h1>
           <p class="text-xs text-ink-400">
-            مساعد بحثي ذكي — قريباً متصل ببيانات المنصة (RAG)
+            Smart research assistant — soon connected to platform data (RAG)
           </p>
         </div>
       </div>
@@ -66,7 +66,7 @@ interface ChatMessage {
             [(ngModel)]="draft"
             (keydown.enter)="onEnter($event)"
             rows="1"
-            placeholder="اكتب سؤالك هنا…"
+            placeholder="Type your question…"
             class="flex-1 bg-transparent resize-none outline-none text-sm
                    text-ink-800 placeholder:text-ink-400 max-h-32 py-1.5"></textarea>
           <button
@@ -78,7 +78,7 @@ interface ChatMessage {
           </button>
         </div>
         <p class="text-[11px] text-ink-300 text-center mt-2">
-          Litrix AI تحت التطوير — الردود الحالية تجريبية.
+          Litrix AI is under development — replies are experimental.
         </p>
       </div>
     </div>
@@ -90,8 +90,9 @@ export class LitrixAiComponent {
   readonly messages = signal<ChatMessage[]>([
     {
       role: 'assistant',
-      text: 'مرحباً 👋 أنا Litrix AI. قريباً بقدر أجاوبك عن الأبحاث، '
-          + 'الباحثين، والإحصائيات داخل المنصة. حالياً الواجهة تجريبية.',
+      text: 'Hi 👋 I\'m Litrix AI. Soon I\'ll be able to answer your '
+          + 'questions about papers, researchers, and stats across the '
+          + 'platform. The interface is experimental for now.',
     },
   ]);
   readonly thinking = signal(false);
@@ -132,8 +133,8 @@ export class LitrixAiComponent {
       this.thinking.set(false);
       this.messages.update(m => [...m, {
         role: 'assistant',
-        text: 'شكراً لسؤالك! خاصية الإجابة الذكية (RAG) قيد الإعداد، '
-            + 'وراح تكون متاحة قريباً بإذن الله.',
+        text: 'Thanks for your question! The smart-answer feature (RAG) '
+            + 'is being set up and will be available soon.',
       }]);
     }, 600);
   }

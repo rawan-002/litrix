@@ -59,9 +59,10 @@ export class DashboardRouterComponent {
   }
 
   supervisorName(): string {
-    // Prefer a short, warm Arabic form: "د. " + first name if available.
-    const ar = this.auth.user()?.full_name_ar || '';
-    const first = ar.split(' ')[0] || 'دكتور';
-    return `د. ${first}`;
+    // "Dr." + first name; the name itself stays as-is (Arabic if that's
+    // what's stored). Falls back to the English name, then a generic title.
+    const u = this.auth.user();
+    const first = (u?.full_name_ar || u?.full_name || '').trim().split(' ')[0];
+    return first ? `Dr. ${first}` : 'Doctor';
   }
 }

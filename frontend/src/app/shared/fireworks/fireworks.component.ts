@@ -28,16 +28,16 @@ interface Particle {
                     shadow-hover border border-white/60 max-w-md mx-4 animate-[pop_.4s_ease-out]"
              (click)="$event.stopPropagation()">
           <div class="text-4xl mb-2">🎉</div>
-          <h2 class="text-xl font-bold text-ink-900 mb-1" dir="rtl">
-            أهلاً وسهلاً، {{ name() }}
+          <h2 class="text-xl font-bold text-ink-900 mb-1">
+            Welcome, {{ name() }}
           </h2>
-          <p class="text-sm text-ink-600 leading-relaxed" dir="rtl">
-            يسعدنا وجودك في <span class="font-semibold text-ink-900">Litrix</span> —
-            شكراً لإشرافك وثقتك 💚
+          <p class="text-sm text-ink-600 leading-relaxed">
+            We're glad to have you on <span class="font-semibold text-ink-900">Litrix</span> —
+            thank you for your guidance and trust 💚
           </p>
           <button (click)="dismiss()"
                   class="mt-5 text-xs font-medium text-ink-500 hover:text-ink-900 transition-colors">
-            تخطّي
+            Skip
           </button>
         </div>
       </div>
