@@ -141,14 +141,18 @@ export class UsersComponent {
     const u = this.pendingDelete();
     if (!u) return;
     this.deletingId.set(u.UserID);
-    this.http.delete<{ message: string; deleted: any }>(
+    this.http.delete<{ message: string; deleted?: any; unregistered?: any }>(
       `${this.API}/users/${u.UserID}/`,
     ).subscribe({
-      next: () => {
+      next: (res) => {
         // Optimistic local removal so the UI feels snappy.
         this.users.update(list => list.filter(x => x.UserID !== u.UserID));
         this.deletingId.set(null);
         this.pendingDelete.set(null);
+        // Let the admin know when it was un-registered (papers kept) vs deleted.
+        if (res?.unregistered) {
+          alert(res.message);
+        }
       },
       error: err => {
         this.deletingId.set(null);

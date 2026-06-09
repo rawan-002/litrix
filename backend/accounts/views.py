@@ -1434,6 +1434,14 @@ def _delete_user(request, user_id: int):
             'papers':       row[5] or 0,
         }
 
+    # If this account has papers, a hard delete would orphan them (its
+    # Authors links get removed). Instead we UN-REGISTER: strip the login +
+    # registration artifacts but keep the researcher profile, their author
+    # links, department, and every paper. Only truly footprint-less accounts
+    # (no papers) are hard-deleted below.
+    if snapshot['papers'] > 0:
+        return _unregister_user(request, user_id, snapshot)
+
     def _table_exists(cur, name: str) -> bool:
         cur.execute(
             'SELECT 1 FROM information_schema.tables '
@@ -1521,6 +1529,97 @@ def _delete_user(request, user_id: int):
         request=request,
     )
     return Response({'message': 'User deleted', 'deleted': snapshot})
+
+
+def _unregister_user(request, user_id: int, snapshot: dict):
+    """
+    Soft-remove an account that HAS papers: strip the login + everything the
+    registration created, but keep the scraped researcher profile, its author
+    links, department membership, and every paper. A hard delete would drop
+    the Authors links and orphan those papers, so this is used instead.
+
+    Reverts the Users row to the unregistered scraped-researcher state
+    (AccountStatus='Pending', no password, no email, UserType='Researcher')
+    and clears registration side-effects: welcome notifications, the initial
+    sync job, registration requests, consumed/issued invitations, any
+    headship, and active JWT sessions. Idempotent and atomic.
+    """
+    tenant_id = request.user.tenant_id
+    with transaction.atomic():
+        with connection.cursor() as cur:
+            cur.execute('SELECT "Email" FROM "Users" WHERE "UserID" = %s', [user_id])
+            r = cur.fetchone()
+            email = r[0] if r else None
+
+            # Registration records tied to this email + invitations.
+            if email:
+                cur.execute(
+                    'DELETE FROM "RegistrationRequest" WHERE LOWER("Email") = LOWER(%s)',
+                    [email],
+                )
+                cur.execute(
+                    'UPDATE "Invitation" SET "RevokedAt" = NOW(), "UsedAt" = NULL, '
+                    '"UsedByUserID" = NULL WHERE LOWER("InvitedEmail") = LOWER(%s)',
+                    [email],
+                )
+            cur.execute(
+                'UPDATE "Invitation" SET "UsedAt" = NULL, "UsedByUserID" = NULL '
+                'WHERE "UsedByUserID" = %s',
+                [user_id],
+            )
+
+            # Welcome notifications + the registration-triggered sync job.
+            cur.execute(
+                'DELETE FROM "Notification" WHERE "UserID" = %s '
+                "AND \"Type\" IN ('registration_approved', 'invitation_accepted')",
+                [user_id],
+            )
+            cur.execute('DELETE FROM "SyncJob" WHERE "UserID" = %s', [user_id])
+
+            # Defensive: drop any headship the (possibly promoted) account held.
+            cur.execute(
+                'UPDATE "Department" SET "HeadID" = NULL WHERE "HeadID" = %s',
+                [user_id],
+            )
+
+            # Invalidate active JWT sessions so the removed login can't keep
+            # working until token expiry (mirrors the hard-delete cleanup).
+            cur.execute(
+                'SELECT 1 FROM information_schema.tables '
+                'WHERE table_name = %s', ['token_blacklist_outstandingtoken'])
+            if cur.fetchone():
+                cur.execute(
+                    'DELETE FROM token_blacklist_blacklistedtoken '
+                    'WHERE token_id IN (SELECT id FROM token_blacklist_outstandingtoken '
+                    'WHERE user_id = %s)', [user_id])
+                cur.execute(
+                    'DELETE FROM token_blacklist_outstandingtoken WHERE user_id = %s',
+                    [user_id])
+
+            # Revert the Users row to the unregistered scraped-researcher state.
+            cur.execute(
+                '''UPDATE "Users" SET
+                       "PasswordHash"  = NULL,
+                       "Email"         = NULL,
+                       "AccountStatus" = 'Pending',
+                       "EmailVerified" = FALSE,
+                       "LastLoginAt"   = NULL,
+                       "UserType"      = 'Researcher',
+                       "RoleID"        = (SELECT "RoleID" FROM "Role"
+                                          WHERE "Name" = 'Researcher' AND "TenantID" = %s)
+                   WHERE "UserID" = %s''',
+                [tenant_id, user_id],
+            )
+
+    audit(
+        request.user.user_id, tenant_id,
+        'user.unregister', 'User', user_id, snapshot, request=request,
+    )
+    return Response({
+        'message': 'Account unregistered — the login was removed but the '
+                   'researcher profile and all their papers were kept.',
+        'unregistered': snapshot,
+    })
 
 
 @api_view(['GET'])

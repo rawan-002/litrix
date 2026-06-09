@@ -290,7 +290,7 @@
             </svg>
           </div>
           <div class="flex-1">
-            <h3 class="text-base font-semibold text-ink-900">Delete this user?</h3>
+            <h3 class="text-base font-semibold text-ink-900">Remove this user?</h3>
             <p class="text-sm text-ink-500 mt-1 leading-relaxed">
               <span class="font-semibold text-ink-900" dir="rtl">
                 {{ target.FullName_Ar || target.Email }}
@@ -301,10 +301,12 @@
         </div>
 
         <div class="rounded-xl bg-ink-50 px-4 py-3 text-xs text-ink-600 mb-5 leading-relaxed">
-          This permanently removes the account, their author links,
-          department membership, sync history, and notifications. Papers
-          they co-authored stay (they may have other authors). The action
-          cannot be undone.
+          This removes the login and everything the registration created
+          (password, email, welcome notifications, sync job, invitations).
+          <span class="font-semibold text-ink-900">If the researcher has
+          papers, their profile and all papers are kept</span> — the account
+          simply becomes an unregistered scraped profile. Accounts with no
+          papers are deleted permanently. The action cannot be undone.
         </div>
 
         <div class="flex justify-end gap-2">
@@ -317,7 +319,7 @@
                   [disabled]="deletingId() !== null"
                   class="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium
                          hover:bg-red-700 transition disabled:opacity-50">
-            {{ deletingId() !== null ? 'Deleting…' : 'Delete user' }}
+            {{ deletingId() !== null ? 'Removing…' : 'Remove user' }}
           </button>
         </div>
       </div>
