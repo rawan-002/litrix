@@ -238,18 +238,12 @@ def verify_via_openalex(doi: str) -> tuple[Optional[bool], dict[str, Any]]:
 
     authorships = data.get('authorships') or []
     if not authorships:
-        return None, {'tier': 'openalex', 'reason': 'openalex_no_authorships'}
+        return False, {'reason': 'openalex_no_authorships'}
 
-    # Walk every (author × institution) pair. Track whether ANY institution
-    # was present — a conclusive "not Al-Baha" requires that OpenAlex
-    # actually had affiliation data to inspect. If every authorship lacks
-    # institutions we return None (inconclusive) so a later tier / retry can
-    # resolve it, instead of falsely excluding the paper.
-    institutions_seen = 0
+    # Walk every (author × institution) pair
     for auth in authorships:
         author_name = (auth.get('author') or {}).get('display_name', '')
         for inst in auth.get('institutions') or []:
-            institutions_seen += 1
             inst_name = inst.get('display_name', '') or ''
             ror = inst.get('ror', '') or ''
             country = inst.get('country_code', '') or ''
@@ -264,14 +258,10 @@ def verify_via_openalex(doi: str) -> tuple[Optional[bool], dict[str, Any]]:
                     'matched_substring':   match,
                 }
 
-    if institutions_seen == 0:
-        return None, {'tier': 'openalex', 'reason': 'openalex_no_institutions'}
-
     return False, {
         'tier': 'openalex',
         'reason': 'no_albaha_in_authorships',
         'authorships_count': len(authorships),
-        'institutions_seen': institutions_seen,
     }
 
 
@@ -304,19 +294,12 @@ def verify_via_crossref(doi: str) -> tuple[Optional[bool], dict[str, Any]]:
 
     authors = msg.get('author') or []
     if not authors:
-        return None, {'tier': 'crossref', 'reason': 'crossref_no_authors'}
+        return False, {'reason': 'crossref_no_authors'}
 
-    # Crossref very often omits affiliations entirely. So we only return a
-    # conclusive "not Al-Baha" when at least one affiliation string was
-    # actually present; otherwise it's inconclusive (None) and we fall
-    # through to the HTML/PDF tiers instead of falsely excluding the paper.
-    affiliations_seen = 0
     for auth in authors:
         author_name = f"{auth.get('given', '')} {auth.get('family', '')}".strip()
         for aff in auth.get('affiliation') or []:
             aff_name = aff.get('name', '') or ''
-            if aff_name:
-                affiliations_seen += 1
             match = detect_albaha_in_text(aff_name)
             if match:
                 return True, {
@@ -326,14 +309,10 @@ def verify_via_crossref(doi: str) -> tuple[Optional[bool], dict[str, Any]]:
                     'matched_substring':   match,
                 }
 
-    if affiliations_seen == 0:
-        return None, {'tier': 'crossref', 'reason': 'crossref_no_affiliations'}
-
     return False, {
         'tier': 'crossref',
         'reason': 'no_albaha_in_affiliations',
         'authors_count': len(authors),
-        'affiliations_seen': affiliations_seen,
     }
 
 
@@ -640,30 +619,6 @@ def verify_via_publisher_html(doi: str) -> tuple[Optional[bool], dict[str, Any]]
         # PubMed / NCBI
         '.affiliations',
         '.affil',
-        # SAGE
-        '.author-institution',
-        '.authorLayer .aff',
-        # Emerald
-        '.intent_author_affiliation',
-        '.rlist--inline .aff',
-        # IOP Publishing
-        '.wd-jnl-art-author-affiliations',
-        '.affiliations-list',
-        # RSC (Royal Society of Chemistry)
-        '.article__author-affiliation',
-        # ACS (American Chemical Society)
-        '.affiliations div',
-        '.loa-info-affiliations',
-        # De Gruyter
-        '.contributorAffiliation',
-        # Karger
-        '.affiliation-list',
-        # ASCE / AIP / AIP-style Atypon
-        '.NLM_aff',
-        '.affil-text',
-        # Generic schema.org / Atypon platforms (covers many hosted journals)
-        '[class*="affiliation"]',
-        '[id*="aff"]',
     ]
     for selector in publisher_selectors:
         try:
@@ -688,36 +643,10 @@ def verify_via_publisher_html(doi: str) -> tuple[Optional[bool], dict[str, Any]]
     # -------------------------------------------------------------------
     # Strategy 4: Full HTML text search (fallback — last resort)
     # We strip noisy elements first to reduce false matches on navigation,
-    # ads, footers etc. CRITICALLY we also drop the references / bibliography
-    # / acknowledgements / cited-by blocks: a paper that merely CITES or
-    # THANKS an Al-Baha author would otherwise be mislabelled as Al-Baha.
+    # ads, footers etc.
     # -------------------------------------------------------------------
     for tag in soup(['script', 'style', 'nav', 'footer', 'header', 'iframe']):
         tag.decompose()
-
-    # Drop reference/bibliography/acknowledgement/cited-by containers by id,
-    # class, or section role — matched loosely since publishers name them
-    # inconsistently (references, ref-list, bibliography, citedby, …).
-    _NOISE_RE = re.compile(
-        r'(reference|bibliograph|ref[-_]?list|citedby|cited-by|'
-        r'acknowledg|backmatter|back-matter|footnote)',
-        re.IGNORECASE,
-    )
-    for tag in soup.find_all(['section', 'div', 'ol', 'ul', 'aside']):
-        # A matching ancestor may have already decomposed this tag (find_all
-        # returns nested matches); a decomposed tag has attrs == None.
-        if getattr(tag, 'attrs', None) is None:
-            continue
-        cls = tag.get('class') or []
-        ident = ' '.join([
-            tag.get('id', '') or '',
-            ' '.join(cls) if isinstance(cls, list) else str(cls),
-            tag.get('role', '') or '',
-            tag.get('aria-label', '') or '',
-        ])
-        if _NOISE_RE.search(ident):
-            tag.decompose()
-
     plain_text = soup.get_text(' ', strip=True)
     match = detect_albaha_in_text(plain_text)
     if match:
@@ -779,20 +708,12 @@ def verify_paper(
         }
     """
     last_evidence: dict[str, Any] = {}
-    conclusive_negative: Optional[dict[str, Any]] = None
 
     for tier_name in tiers_to_run:
         tier_fn = TIERS[tier_name]
         time.sleep(TIER_DELAYS[tier_name])
 
-        # A bug or unexpected payload in one tier must never abort the whole
-        # run — treat any unhandled error as inconclusive and move on.
-        try:
-            verified, evidence = tier_fn(doi or '')
-        except Exception as e:
-            verified, evidence = None, {
-                'tier': tier_name, 'reason': 'tier_exception', 'detail': str(e)[:200],
-            }
+        verified, evidence = tier_fn(doi or '')
         last_evidence = evidence
 
         if verified is True:
@@ -802,25 +723,24 @@ def verify_paper(
                 'details': evidence,
             }
         if verified is False:
-            # Conclusive negative — this tier had affiliation data and none
-            # of it was Al-Baha. Remember it (prefer the FIRST, most
-            # authoritative tier — OpenAlex), but keep trying later tiers in
-            # case their richer metadata surfaces an Al-Baha affiliation.
-            if conclusive_negative is None:
-                conclusive_negative = dict(evidence)
-                conclusive_negative.setdefault('tier', tier_name)
+            # Conclusive negative — paper exists but no Al-Baha mention.
+            # We still try later tiers in case API metadata is incomplete.
             continue
-        # verified is None → inconclusive (no data / network / 404), try next.
+        # verified is None → tier failed (network/404/etc), try next.
 
-    # All tiers exhausted with no positive match. If ANY tier conclusively
-    # inspected affiliation data and found no Al-Baha, mark False. Otherwise
-    # leave it NULL (pending-review) so a retry / human can resolve it — a
-    # purely inconclusive run must never exclude a paper.
-    if conclusive_negative is not None:
+    # All tiers exhausted
+    # If we got a conclusive negative from any tier, return False.
+    # Otherwise leave it NULL (pending-review) so a retry can resolve it.
+    if last_evidence.get('reason') in {
+        'no_albaha_in_authorships',
+        'no_albaha_in_affiliations',
+        'pdf_no_albaha',
+        'no_albaha_in_html',
+    }:
         return {
             'verified': False,
-            'verification_source': conclusive_negative.get('tier', 'pending-review'),
-            'details': conclusive_negative,
+            'verification_source': last_evidence.get('tier', 'pending-review'),
+            'details': last_evidence,
         }
     return {
         'verified': None,
@@ -854,7 +774,6 @@ def fetch_pending_papers(
     re_verify: bool,
     retry_pending: bool = False,
     years: Optional[list[int]] = None,
-    user_id: Optional[int] = None,
 ) -> list[dict]:
     """
     Selects papers needing verification.
@@ -863,8 +782,6 @@ def fetch_pending_papers(
       - re_verify: include ALL papers regardless of current state
       - retry_pending: only re-process papers previously marked pending-review
       - years: PubYear scope (default: dynamic dashboard window)
-      - user_id: restrict to papers authored by this Users.UserID (testing
-        a single researcher's profile)
     """
     where = ['1=1']
     params: list[Any] = []
@@ -872,13 +789,6 @@ def fetch_pending_papers(
     if source_filter:
         where.append('rp."Source" = %s')
         params.append(source_filter)
-
-    if user_id is not None:
-        where.append(
-            'EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID" '
-            'AND a."UserID" = %s)'
-        )
-        params.append(user_id)
 
     if retry_pending:
         # Special path: pick up only the papers Tier 3 (PDF) couldn't resolve.
@@ -943,29 +853,27 @@ def update_paper_verification(
 # CLI
 # ============================================================================
 
-def cmd_report(conn, years: Optional[list[int]] = None):
+def cmd_report(conn):
     """Prints per-source verification stats. No API calls."""
-    yrs = years or default_verification_years()
     print()
     print('═' * 80)
     print(' VERIFICATION REPORT'.center(80))
-    print(f' (PubYear scope: {", ".join(map(str, yrs))})'.center(80))
     print('═' * 80)
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute('''
             SELECT
                 rp."Source"                                              AS source,
-                COUNT(DISTINCT rp."PaperID")                             AS total,
-                COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."AffiliationVerified" = TRUE)  AS verified_yes,
-                COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."AffiliationVerified" = FALSE) AS verified_no,
-                COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."AffiliationVerified" IS NULL) AS pending,
-                COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."DOI" IS NULL OR rp."DOI" = '') AS no_doi
+                COUNT(*)                                                 AS total,
+                COUNT(*) FILTER (WHERE rp."AffiliationVerified" = TRUE)  AS verified_yes,
+                COUNT(*) FILTER (WHERE rp."AffiliationVerified" = FALSE) AS verified_no,
+                COUNT(*) FILTER (WHERE rp."AffiliationVerified" IS NULL) AS pending,
+                COUNT(*) FILTER (WHERE rp."DOI" IS NULL OR rp."DOI" = '') AS no_doi
             FROM "ResearchPaper" rp
             JOIN "Authors" a ON a."PaperID" = rp."PaperID"
-            WHERE rp."PubYear" = ANY(%s)
+            WHERE rp."PubYear" = ANY(ARRAY[2025, 2026])
             GROUP BY rp."Source"
             ORDER BY total DESC
-        ''', [yrs])
+        ''')
         rows = cur.fetchall()
 
     print(f'\n{"Source":<15} {"Total":>7} {"Al-Baha":>10} {"Not Al-Baha":>13} {"Pending":>9} {"No DOI":>8}')
@@ -1021,7 +929,6 @@ def cmd_verify(conn, args):
         re_verify=args.re_verify,
         retry_pending=args.retry_pending,
         years=years,
-        user_id=getattr(args, 'user', None),
     )
     log.info(f'Fetched {len(papers)} pending papers')
     if not papers:
@@ -1109,8 +1016,6 @@ def main():
     parser.add_argument('--tier', choices=list(TIERS.keys()),
                         help='Run a single tier only (default: all in order)')
     parser.add_argument('--limit', type=int, help='Process at most N papers (testing)')
-    parser.add_argument('--user', type=int,
-                        help='Restrict to papers authored by this Users.UserID')
     parser.add_argument('--resume',    dest='resume', action='store_true',  default=True,
                         help='Skip already-verified papers (default)')
     parser.add_argument('--no-resume', dest='resume', action='store_false',
@@ -1134,18 +1039,13 @@ def main():
         sys.exit(1)
     log.info('Connected.')
 
-    # Parse the optional year scope once so the report and the run agree.
-    report_years = None
-    if getattr(args, 'years', None):
-        report_years = [int(y.strip()) for y in args.years.split(',') if y.strip()]
-
     try:
         if args.report:
-            cmd_report(conn, report_years)
+            cmd_report(conn)
         else:
             cmd_verify(conn, args)
             if args.apply:
-                cmd_report(conn, report_years)
+                cmd_report(conn)
     finally:
         conn.close()
 
