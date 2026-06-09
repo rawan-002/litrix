@@ -652,6 +652,31 @@ def _provision_invited_user(request, d, metadata, pwd_hash, email, invite):
     with transaction.atomic():
         with connection.cursor() as cur:
             # ----------------------------------------------------------
+            # ATOMIC INVITATION CLAIM (race guard)
+            # consume_invitation() validated the token earlier but did NOT
+            # mark it used, so two concurrent registrations with the same
+            # token could both reach here and provision two accounts. Claim
+            # it FIRST with a conditional UPDATE: the `WHERE "UsedAt" IS NULL`
+            # + row lock makes this the single serialization point — the
+            # second request matches 0 rows and is rejected before anything
+            # is created. UsedByUserID is filled in once we have the UserID;
+            # if any later step fails, the whole atomic block rolls back and
+            # the token reverts to unused.
+            # ----------------------------------------------------------
+            cur.execute(
+                'UPDATE "Invitation" SET "UsedAt" = NOW() '
+                'WHERE "InvitationID" = %s '
+                '  AND "UsedAt" IS NULL AND "RevokedAt" IS NULL '
+                'RETURNING "InvitationID"',
+                [invite['invitation_id']],
+            )
+            if cur.fetchone() is None:
+                return Response(
+                    {'error': 'invalid_invitation', 'reason': 'already_used'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            # ----------------------------------------------------------
             # CLAIM-PROFILE FLOW
             # Before INSERT-ing a brand-new Users row, check if there's
             # already a 'Pending' row with the same Scholar_ID or ORCID.
@@ -754,9 +779,14 @@ def _provision_invited_user(request, d, metadata, pwd_hash, email, invite):
                         [new_user_id, final_dept],
                     )
 
-            # Mark the invitation as consumed.
-            from .invitation_views import mark_invitation_used
-            mark_invitation_used(invite['invitation_id'], new_user_id)
+            # The invitation was already claimed (UsedAt set) at the top of
+            # this transaction; now that we have the UserID, record who used
+            # it. Same atomic block, so it commits/rolls back together.
+            cur.execute(
+                'UPDATE "Invitation" SET "UsedByUserID" = %s '
+                'WHERE "InvitationID" = %s',
+                [new_user_id, invite['invitation_id']],
+            )
 
             # Welcome notification (English — matches the rest of the UI).
             cur.execute('''
