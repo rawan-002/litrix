@@ -255,43 +255,45 @@ def export_excel(request):
     from django.db import connection
 
     # ------------------------------------------------------------------
-    # SAFETY GUARD: HoD scope check
-    # HoDs (view_dept_researchers without view_all_researchers) can only
-    # export their own department. We need to ALSO scope every query
-    # to their department; until that fine-grained scoping lands, we
-    # refuse the export to avoid a data leak across departments.
-    # Admins/Deans (view_all_researchers) are unaffected.
+    # HoD scoping. A HoD (view_dept_researchers without view_all_researchers)
+    # may only export their OWN department, so every sheet below is filtered
+    # to `hod_dept_id`. Admin/Dean get the full institution (hod_dept_id is
+    # None → all the `scoped`-guarded clauses are skipped). The shared helper
+    # resolves the department via Department.HeadID then current Works_In and
+    # returns the sentinel -1 for a HoD with no department at all.
     # ------------------------------------------------------------------
-    _u = getattr(request, 'user', None)
-    if _u and _u.is_authenticated:
-        _is_hod_scope = (
-            _u.has_litrix_perm('view_dept_researchers')
-            and not _u.has_litrix_perm('view_all_researchers')
+    hod_dept_id = _hod_scope_department_id(request)
+    if hod_dept_id == -1:
+        return response.Response(
+            {'error': 'You are not assigned to any department. '
+                      'Contact an admin to set your department.'},
+            status=403,
         )
-        if _is_hod_scope:
-            # Lookup HoD's department for use in scoped queries below.
-            with connection.cursor() as _cur:
-                _cur.execute(
-                    'SELECT "DepartmentID" FROM "Department" '
-                    'WHERE "HeadID" = %s LIMIT 1',
-                    [_u.user_id]
-                )
-                _r = _cur.fetchone()
-            _hod_dept_id = _r[0] if _r else None
-            if _hod_dept_id is None:
-                return response.Response(
-                    {'error': 'You are not assigned to any department. '
-                              'Contact an admin to set Department.HeadID.'},
-                    status=403,
-                )
-            # Block the export until scoped queries land. This prevents
-            # leaking other departments' data to HoDs.
-            return response.Response(
-                {'error': 'Department-scoped export for HoDs is being '
-                          'prepared. For now, please ask an Admin or Dean '
-                          'to export your department\'s data.'},
-                status=403,
+    scoped = hod_dept_id is not None
+
+    # Department label for the Overview sheet, so a HoD's file makes its
+    # scope obvious.
+    hod_dept_name = None
+    if scoped:
+        with connection.cursor() as _c:
+            _c.execute(
+                'SELECT "DepartmentName" FROM "Department" WHERE "DepartmentID" = %s',
+                [hod_dept_id],
             )
+            _row = _c.fetchone()
+            hod_dept_name = _row[0] if _row else None
+
+    # EXISTS predicate: the paper has at least one author whose CURRENT
+    # position is in the HoD's department. Appended to paper queries when
+    # scoped; `rp_alias` is the ResearchPaper alias in the target query.
+    def _dept_paper_clause(rp_alias: str) -> str:
+        return (
+            f' AND EXISTS (SELECT 1 FROM "Authors" a_dept '
+            f'             JOIN "Works_In" w_dept ON w_dept."UserID" = a_dept."UserID" '
+            f'                                   AND w_dept."IsCurrentPosition" = TRUE '
+            f'             WHERE a_dept."PaperID" = {rp_alias}."PaperID" '
+            f'               AND w_dept."DepartmentID" = %s)'
+        )
 
     years_param = request.query_params.get('years', '').strip()
     if years_param:
@@ -330,42 +332,86 @@ def export_excel(request):
         ws_overview['A1'].font = title_font
         ws_overview.row_dimensions[1].height = 36
         years_label = ', '.join(str(y) for y in sorted(years))
-        ws_overview['A2'] = f'Window: {years_label}'
+        scope_label = f' · Department: {hod_dept_name}' if hod_dept_name else ''
+        ws_overview['A2'] = f'Window: {years_label}{scope_label}'
         ws_overview['A2'].font = sublabel_font
 
-        # KPI computation — same per-year semantics as the dashboard.
+        # KPI computation — same per-year semantics as the dashboard. Each
+        # KPI is its own small query so the HoD department filter can be
+        # added cleanly (param order stays trivial).
+        year_strs = [str(y) for y in years]
         with connection.cursor() as cur:
-            # Citations sourced from Researcher.CitationsByYear (Scholar's
-            # author-level per-year graph). Same approach as the live
-            # /overview/ endpoint — single source of truth.
+            # Researchers + active (scoped to current dept positions).
+            if scoped:
+                cur.execute('''
+                    SELECT COUNT(DISTINCT u."UserID"),
+                           COUNT(DISTINCT u."UserID") FILTER (WHERE r."LastSyncedAt" IS NOT NULL)
+                    FROM "Users" u
+                    JOIN "Works_In" w ON w."UserID" = u."UserID" AND w."IsCurrentPosition" = TRUE
+                    LEFT JOIN "Researcher" r ON r."UserID" = u."UserID"
+                    WHERE u."UserType" = 'Researcher' AND w."DepartmentID" = %s
+                ''', [hod_dept_id])
+            else:
+                cur.execute('''
+                    SELECT COUNT(DISTINCT u."UserID"),
+                           COUNT(DISTINCT u."UserID") FILTER (WHERE r."LastSyncedAt" IS NOT NULL)
+                    FROM "Users" u
+                    LEFT JOIN "Researcher" r ON r."UserID" = u."UserID"
+                    WHERE u."UserType" = 'Researcher'
+                ''')
+            r_total, r_active = cur.fetchone()
+
+            # Papers in window + Q1 (author-in-dept when scoped).
+            papers_sql = (
+                'SELECT COUNT(*), COUNT(*) FILTER (WHERE q = \'Q1\') FROM ('
+                '  SELECT DISTINCT rp."PaperID", jr."Quartile" AS q'
+                '  FROM "ResearchPaper" rp'
+                '  LEFT JOIN LATERAL (SELECT "Quartile" FROM "JournalRankings"'
+                '      WHERE "JournalID" = rp."JournalID"'
+                '      ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1) jr ON TRUE'
+                '  WHERE rp."PubYear" = ANY(%s)'
+                '    AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID")'
+            )
+            papers_params = [years]
+            if scoped:
+                papers_sql += _dept_paper_clause('rp')
+                papers_params.append(hod_dept_id)
+            papers_sql += ') sub'
+            cur.execute(papers_sql, papers_params)
+            p_total, p_q1 = cur.fetchone()
+
+            # Citations (Researcher.CitationsByYear) summed, scoped to dept.
             year_keys_expr = ' + '.join([
-                f"COALESCE((r.\"CitationsByYear\"->>%s)::int, 0)"
-                for _ in years
+                "COALESCE((r.\"CitationsByYear\"->>%s)::int, 0)" for _ in years
             ])
-            cur.execute(f'''
-                WITH window_papers AS (
-                    SELECT DISTINCT rp."PaperID", jr."Quartile", rp."Indexing"
-                    FROM "ResearchPaper" rp
-                    LEFT JOIN LATERAL (    SELECT "Quartile", "ImpactFactor"    FROM "JournalRankings"    WHERE "JournalID" = rp."JournalID"    ORDER BY "RankingYear" DESC NULLS LAST, "Source"    LIMIT 1) jr ON TRUE
-                    WHERE rp."PubYear" = ANY(%s)
-                      AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID")
-                ),
-                year_citations AS (
-                    SELECT COALESCE(SUM({year_keys_expr}), 0) AS total
-                    FROM "Researcher" r
-                    WHERE r."CitationsByYear" IS NOT NULL
+            cit_sql = (
+                f'SELECT COALESCE(SUM({year_keys_expr}), 0) FROM "Researcher" r '
+                'WHERE r."CitationsByYear" IS NOT NULL'
+            )
+            cit_params = list(year_strs)
+            if scoped:
+                cit_sql += (
+                    ' AND EXISTS (SELECT 1 FROM "Works_In" w '
+                    '             WHERE w."UserID" = r."UserID" '
+                    '               AND w."IsCurrentPosition" = TRUE '
+                    '               AND w."DepartmentID" = %s)'
                 )
-                SELECT
-                    (SELECT COUNT(*) FROM "Users" WHERE "UserType" = 'Researcher')                  AS researchers,
-                    (SELECT COUNT(*) FROM "Users" u
-                       JOIN "Researcher" r ON r."UserID" = u."UserID"
-                      WHERE r."LastSyncedAt" IS NOT NULL)                                            AS active,
-                    (SELECT COUNT(*) FROM window_papers)                                            AS papers,
-                    (SELECT COUNT(*) FROM window_papers WHERE "Quartile" = 'Q1')                    AS q1,
-                    (SELECT total FROM year_citations)                                              AS citations,
-                    (SELECT ROUND(AVG(h_index)::numeric, 1) FROM v_researcher_h_index)              AS avg_h
-            ''', [years] + [str(y) for y in years])
-            r_total, r_active, p_total, p_q1, c_total, avg_h = cur.fetchone()
+                cit_params.append(hod_dept_id)
+            cur.execute(cit_sql, cit_params)
+            c_total = cur.fetchone()[0]
+
+            # Average h-index, scoped to dept researchers.
+            if scoped:
+                cur.execute('''
+                    SELECT ROUND(AVG(hi.h_index)::numeric, 1)
+                    FROM v_researcher_h_index hi
+                    JOIN "Works_In" w ON w."UserID" = hi."UserID"
+                                     AND w."IsCurrentPosition" = TRUE
+                    WHERE w."DepartmentID" = %s
+                ''', [hod_dept_id])
+            else:
+                cur.execute('SELECT ROUND(AVG(h_index)::numeric, 1) FROM v_researcher_h_index')
+            avg_h = cur.fetchone()[0]
 
         # KPI cards laid out across columns (4 cards in a row)
         # Each card spans 2 columns: A-B, C-D, E-F, G-H
@@ -432,34 +478,46 @@ def export_excel(request):
             style_header(ws, 2)
             with connection.cursor() as cur:
                 # Paper counts per year (published-in-year semantics)
-                cur.execute('''
-                    SELECT
-                        COUNT(DISTINCT rp."PaperID"),
-                        COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q1'),
-                        COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q2'),
-                        COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q3'),
-                        COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q4'),
-                        COUNT(DISTINCT rp."PaperID") FILTER (WHERE j."VenueType" = 'Journal'),
-                        COUNT(DISTINCT rp."PaperID") FILTER (WHERE j."VenueType" = 'Conference')
-                    FROM "ResearchPaper" rp
-                    LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
-                    LEFT JOIN LATERAL (    SELECT "Quartile", "ImpactFactor"    FROM "JournalRankings"    WHERE "JournalID" = rp."JournalID"    ORDER BY "RankingYear" DESC NULLS LAST, "Source"    LIMIT 1) jr ON TRUE
-                    WHERE rp."PubYear" = %s
-                      AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID")
-                ''', [year])
+                summary_sql = (
+                    'SELECT '
+                    '    COUNT(DISTINCT rp."PaperID"), '
+                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q1\'), '
+                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q2\'), '
+                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q3\'), '
+                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q4\'), '
+                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE j."VenueType" = \'Journal\'), '
+                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE j."VenueType" = \'Conference\') '
+                    'FROM "ResearchPaper" rp '
+                    'LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID" '
+                    'LEFT JOIN LATERAL (SELECT "Quartile", "ImpactFactor" FROM "JournalRankings" '
+                    '  WHERE "JournalID" = rp."JournalID" ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1) jr ON TRUE '
+                    'WHERE rp."PubYear" = %s '
+                    '  AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID")'
+                )
+                summary_params = [year]
+                if scoped:
+                    summary_sql += _dept_paper_clause('rp')
+                    summary_params.append(hod_dept_id)
+                cur.execute(summary_sql, summary_params)
                 p, q1, q2, q3, q4, jp, cp = cur.fetchone()
 
-                # Citations: SUM Researcher.CitationsByYear[year] across all
-                # researchers — same source as the dashboard "Citations" KPI.
-                # Year-of-receipt semantics: how many citations our faculty
-                # RECEIVED in this calendar year.
-                cur.execute('''
-                    SELECT COALESCE(SUM(
-                        COALESCE(("CitationsByYear"->>%s)::int, 0)
-                    ), 0)
-                    FROM "Researcher"
-                    WHERE "CitationsByYear" IS NOT NULL
-                ''', [str(year)])
+                # Citations: SUM Researcher.CitationsByYear[year] across
+                # researchers (scoped to the dept's current members for HoDs).
+                # Year-of-receipt semantics: citations RECEIVED this year.
+                cit_sql = (
+                    'SELECT COALESCE(SUM(COALESCE((r."CitationsByYear"->>%s)::int, 0)), 0) '
+                    'FROM "Researcher" r WHERE r."CitationsByYear" IS NOT NULL'
+                )
+                cit_params = [str(year)]
+                if scoped:
+                    cit_sql += (
+                        ' AND EXISTS (SELECT 1 FROM "Works_In" w '
+                        '             WHERE w."UserID" = r."UserID" '
+                        '               AND w."IsCurrentPosition" = TRUE '
+                        '               AND w."DepartmentID" = %s)'
+                    )
+                    cit_params.append(hod_dept_id)
+                cur.execute(cit_sql, cit_params)
                 c = cur.fetchone()[0]
             for label, val in [
                 ('Year', year),
@@ -488,40 +546,42 @@ def export_excel(request):
                 # Citations come from Researcher.CitationsByYear[year] —
                 # same source as the dashboard. Computed in a separate
                 # subquery so it's not multiplied by the papers JOIN.
-                cur.execute('''
-                    WITH dept_cites AS (
-                        SELECT w."DepartmentID",
-                               SUM(COALESCE((r."CitationsByYear"->>%s)::int, 0)) AS cites
-                        FROM "Works_In" w
-                        JOIN "Researcher" r ON r."UserID" = w."UserID"
-                        WHERE w."IsCurrentPosition" = TRUE
-                          AND r."CitationsByYear" IS NOT NULL
-                        GROUP BY w."DepartmentID"
-                    )
-                    SELECT
-                        d."DepartmentName",
-                        COUNT(DISTINCT u."UserID"),
-                        COUNT(DISTINCT rp."PaperID") FILTER (WHERE j."VenueType" = 'Journal'),
-                        COUNT(DISTINCT rp."PaperID") FILTER (WHERE j."VenueType" = 'Conference'),
-                        COUNT(DISTINCT rp."PaperID"),
-                        COALESCE(MAX(dc.cites), 0) AS citations,
-                        COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q1'),
-                        COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q2'),
-                        COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q3'),
-                        COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q4')
-                    FROM "Department" d
-                    LEFT JOIN "Works_In" w ON w."DepartmentID" = d."DepartmentID"
-                                          AND w."IsCurrentPosition" = TRUE
-                    LEFT JOIN "Users" u ON u."UserID" = w."UserID" AND u."UserType" = 'Researcher'
-                    LEFT JOIN "Authors" a ON a."UserID" = u."UserID"
-                    LEFT JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
-                                               AND rp."PubYear" = %s
-                    LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
-                    LEFT JOIN LATERAL (    SELECT "Quartile", "ImpactFactor"    FROM "JournalRankings"    WHERE "JournalID" = rp."JournalID"    ORDER BY "RankingYear" DESC NULLS LAST, "Source"    LIMIT 1) jr ON TRUE
-                    LEFT JOIN dept_cites dc ON dc."DepartmentID" = d."DepartmentID"
-                    GROUP BY d."DepartmentName"
-                    ORDER BY 5 DESC
-                ''', [str(year), year])
+                dept_sql = (
+                    'WITH dept_cites AS ('
+                    '    SELECT w."DepartmentID", '
+                    '           SUM(COALESCE((r."CitationsByYear"->>%s)::int, 0)) AS cites '
+                    '    FROM "Works_In" w '
+                    '    JOIN "Researcher" r ON r."UserID" = w."UserID" '
+                    '    WHERE w."IsCurrentPosition" = TRUE AND r."CitationsByYear" IS NOT NULL '
+                    '    GROUP BY w."DepartmentID"'
+                    ') '
+                    'SELECT '
+                    '    d."DepartmentName", '
+                    '    COUNT(DISTINCT u."UserID"), '
+                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE j."VenueType" = \'Journal\'), '
+                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE j."VenueType" = \'Conference\'), '
+                    '    COUNT(DISTINCT rp."PaperID"), '
+                    '    COALESCE(MAX(dc.cites), 0) AS citations, '
+                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q1\'), '
+                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q2\'), '
+                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q3\'), '
+                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q4\') '
+                    'FROM "Department" d '
+                    'LEFT JOIN "Works_In" w ON w."DepartmentID" = d."DepartmentID" AND w."IsCurrentPosition" = TRUE '
+                    'LEFT JOIN "Users" u ON u."UserID" = w."UserID" AND u."UserType" = \'Researcher\' '
+                    'LEFT JOIN "Authors" a ON a."UserID" = u."UserID" '
+                    'LEFT JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID" AND rp."PubYear" = %s '
+                    'LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID" '
+                    'LEFT JOIN LATERAL (SELECT "Quartile", "ImpactFactor" FROM "JournalRankings" '
+                    '  WHERE "JournalID" = rp."JournalID" ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1) jr ON TRUE '
+                    'LEFT JOIN dept_cites dc ON dc."DepartmentID" = d."DepartmentID" '
+                )
+                dept_params = [str(year), year]
+                if scoped:
+                    dept_sql += 'WHERE d."DepartmentID" = %s '
+                    dept_params.append(hod_dept_id)
+                dept_sql += 'GROUP BY d."DepartmentName" ORDER BY 5 DESC'
+                cur.execute(dept_sql, dept_params)
                 for row in cur.fetchall():
                     ws.append(list(row))
             set_widths(ws, [32, 12, 14, 16, 12, 12, 8, 8, 8, 8])
@@ -537,7 +597,7 @@ def export_excel(request):
         ])
         style_header(ws, 11)
         with connection.cursor() as cur:
-            cur.execute('''
+            researchers_sql = '''
                 SELECT
                     u."FullName_Ar",
                     d."DepartmentName",
@@ -578,12 +638,21 @@ def export_excel(request):
                 LEFT JOIN "ResearchPaper" rp_w ON rp_w."PaperID" = a_w."PaperID"
                 LEFT JOIN v_researcher_h_index hi ON hi."UserID" = u."UserID"
                 WHERE u."UserType" = 'Researcher'
+                {dept_filter}
                 GROUP BY u."UserID", u."FullName_Ar", d."DepartmentName",
                          r."AcademicRank", hi.h_index, u."Scholar_ID",
                          r."ORCID_ID", r."OpenAlex_AuthorID", r."Scopus_ID",
                          r."LastSyncedAt"
                 ORDER BY papers_window DESC, h_index DESC
-            ''', {'years': years})
+            '''
+            researchers_params = {'years': years}
+            if scoped:
+                researchers_sql = researchers_sql.format(
+                    dept_filter='AND w."DepartmentID" = %(dept)s')
+                researchers_params['dept'] = hod_dept_id
+            else:
+                researchers_sql = researchers_sql.format(dept_filter='')
+            cur.execute(researchers_sql, researchers_params)
             for row in cur.fetchall():
                 ws.append(list(row))
         set_widths(ws, [32, 22, 18, 12, 14, 14, 16, 14, 14, 18, 22])
@@ -610,24 +679,25 @@ def export_excel(request):
                 # by DOI when available (canonical identifier) and fall
                 # back to a case-insensitive title match for papers
                 # without a DOI on either side.
-                cur.execute('''
-                    SELECT
-                        v.department_name, v.title,
-                        rp."Abstract"          AS abstract,
-                        v.authors_ar,
-                        v.all_authors_en,
-                        v.journal_name, v.quartile, v.impact_factor, v.indexing,
-                        v.citations, v.doi
-                    FROM v_paper_details v
-                    LEFT JOIN "ResearchPaper" rp ON
-                        (v.doi IS NOT NULL
-                         AND LOWER(rp."DOI") = LOWER(v.doi))
-                        OR
-                        ((v.doi IS NULL OR rp."DOI" IS NULL)
-                         AND LOWER(rp."Title") = LOWER(v.title))
-                    WHERE v.pub_year = %s AND v.venue_type = 'Journal'
-                    ORDER BY v.department_name, v.citations DESC NULLS LAST
-                ''', [year])
+                journals_sql = (
+                    'SELECT '
+                    '    v.department_name, v.title, '
+                    '    rp."Abstract" AS abstract, '
+                    '    v.authors_ar, v.all_authors_en, '
+                    '    v.journal_name, v.quartile, v.impact_factor, v.indexing, '
+                    '    v.citations, v.doi '
+                    'FROM v_paper_details v '
+                    'LEFT JOIN "ResearchPaper" rp ON '
+                    '    (v.doi IS NOT NULL AND LOWER(rp."DOI") = LOWER(v.doi)) '
+                    '    OR ((v.doi IS NULL OR rp."DOI" IS NULL) AND LOWER(rp."Title") = LOWER(v.title)) '
+                    'WHERE v.pub_year = %s AND v.venue_type = \'Journal\''
+                )
+                journals_params = [year]
+                if scoped:
+                    journals_sql += ' AND v.department_id = %s'
+                    journals_params.append(hod_dept_id)
+                journals_sql += ' ORDER BY v.department_name, v.citations DESC NULLS LAST'
+                cur.execute(journals_sql, journals_params)
                 for row in cur.fetchall():
                     ws.append(list(row))
             set_widths(ws, [22, 60, 80, 50, 50, 30, 10, 8, 12, 10, 30])
@@ -643,23 +713,24 @@ def export_excel(request):
             ])
             style_header(ws, 9)
             with connection.cursor() as cur:
-                cur.execute('''
-                    SELECT
-                        v.department_name, v.title,
-                        rp."Abstract"          AS abstract,
-                        v.authors_ar,
-                        v.all_authors_en,
-                        v.journal_name, v.indexing, v.citations, v.doi
-                    FROM v_paper_details v
-                    LEFT JOIN "ResearchPaper" rp ON
-                        (v.doi IS NOT NULL
-                         AND LOWER(rp."DOI") = LOWER(v.doi))
-                        OR
-                        ((v.doi IS NULL OR rp."DOI" IS NULL)
-                         AND LOWER(rp."Title") = LOWER(v.title))
-                    WHERE v.pub_year = %s AND v.venue_type = 'Conference'
-                    ORDER BY v.department_name, v.citations DESC NULLS LAST
-                ''', [year])
+                conf_sql = (
+                    'SELECT '
+                    '    v.department_name, v.title, '
+                    '    rp."Abstract" AS abstract, '
+                    '    v.authors_ar, v.all_authors_en, '
+                    '    v.journal_name, v.indexing, v.citations, v.doi '
+                    'FROM v_paper_details v '
+                    'LEFT JOIN "ResearchPaper" rp ON '
+                    '    (v.doi IS NOT NULL AND LOWER(rp."DOI") = LOWER(v.doi)) '
+                    '    OR ((v.doi IS NULL OR rp."DOI" IS NULL) AND LOWER(rp."Title") = LOWER(v.title)) '
+                    'WHERE v.pub_year = %s AND v.venue_type = \'Conference\''
+                )
+                conf_params = [year]
+                if scoped:
+                    conf_sql += ' AND v.department_id = %s'
+                    conf_params.append(hod_dept_id)
+                conf_sql += ' ORDER BY v.department_name, v.citations DESC NULLS LAST'
+                cur.execute(conf_sql, conf_params)
                 for row in cur.fetchall():
                     ws.append(list(row))
             set_widths(ws, [22, 60, 80, 50, 50, 30, 12, 10, 30])
