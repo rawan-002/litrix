@@ -117,6 +117,30 @@ export class RegisterComponent implements OnInit, OnDestroy {
     orcid_id:        [''],
   });
 
+  /**
+   * Accept a full Google Scholar profile URL *or* a bare ID and return
+   * the ID. The "Scholar_ID" column is VARCHAR(64), so storing a pasted
+   * URL would overflow it (500). The ID lives in the `user=` query param:
+   *   https://scholar.google.com/citations?user=AbCd1234EfGh&hl=en
+   */
+  private extractScholarId(raw: string | null | undefined): string {
+    const s = (raw || '').trim();
+    if (!s) return '';
+    const m = s.match(/[?&]user=([^&#]+)/i);
+    return m ? m[1] : s;
+  }
+
+  /**
+   * Accept a full ORCID URL *or* a bare ORCID and return the 16-char
+   * identifier (e.g. https://orcid.org/0000-0002-1825-0097 -> the digits).
+   */
+  private extractOrcid(raw: string | null | undefined): string {
+    const s = (raw || '').trim();
+    if (!s) return '';
+    const m = s.match(/(\d{4}-\d{4}-\d{4}-\d{3}[\dX])/i);
+    return m ? m[1].toUpperCase() : s;
+  }
+
   /** Concatenated full names — what the backend currently expects. */
   private buildFullNames() {
     const v = this.profileForm.getRawValue();
@@ -195,8 +219,8 @@ export class RegisterComponent implements OnInit, OnDestroy {
           return this.http.post<VerificationResult>(
             `${environment.apiBaseUrl}/auth/registration-match/`,
             {
-              scholar_id:    v.scholar_id || null,
-              orcid_id:      v.orcid_id || null,
+              scholar_id:    this.extractScholarId(v.scholar_id) || null,
+              orcid_id:      this.extractOrcid(v.orcid_id) || null,
               email:         v.email || null,
               department_id: v.department_id,
               academic_rank: v.academic_rank || null,
@@ -231,6 +255,11 @@ export class RegisterComponent implements OnInit, OnDestroy {
 
     const v = this.profileForm.getRawValue();
     const names = this.buildFullNames();
+    // Normalize pasted profile URLs down to bare IDs before they hit the
+    // VARCHAR(64) columns, and reflect the cleaned value back in the form.
+    const scholar_id = this.extractScholarId(v.scholar_id);
+    const orcid_id   = this.extractOrcid(v.orcid_id);
+    this.profileForm.patchValue({ scholar_id, orcid_id }, { emitEvent: false });
     const payload: any = {
       email:         v.email,
       password:      v.password,
@@ -240,8 +269,8 @@ export class RegisterComponent implements OnInit, OnDestroy {
       last_name:     (v.last_name_en  || '').trim(),
       department_id: v.department_id,
       academic_rank: v.academic_rank,
-      scholar_id:    v.scholar_id,
-      orcid_id:      v.orcid_id,
+      scholar_id:    scholar_id,
+      orcid_id:      orcid_id,
     };
     // Carry the invite token through if we have one — the backend uses
     // it to skip the awaiting-email-verification queue entirely.
