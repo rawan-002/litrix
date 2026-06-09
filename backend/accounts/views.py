@@ -614,13 +614,15 @@ def _provision_invited_user(request, d, metadata, pwd_hash, email, invite):
     name_en = (metadata['full_name_en'] or '').strip() or None
     rank    = (metadata['academic_rank'] or '').strip() or None
 
-    if name_en:
-        parts      = name_en.split()
-        first_name = parts[0] if parts else None
-        last_name  = ' '.join(parts[1:]) if len(parts) > 1 else None
-    else:
-        first_name = None
-        last_name  = None
+    # "Users"."FirstName"/"LastName" are NOT NULL. An invitee may leave the
+    # English name blank (Arabic-only) or type a single token, which used to
+    # send NULLs into those columns and 500 the whole registration. Always
+    # derive non-empty values: English name -> Arabic name -> email local
+    # part, and fall the last name back to the first when only one token.
+    display    = name_en or name_ar or email.split('@')[0]
+    parts      = display.split()
+    first_name = parts[0] if parts else display
+    last_name  = ' '.join(parts[1:]) if len(parts) > 1 else first_name
 
     # The invitation already pinned tenant + role + user_type + (optional)
     # department; the invitee can't override them via the form.
