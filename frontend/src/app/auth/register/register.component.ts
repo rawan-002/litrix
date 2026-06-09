@@ -105,12 +105,12 @@ export class RegisterComponent implements OnInit, OnDestroy {
     // English name is REQUIRED — it's the canonical form used in
     // citation lookups, journal records, and admin reporting.
     first_name_en:   ['', [Validators.required]],
+    middle_name_en:  [''],
     last_name_en:    ['', [Validators.required]],
-    // Arabic name is OPTIONAL — preserved for the local UI and
-    // FullName_Ar column, but a missing value is acceptable. Researchers
-    // imported via scrapers may not always have an Arabic name yet.
-    first_name_ar:   [''],
-    last_name_ar:    [''],
+    // Arabic name is OPTIONAL and captured as a single triple-name field
+    // (الاسم الثلاثي) that maps to FullName_Ar. Researchers imported via
+    // scrapers may not always have an Arabic name yet.
+    full_name_ar:    [''],
     department_id:   [null as number | null],
     academic_rank:   [''],
     scholar_id:      [''],
@@ -144,9 +144,8 @@ export class RegisterComponent implements OnInit, OnDestroy {
   /** Concatenated full names — what the backend currently expects. */
   private buildFullNames() {
     const v = this.profileForm.getRawValue();
-    const fullAr = [v.first_name_ar, v.last_name_ar]
-      .map(s => (s || '').trim()).filter(Boolean).join(' ');
-    const fullEn = [v.first_name_en, v.last_name_en]
+    const fullAr = (v.full_name_ar || '').trim();
+    const fullEn = [v.first_name_en, v.middle_name_en, v.last_name_en]
       .map(s => (s || '').trim()).filter(Boolean).join(' ');
     return { full_name_ar: fullAr, full_name_en: fullEn };
   }
@@ -265,8 +264,9 @@ export class RegisterComponent implements OnInit, OnDestroy {
       password:      v.password,
       full_name_ar:  names.full_name_ar,
       full_name_en:  names.full_name_en,
-      first_name:    (v.first_name_en || '').trim(),
-      last_name:     (v.last_name_en  || '').trim(),
+      first_name:    (v.first_name_en  || '').trim(),
+      middle_name:   (v.middle_name_en || '').trim(),
+      last_name:     (v.last_name_en   || '').trim(),
       department_id: v.department_id,
       academic_rank: v.academic_rank,
       scholar_id:    scholar_id,

@@ -511,6 +511,11 @@ def register(request):
     metadata = {
         'full_name_ar': d.get('full_name_ar') or '',
         'full_name_en': d.get('full_name_en') or '',
+        # Explicit three-part English name from the form (preferred over
+        # splitting full_name_en, which can't tell middle from last).
+        'first_name':   d.get('first_name') or '',
+        'middle_name':  d.get('middle_name') or '',
+        'last_name':    d.get('last_name') or '',
         'department_id': d.get('department_id'),
         'academic_rank': d.get('academic_rank') or '',
         'scholar_id':   d.get('scholar_id') or '',
@@ -614,15 +619,21 @@ def _provision_invited_user(request, d, metadata, pwd_hash, email, invite):
     name_en = (metadata['full_name_en'] or '').strip() or None
     rank    = (metadata['academic_rank'] or '').strip() or None
 
-    # "Users"."FirstName"/"LastName" are NOT NULL. An invitee may leave the
-    # English name blank (Arabic-only) or type a single token, which used to
-    # send NULLs into those columns and 500 the whole registration. Always
-    # derive non-empty values: English name -> Arabic name -> email local
-    # part, and fall the last name back to the first when only one token.
-    display    = name_en or name_ar or email.split('@')[0]
-    parts      = display.split()
-    first_name = parts[0] if parts else display
-    last_name  = ' '.join(parts[1:]) if len(parts) > 1 else first_name
+    # Prefer the explicit three-part English name the form now sends.
+    first_name  = (metadata.get('first_name')  or '').strip() or None
+    middle_name = (metadata.get('middle_name') or '').strip() or None
+    last_name   = (metadata.get('last_name')   or '').strip() or None
+
+    # "Users"."FirstName"/"LastName" are NOT NULL. If the explicit parts are
+    # missing (older clients, Arabic-only signups, a single token), derive
+    # non-empty values so we never send NULLs and 500 the registration:
+    # English full name -> Arabic name -> email local part.
+    if not (first_name and last_name):
+        display = name_en or name_ar or email.split('@')[0]
+        parts   = display.split()
+        first_name = first_name or (parts[0] if parts else display)
+        if not last_name:
+            last_name = ' '.join(parts[1:]) if len(parts) > 1 else first_name
 
     # The invitation already pinned tenant + role + user_type + (optional)
     # department; the invitee can't override them via the form.
@@ -674,6 +685,7 @@ def _provision_invited_user(request, d, metadata, pwd_hash, email, invite):
                         "PasswordHash"  = %s,
                         "FullName_Ar"   = COALESCE(%s, "FullName_Ar"),
                         "FirstName"     = COALESCE(%s, "FirstName"),
+                        "MiddleName"    = COALESCE(%s, "MiddleName"),
                         "LastName"      = COALESCE(%s, "LastName"),
                         "UserType"      = %s,
                         "AccountStatus" = 'Active',
@@ -685,7 +697,7 @@ def _provision_invited_user(request, d, metadata, pwd_hash, email, invite):
                     WHERE "UserID" = %s
                     RETURNING "UserID"
                 ''', [
-                    email, pwd_hash, name_ar, first_name, last_name,
+                    email, pwd_hash, name_ar, first_name, middle_name, last_name,
                     user_type, tenant_id, role_id, scopus,
                     claimed_user_id,
                 ])
@@ -694,15 +706,15 @@ def _provision_invited_user(request, d, metadata, pwd_hash, email, invite):
                 # Fresh INSERT path: no matching profile to claim.
                 cur.execute('''
                     INSERT INTO "Users"
-                      ("Email", "PasswordHash", "FullName_Ar", "FirstName", "LastName",
+                      ("Email", "PasswordHash", "FullName_Ar", "FirstName", "MiddleName", "LastName",
                        "UserType", "AccountStatus", "TenantID", "RoleID",
                        "EmailVerified", "IsActive", "Scholar_ID", "Orcid_ID", "Scopus_ID",
                        "CreatedAt")
-                    VALUES (%s, %s, %s, %s, %s, %s, 'Active', %s, %s,
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, 'Active', %s, %s,
                             TRUE, TRUE, %s, %s, %s, NOW())
                     RETURNING "UserID"
                 ''', [
-                    email, pwd_hash, name_ar, first_name, last_name,
+                    email, pwd_hash, name_ar, first_name, middle_name, last_name,
                     user_type, tenant_id, role_id,
                     sid, oid, scopus,
                 ])
@@ -1053,17 +1065,19 @@ def approve_registration(request, request_id):
             name_en = (name_en or '').strip() or None
             rank    = (rank    or '').strip() or None
 
-            # Pre-split English name. Done up here (not inline in the
-            # INSERT) so we control the NULL-vs-'' behaviour on each
-            # piece — empty string would still fight any FirstName /
-            # LastName UNIQUE that gets added later.
+            # Pre-split the English name into three parts. Done up here (not
+            # inline in the INSERT) so we control the NULL-vs-'' behaviour on
+            # each piece — empty string would still fight any FirstName /
+            # LastName UNIQUE that gets added later. A three-part name maps
+            # to First / Middle / Last; everything between first and last is
+            # the middle name.
             if name_en:
-                parts      = name_en.split()
-                first_name = parts[0] if parts else None
-                last_name  = ' '.join(parts[1:]) if len(parts) > 1 else None
+                parts       = name_en.split()
+                first_name  = parts[0]
+                last_name   = parts[-1] if len(parts) > 1 else None
+                middle_name = ' '.join(parts[1:-1]) if len(parts) > 2 else None
             else:
-                first_name = None
-                last_name  = None
+                first_name = middle_name = last_name = None
 
             cur.execute('''
                 SELECT "RoleID" FROM "Role"
@@ -1109,16 +1123,16 @@ def approve_registration(request, request_id):
             else:
                 cur.execute('''
                     INSERT INTO "Users"
-                    ("Email", "PasswordHash", "FullName_Ar", "FirstName", "LastName",
+                    ("Email", "PasswordHash", "FullName_Ar", "FirstName", "MiddleName", "LastName",
                      "UserType", "AccountStatus", "TenantID", "RoleID",
                      "EmailVerified", "IsActive", "Scholar_ID", "Orcid_ID", "Scopus_ID",
                      "CreatedAt")
-                    VALUES (%s, %s, %s, %s, %s, 'Researcher', 'Active', %s, %s,
+                    VALUES (%s, %s, %s, %s, %s, %s, 'Researcher', 'Active', %s, %s,
                             TRUE, TRUE, %s, %s, %s, NOW())
                     RETURNING "UserID"
                 ''', [
                     email, pwd, name_ar,
-                    first_name, last_name,
+                    first_name, middle_name, last_name,
                     tenant_id, researcher_role_id,
                     sid, oid, scopus,
                 ])

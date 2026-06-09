@@ -39,6 +39,23 @@ export const routes: Routes = [
   { path: 'register',         component: RegisterComponent,       canActivate: [guestGuard] },
   { path: 'forgot-password',  component: ForgotPasswordComponent, canActivate: [guestGuard] },
 
+  // ---- PUBLIC SUPERVISOR DASHBOARD ---------------------------------------
+  // No login required. Lazy-loaded standalone components, NO LayoutComponent
+  // (so the public pages don't render the authenticated app shell/sidebar).
+  // Backend endpoints live under /api/public/* and are AllowAny.
+  {
+    path: 'public/dashboard',
+    loadComponent: () =>
+      import('./public/dashboard/public-dashboard.component')
+        .then((m) => m.PublicDashboardComponent),
+  },
+  {
+    path: 'public/researcher/:litrixId',
+    loadComponent: () =>
+      import('./public/profile/public-profile.component')
+        .then((m) => m.PublicProfileComponent),
+  },
+
   {
     path: '',
     component: LayoutComponent,
@@ -102,6 +119,15 @@ export const routes: Routes = [
       // Research Network - collaboration graph, accessible to all
       // authenticated users (each one centred on themselves by default).
       { path: 'network', component: NetworkComponent },
+
+      // Litrix AI — chatbot surface (lazy: keeps the bundle lean until
+      // visited; RAG backend wiring lands later).
+      {
+        path: 'ai',
+        loadComponent: () =>
+          import('./pages/ai/litrix-ai.component')
+            .then(m => m.LitrixAiComponent),
+      },
       {
         // Dynamic redirect to the user's own /profile/Lit-NNNNNN URL.
         // Why a function: Angular needs to read the current AuthUser at

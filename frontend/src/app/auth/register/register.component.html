@@ -186,11 +186,11 @@
             <p class="text-xs text-ink-400 mt-1">Minimum 8 characters</p>
           </div>
 
-          <!-- English name — REQUIRED. Listed first to signal priority. -->
-          <div class="grid grid-cols-2 gap-3">
+          <!-- English name — three parts. First + Last REQUIRED, Middle optional. -->
+          <div class="grid grid-cols-3 gap-3">
             <div>
               <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide">
-                First Name *
+                First Name (En) *
               </label>
               <input type="text" formControlName="first_name_en"
                      class="w-full px-4 py-2.5 rounded-lg border border-ink-200
@@ -199,7 +199,16 @@
             </div>
             <div>
               <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide">
-                Last Name *
+                Middle Name (En)
+              </label>
+              <input type="text" formControlName="middle_name_en"
+                     class="w-full px-4 py-2.5 rounded-lg border border-ink-200
+                            focus:border-accent focus:ring-2 focus:ring-accent/20
+                            outline-none transition text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide">
+                Last Name (En) *
               </label>
               <input type="text" formControlName="last_name_en"
                      class="w-full px-4 py-2.5 rounded-lg border border-ink-200
@@ -208,30 +217,18 @@
             </div>
           </div>
 
-          <!-- Arabic name — OPTIONAL. -->
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide"
-                     dir="rtl">
-                الاسم الأول
-                <span class="text-ink-300 normal-case tracking-normal">(اختياري)</span>
-              </label>
-              <input type="text" formControlName="first_name_ar" dir="rtl"
-                     class="w-full px-4 py-2.5 rounded-lg border border-ink-200
-                            focus:border-accent focus:ring-2 focus:ring-accent/20
-                            outline-none transition text-sm" />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide"
-                     dir="rtl">
-                الاسم الأخير
-                <span class="text-ink-300 normal-case tracking-normal">(اختياري)</span>
-              </label>
-              <input type="text" formControlName="last_name_ar" dir="rtl"
-                     class="w-full px-4 py-2.5 rounded-lg border border-ink-200
-                            focus:border-accent focus:ring-2 focus:ring-accent/20
-                            outline-none transition text-sm" />
-            </div>
+          <!-- Arabic triple name — OPTIONAL, single field. -->
+          <div>
+            <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide"
+                   dir="rtl">
+              الاسم الثلاثي بالعربي
+              <span class="text-ink-300 normal-case tracking-normal">(اختياري)</span>
+            </label>
+            <input type="text" formControlName="full_name_ar" dir="rtl"
+                   placeholder="مثال: محمد عبدالله الزهراني"
+                   class="w-full px-4 py-2.5 rounded-lg border border-ink-200
+                          focus:border-accent focus:ring-2 focus:ring-accent/20
+                          outline-none transition text-sm" />
           </div>
 
           <div>

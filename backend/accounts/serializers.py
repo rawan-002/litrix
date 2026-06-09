@@ -9,6 +9,11 @@ class RegisterSerializer(serializers.Serializer):
     password        = serializers.CharField(write_only=True, min_length=8)
     full_name_ar    = serializers.CharField(required=False, allow_blank=True)
     full_name_en    = serializers.CharField(required=False, allow_blank=True)
+    # Explicit English name parts (preferred over splitting full_name_en);
+    # the registration form now collects a three-part English name.
+    first_name      = serializers.CharField(required=False, allow_blank=True)
+    middle_name     = serializers.CharField(required=False, allow_blank=True)
+    last_name       = serializers.CharField(required=False, allow_blank=True)
     department_id   = serializers.IntegerField(required=False, allow_null=True)
     academic_rank   = serializers.CharField(required=False, allow_blank=True)
     scholar_id      = serializers.CharField(required=False, allow_blank=True)

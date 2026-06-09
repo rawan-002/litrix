@@ -96,9 +96,14 @@ export class LayoutComponent implements OnInit {
       items.push({ label: 'Departments', icon: '◫', route: '/departments' });
     }
 
-    // Research Network — collaboration graph. Available to every
-    // authenticated user; each one is centred on themselves by default.
-    items.push({ label: 'Network', icon: '◉', route: '/network' });
+    // Collaboration graph. Available to every authenticated user; each
+    // one is centred on themselves by default. (Route stays /network to
+    // avoid a refactor — only the user-facing label changed.)
+    items.push({ label: 'Collaboration', icon: '◉', route: '/network' });
+
+    // Litrix AI — chatbot surface (RAG wiring lands later). Visible to
+    // everyone; placed up top so it reads as a first-class feature.
+    items.push({ label: 'Litrix AI', icon: '✦', route: '/ai' });
 
     if (this.auth.hasPermission('approve_registrations')) {
       items.push({ label: 'Registrations', icon: '✓', route: '/admin/registrations' });
