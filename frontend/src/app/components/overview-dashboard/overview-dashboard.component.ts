@@ -28,6 +28,8 @@ import {
 import { environment } from '../../../environments/environment';
 import { PaperDetailModalComponent } from
   '../paper-detail-modal/paper-detail-modal.component';
+import { CitationsChartComponent } from
+  '../citations-chart/citations-chart.component';
 
 /**
  * Year filter is now multi-select. An empty Set means "all years"
@@ -47,7 +49,7 @@ interface DonutSlice {
 @Component({
   selector: 'app-overview-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, PaperDetailModalComponent],
+  imports: [CommonModule, FormsModule, PaperDetailModalComponent, CitationsChartComponent],
   templateUrl: './overview-dashboard.component.html',
 })
 export class OverviewDashboardComponent implements OnInit {
@@ -98,7 +100,6 @@ export class OverviewDashboardComponent implements OnInit {
    * inside its own SVG so positioning is self-contained.
    */
   readonly hoveredPub      = signal<{ year: number; x: number; y: number; value: number } | null>(null);
-  readonly hoveredCit      = signal<{ year: number; x: number; y: number; value: number } | null>(null);
   readonly hoveredQuartile = signal<string | null>(null);
   readonly hoveredDept     = signal<number | null>(null);
 
@@ -200,62 +201,14 @@ export class OverviewDashboardComponent implements OnInit {
   });
 
   /**
-   * Citations-over-time area chart.
-   *
-   * Why a line/area instead of bars? Citations are a continuous
-   * cumulative-feeling signal — the *trend* over time tells more than
-   * the discrete per-year totals. An area chart visually conveys the
-   * temporal flow, while bars suggest discrete buckets.
-   *
-   * Returns the geometry used by the SVG <path> renderer:
-   *   • linePath : `M x0,y0 L x1,y1 ...`  (the connecting line)
-   *   • areaPath : same line + closing back to the baseline (filled area)
-   *   • points   : data points for dots + axis labels
+   * Citations-by-year series for the shared <app-citations-chart>.
+   * The chart geometry + hover now live in that one component so the
+   * trend looks identical here, on the researcher dashboard, and on the
+   * profile page.
    */
-  readonly chartCitations = computed(() => {
-    const series = this.bucketByYear();
-    if (!series.length) return null;
-
-    const W = 500, H = 200,
-          padding = { top: 16, right: 16, bottom: 32, left: 36 };
-    const innerW = W - padding.left - padding.right;
-    const innerH = H - padding.top - padding.bottom;
-    const max    = Math.max(...series.map(s => s.citations), 1);
-
-    // Distribute points evenly. When there's only one point, anchor it
-    // to the chart's left edge to avoid a divide-by-zero.
-    const xStep = series.length > 1
-      ? innerW / (series.length - 1)
-      : 0;
-
-    const points = series.map((s, i) => {
-      const x = padding.left + i * xStep;
-      const y = padding.top + innerH - (s.citations / max) * innerH;
-      return { x, y, year: s.year, value: s.citations };
-    });
-
-    const linePath = points
-      .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)},${p.y.toFixed(1)}`)
-      .join(' ');
-
-    const baseline = padding.top + innerH;
-    const first    = points[0];
-    const last     = points[points.length - 1];
-    const areaPath =
-      `${linePath} ` +
-      `L ${last.x.toFixed(1)},${baseline} ` +
-      `L ${first.x.toFixed(1)},${baseline} Z`;
-
-    return {
-      W, H, padding,
-      points, linePath, areaPath,
-      yLabels: [
-        { v: max,                              y: padding.top },
-        { v: Math.max(1, Math.round(max / 2)), y: padding.top + innerH / 2 },
-        { v: 0,                                y: padding.top + innerH },
-      ],
-    };
-  });
+  readonly citationSeries = computed(() =>
+    this.bucketByYear().map(s => ({ year: s.year, citations: s.citations })),
+  );
 
   /** Department comparison: horizontal bars by total papers. */
   readonly chartDepartments = computed(() => {
@@ -447,9 +400,6 @@ export class OverviewDashboardComponent implements OnInit {
     });
   }
 
-  setHoveredCit(p: { year: number; x: number; y: number; value: number } | null) {
-    this.hoveredCit.set(p);
-  }
 
   /** Click a year-axis chart bar/point to toggle that year in the filter. */
   pickYearFromChart(year: number) {
