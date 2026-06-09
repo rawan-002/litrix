@@ -704,9 +704,14 @@ def verify_via_publisher_html(doi: str) -> tuple[Optional[bool], dict[str, Any]]
         re.IGNORECASE,
     )
     for tag in soup.find_all(['section', 'div', 'ol', 'ul', 'aside']):
+        # A matching ancestor may have already decomposed this tag (find_all
+        # returns nested matches); a decomposed tag has attrs == None.
+        if getattr(tag, 'attrs', None) is None:
+            continue
+        cls = tag.get('class') or []
         ident = ' '.join([
             tag.get('id', '') or '',
-            ' '.join(tag.get('class', []) or []),
+            ' '.join(cls) if isinstance(cls, list) else str(cls),
             tag.get('role', '') or '',
             tag.get('aria-label', '') or '',
         ])
@@ -780,7 +785,14 @@ def verify_paper(
         tier_fn = TIERS[tier_name]
         time.sleep(TIER_DELAYS[tier_name])
 
-        verified, evidence = tier_fn(doi or '')
+        # A bug or unexpected payload in one tier must never abort the whole
+        # run — treat any unhandled error as inconclusive and move on.
+        try:
+            verified, evidence = tier_fn(doi or '')
+        except Exception as e:
+            verified, evidence = None, {
+                'tier': tier_name, 'reason': 'tier_exception', 'detail': str(e)[:200],
+            }
         last_evidence = evidence
 
         if verified is True:
@@ -842,6 +854,7 @@ def fetch_pending_papers(
     re_verify: bool,
     retry_pending: bool = False,
     years: Optional[list[int]] = None,
+    user_id: Optional[int] = None,
 ) -> list[dict]:
     """
     Selects papers needing verification.
@@ -850,6 +863,8 @@ def fetch_pending_papers(
       - re_verify: include ALL papers regardless of current state
       - retry_pending: only re-process papers previously marked pending-review
       - years: PubYear scope (default: dynamic dashboard window)
+      - user_id: restrict to papers authored by this Users.UserID (testing
+        a single researcher's profile)
     """
     where = ['1=1']
     params: list[Any] = []
@@ -857,6 +872,13 @@ def fetch_pending_papers(
     if source_filter:
         where.append('rp."Source" = %s')
         params.append(source_filter)
+
+    if user_id is not None:
+        where.append(
+            'EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID" '
+            'AND a."UserID" = %s)'
+        )
+        params.append(user_id)
 
     if retry_pending:
         # Special path: pick up only the papers Tier 3 (PDF) couldn't resolve.
@@ -999,6 +1021,7 @@ def cmd_verify(conn, args):
         re_verify=args.re_verify,
         retry_pending=args.retry_pending,
         years=years,
+        user_id=getattr(args, 'user', None),
     )
     log.info(f'Fetched {len(papers)} pending papers')
     if not papers:
@@ -1086,6 +1109,8 @@ def main():
     parser.add_argument('--tier', choices=list(TIERS.keys()),
                         help='Run a single tier only (default: all in order)')
     parser.add_argument('--limit', type=int, help='Process at most N papers (testing)')
+    parser.add_argument('--user', type=int,
+                        help='Restrict to papers authored by this Users.UserID')
     parser.add_argument('--resume',    dest='resume', action='store_true',  default=True,
                         help='Skip already-verified papers (default)')
     parser.add_argument('--no-resume', dest='resume', action='store_false',
