@@ -71,7 +71,7 @@ export class ResearcherProfileComponent implements OnInit {
   readonly venueCounts = computed(() => {
     let papers = this.data()?.papers ?? [];
     if (this.affiliationFilter() === 'albaha') {
-      papers = papers.filter(p => p.affiliation_verified !== false);
+      papers = papers.filter(p => p.affiliation_verified === true);
     }
     let conf = 0;
     for (const p of papers) if (this.isConference(p)) conf++;
@@ -83,10 +83,10 @@ export class ResearcherProfileComponent implements OnInit {
     this.visibleCount.set(this.LOAD_BATCH);
   }
 
-  // Affiliation filter: 'albaha' shows only papers authored under Al-Baha
-  // (hides ONLY those CONFIRMED not-Al-Baha — pending/unverified stay
-  // visible so we never hide a paper we haven't proven is foreign). 'all'
-  // shows the researcher's complete archive.
+  // Affiliation filter: 'albaha' shows ONLY papers CONFIRMED Al-Baha
+  // (affiliation_verified === true). Papers confirmed foreign OR still
+  // unverified (e.g. no DOI to check) are hidden — so nothing unconfirmed
+  // is ever presented as Al-Baha output. 'all' shows the full archive.
   readonly affiliationFilter = signal<'albaha' | 'all'>('albaha');
 
   setAffiliation(v: 'albaha' | 'all') {
@@ -94,9 +94,9 @@ export class ResearcherProfileComponent implements OnInit {
     this.visibleCount.set(this.LOAD_BATCH);
   }
 
-  /** Count of papers confirmed NOT Al-Baha (shown as the "All" delta hint). */
-  readonly nonAlbahaCount = computed(() =>
-    (this.data()?.papers ?? []).filter(p => p.affiliation_verified === false).length
+  /** Papers hidden by the "Al-Baha only" view (confirmed foreign + unverified). */
+  readonly hiddenCount = computed(() =>
+    (this.data()?.papers ?? []).filter(p => p.affiliation_verified !== true).length
   );
 
   /**
@@ -130,10 +130,10 @@ export class ResearcherProfileComponent implements OnInit {
   readonly sortedPapers = computed(() => {
     let all = [...(this.data()?.papers ?? [])];
 
-    // Affiliation filter — "Al Baha only" hides papers CONFIRMED foreign
-    // (affiliation_verified === false); confirmed-Al-Baha and pending stay.
+    // Affiliation filter — "Al Baha only" keeps ONLY confirmed-Al-Baha
+    // papers; confirmed-foreign AND unverified (e.g. no-DOI) are hidden.
     if (this.affiliationFilter() === 'albaha') {
-      all = all.filter(p => p.affiliation_verified !== false);
+      all = all.filter(p => p.affiliation_verified === true);
     }
 
     // Venue tab filter (Journals vs Conferences)

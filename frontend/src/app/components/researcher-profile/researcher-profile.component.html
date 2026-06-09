@@ -153,9 +153,9 @@
             All
           </button>
         </div>
-        @if (affiliationFilter() === 'albaha' && nonAlbahaCount() > 0) {
+        @if (affiliationFilter() === 'albaha' && hiddenCount() > 0) {
           <span class="text-[11px] text-ink-400">
-            {{ nonAlbahaCount() }} non-Al-Baha hidden
+            {{ hiddenCount() }} not-confirmed-Al-Baha hidden
           </span>
         }
       </div>
