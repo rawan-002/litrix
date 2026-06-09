@@ -1299,20 +1299,13 @@ def overview(request):
     # --- HoD scoping ---
     # Admin/Dean keep the full institution view (perm: view_all_researchers).
     # HoD has perm view_dept_researchers but NOT view_all_researchers.
-    # For HoDs we look up Department.HeadID = current user and silently
-    # add a dept filter to every query + the aggregate.
-    hod_dept_id = None
-    u_obj = getattr(request, "user", None)
-    if u_obj and u_obj.is_authenticated and not u_obj.has_litrix_perm("view_all_researchers"):
-        from django.db import connection as _c
-        with _c.cursor() as _cur:
-            _cur.execute(
-                'SELECT "DepartmentID" FROM "Department" WHERE "HeadID" = %s LIMIT 1',
-                [u_obj.user_id]
-            )
-            _r = _cur.fetchone()
-            if _r:
-                hod_dept_id = _r[0]
+    # Resolve via the shared helper so detection matches the rest of the
+    # app (Department.HeadID, then current Works_In — invite-provisioned
+    # HoDs are linked via Works_In). Returns None for institution-wide
+    # roles, a dept id for a HoD, or -1 when a HoD has no department — the
+    # -1 sentinel scopes every query below to nothing instead of leaking
+    # the whole institution.
+    hod_dept_id = _hod_scope_department_id(request)
 
     # avg_h keeps the historical definition (average of dept averages).
     _dept_qs = DepartmentStats.objects.all()
@@ -1446,12 +1439,22 @@ def overview(request):
         ''', [years] + [str(y) for y in years] + [hod_dept_id, hod_dept_id])
         top_researchers_rows = cur.fetchall()
 
-        cur.execute('''
-            SELECT * FROM v_top_papers
-            WHERE pub_year = ANY(%s)
-            ORDER BY citations DESC NULLS LAST
-            LIMIT 5
-        ''', [years])
+        # Top papers — for a HoD, restrict to papers authored by someone
+        # currently in their department (otherwise this list leaks the
+        # institution's most-cited papers onto a department dashboard).
+        top_papers_sql = 'SELECT * FROM v_top_papers WHERE pub_year = ANY(%s)'
+        top_papers_params = [years]
+        if hod_dept_id is not None:
+            top_papers_sql += (
+                ' AND EXISTS (SELECT 1 FROM "Authors" a '
+                '             JOIN "Works_In" w_tp ON w_tp."UserID" = a."UserID" '
+                '                                 AND w_tp."IsCurrentPosition" = TRUE '
+                '             WHERE a."PaperID" = v_top_papers.paper_id '
+                '               AND w_tp."DepartmentID" = %s)'
+            )
+            top_papers_params.append(hod_dept_id)
+        top_papers_sql += ' ORDER BY citations DESC NULLS LAST LIMIT 5'
+        cur.execute(top_papers_sql, top_papers_params)
         top_paper_cols = [c[0] for c in cur.description]
         top_papers = [dict(zip(top_paper_cols, row)) for row in cur.fetchall()]
 

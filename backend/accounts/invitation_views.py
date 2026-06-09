@@ -174,6 +174,20 @@ def _create_invitation(request):
             )
         role_id = rrow[0]
 
+        # Supersede any earlier still-pending invitation for this same
+        # email in this tenant. Only the freshest link should stay live,
+        # so an inbox can't accumulate several valid invitations (and the
+        # consume step can't accidentally pick a stale one). Used or
+        # already-revoked rows are left untouched.
+        cur.execute('''
+            UPDATE "Invitation"
+               SET "RevokedAt" = NOW()
+             WHERE "TenantID"           = %s
+               AND LOWER("InvitedEmail") = %s
+               AND "UsedAt"    IS NULL
+               AND "RevokedAt" IS NULL
+        ''', [request.user.tenant_id, email])
+
         # Generate a fresh url-safe token. Collision is astronomically
         # unlikely at 48 bytes but we still rely on the UNIQUE constraint
         # to hard-fail if the impossible happens.
