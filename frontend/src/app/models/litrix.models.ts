@@ -170,6 +170,9 @@ export interface ProfilePaper {
   venue_type: 'Journal' | 'Conference' | null;
   quartile: string | null;
   impact_factor: number | null;
+  // Al-Baha affiliation verification: true = confirmed Al-Baha,
+  // false = confirmed NOT Al-Baha, null = pending / unverified.
+  affiliation_verified: boolean | null;
 }
 
 export interface ResearcherProfilePayload {

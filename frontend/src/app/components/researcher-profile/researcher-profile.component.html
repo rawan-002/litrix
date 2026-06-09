@@ -133,6 +133,33 @@
         </div>
       </div>
 
+      <!-- Affiliation filter: Al-Baha output only vs the full archive -->
+      <div class="flex items-center justify-between gap-3 mb-3">
+        <div class="inline-flex rounded-full bg-ink-100 p-0.5">
+          <button (click)="setAffiliation('albaha')"
+                  class="px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors"
+                  [class.bg-white]="affiliationFilter() === 'albaha'"
+                  [class.shadow-card]="affiliationFilter() === 'albaha'"
+                  [class.text-ink-900]="affiliationFilter() === 'albaha'"
+                  [class.text-ink-500]="affiliationFilter() !== 'albaha'">
+            Al-Baha only
+          </button>
+          <button (click)="setAffiliation('all')"
+                  class="px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors"
+                  [class.bg-white]="affiliationFilter() === 'all'"
+                  [class.shadow-card]="affiliationFilter() === 'all'"
+                  [class.text-ink-900]="affiliationFilter() === 'all'"
+                  [class.text-ink-500]="affiliationFilter() !== 'all'">
+            All
+          </button>
+        </div>
+        @if (affiliationFilter() === 'albaha' && nonAlbahaCount() > 0) {
+          <span class="text-[11px] text-ink-400">
+            {{ nonAlbahaCount() }} non-Al-Baha hidden
+          </span>
+        }
+      </div>
+
       <!-- Venue tabs: split into Journals vs Conferences -->
       <div class="flex items-center gap-1.5 mb-3">
         @for (tab of venueTabs; track tab.key) {

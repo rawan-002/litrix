@@ -67,9 +67,12 @@ export class ResearcherProfileComponent implements OnInit {
     return (p.venue_type || '').toLowerCase().startsWith('conf');
   }
 
-  /** Paper counts per venue tab, for the badges. */
+  /** Paper counts per venue tab (respecting the affiliation filter). */
   readonly venueCounts = computed(() => {
-    const papers = this.data()?.papers ?? [];
+    let papers = this.data()?.papers ?? [];
+    if (this.affiliationFilter() === 'albaha') {
+      papers = papers.filter(p => p.affiliation_verified !== false);
+    }
     let conf = 0;
     for (const p of papers) if (this.isConference(p)) conf++;
     return { all: papers.length, conference: conf, journal: papers.length - conf };
@@ -79,6 +82,22 @@ export class ResearcherProfileComponent implements OnInit {
     this.activeVenue.set(v);
     this.visibleCount.set(this.LOAD_BATCH);
   }
+
+  // Affiliation filter: 'albaha' shows only papers authored under Al-Baha
+  // (hides ONLY those CONFIRMED not-Al-Baha — pending/unverified stay
+  // visible so we never hide a paper we haven't proven is foreign). 'all'
+  // shows the researcher's complete archive.
+  readonly affiliationFilter = signal<'albaha' | 'all'>('albaha');
+
+  setAffiliation(v: 'albaha' | 'all') {
+    this.affiliationFilter.set(v);
+    this.visibleCount.set(this.LOAD_BATCH);
+  }
+
+  /** Count of papers confirmed NOT Al-Baha (shown as the "All" delta hint). */
+  readonly nonAlbahaCount = computed(() =>
+    (this.data()?.papers ?? []).filter(p => p.affiliation_verified === false).length
+  );
 
   /**
    * Chart window floor — matches the admin dashboard CHART_YEAR_FLOOR.
@@ -110,6 +129,12 @@ export class ResearcherProfileComponent implements OnInit {
   // Filter papers by selected quartiles, then sort by chosen field+direction.
   readonly sortedPapers = computed(() => {
     let all = [...(this.data()?.papers ?? [])];
+
+    // Affiliation filter — "Al Baha only" hides papers CONFIRMED foreign
+    // (affiliation_verified === false); confirmed-Al-Baha and pending stay.
+    if (this.affiliationFilter() === 'albaha') {
+      all = all.filter(p => p.affiliation_verified !== false);
+    }
 
     // Venue tab filter (Journals vs Conferences)
     const venue = this.activeVenue();

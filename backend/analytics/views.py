@@ -1092,7 +1092,8 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                     j."ISSN_Print",
                     j."VenueType",
                     jr."Quartile",
-                    jr."ImpactFactor"
+                    jr."ImpactFactor",
+                    rp."AffiliationVerified"
                 FROM "ResearchPaper" rp
                 JOIN "Authors" a ON a."PaperID" = rp."PaperID"
                 LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
@@ -1105,7 +1106,7 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                 'paper_id', 'title', 'doi', 'pub_year', 'source',
                 'indexing', 'citations_by_year', 'citations',
                 'journal_name', 'issn_print', 'venue_type',
-                'quartile', 'impact_factor',
+                'quartile', 'impact_factor', 'affiliation_verified',
             ], r)) for r in cur.fetchall()]
 
         return response.Response({
