@@ -100,42 +100,90 @@ def surnames(raw: str) -> set[str]:
     return out
 
 
+def _norm_candidate(doi: str, title: str, year, names: set) -> Optional[dict]:
+    doi = (doi or '').replace('https://doi.org/', '').replace('http://doi.org/', '').strip()
+    if not doi:
+        return None
+    return {'doi': doi, 'cand_title': title or '', 'year': year, 'cand_names': names}
+
+
 def openalex_candidates(title: str) -> list[dict]:
+    """Candidate works from OpenAlex full-text search."""
     url = 'https://api.openalex.org/works'
     params = {'search': title, 'per-page': 5,
-              'select': 'id,doi,title,publication_year,authorships'}
+              'select': 'doi,title,publication_year,authorships'}
+    out = []
     try:
         r = requests.get(url, params=params, headers={'User-Agent': UA}, timeout=25)
         if r.status_code != 200:
             return []
-        return r.json().get('results', []) or []
+        for c in r.json().get('results', []) or []:
+            names = set()
+            for a in c.get('authorships', []):
+                names |= surnames((a.get('author') or {}).get('display_name', ''))
+            rec = _norm_candidate(c.get('doi'), c.get('title'),
+                                  c.get('publication_year'), names)
+            if rec:
+                rec['src'] = 'openalex'
+                out.append(rec)
     except (requests.RequestException, ValueError):
-        return []
+        pass
+    return out
+
+
+def crossref_candidates(title: str) -> list[dict]:
+    """Candidate works from Crossref bibliographic search (broader DOI
+    coverage than OpenAlex for some publishers). Word-level relevance is
+    Crossref's job; we still re-check title similarity + year + author
+    ourselves before trusting any DOI."""
+    url = 'https://api.crossref.org/works'
+    params = {'query.bibliographic': title, 'rows': 5,
+              'select': 'DOI,title,issued,published-print,published-online,author'}
+    out = []
+    try:
+        r = requests.get(url, params=params, headers={'User-Agent': UA}, timeout=25)
+        if r.status_code != 200:
+            return []
+        for it in r.json().get('message', {}).get('items', []) or []:
+            titles = it.get('title') or []
+            ctitle = titles[0] if titles else ''
+            year = None
+            for k in ('published-print', 'published-online', 'issued'):
+                dp = (it.get(k) or {}).get('date-parts') or []
+                if dp and dp[0] and dp[0][0]:
+                    year = dp[0][0]
+                    break
+            names = set()
+            for a in it.get('author', []) or []:
+                if a.get('family'):
+                    names |= surnames(a['family'])
+            rec = _norm_candidate(it.get('DOI'), ctitle, year, names)
+            if rec:
+                rec['src'] = 'crossref'
+                out.append(rec)
+    except (requests.RequestException, ValueError):
+        pass
+    return out
 
 
 def evaluate(paper: dict) -> dict:
     """
-    Returns {'doi','score','year','cand_title','reason','accept'} for the best
-    candidate, or accept=False with a reason.
+    Returns {'doi','score','year','cand_title','reason','accept','src'} for
+    the best candidate (across OpenAlex + Crossref), or accept=False + reason.
     """
     our_title = paper['Title']
     our_year  = paper['PubYear']
     our_names = surnames(paper.get('AuthorNameRaw') or '')
 
+    candidates = openalex_candidates(our_title) + crossref_candidates(our_title)
+
     best = None
-    for c in openalex_candidates(our_title):
-        doi = (c.get('doi') or '').replace('https://doi.org/', '').strip()
-        if not doi:
-            continue
-        sim = title_sim(our_title, c.get('title') or '')
-        cand_names = set()
-        for a in c.get('authorships', []):
-            cand_names |= surnames((a.get('author') or {}).get('display_name', ''))
+    for c in candidates:
+        sim = title_sim(our_title, c['cand_title'])
         rec = {
-            'doi': doi, 'score': round(sim, 3),
-            'year': c.get('publication_year'),
-            'cand_title': c.get('title') or '',
-            'author_overlap': bool(our_names & cand_names) if our_names else None,
+            'doi': c['doi'], 'score': round(sim, 3),
+            'year': c['year'], 'cand_title': c['cand_title'], 'src': c['src'],
+            'author_overlap': bool(our_names & c['cand_names']) if our_names else None,
         }
         if best is None or sim > best['score']:
             best = rec
@@ -209,7 +257,7 @@ def main():
                 continue
             n_ok += 1
             print(f'[{i}/{len(targets)}] #{p["PaperID"]} ✓ {res["doi"]} '
-                  f'(sim={res["score"]}, yr={res["year"]}) {tprev}')
+                  f'(sim={res["score"]}, yr={res["year"]}, via {res.get("src")}) {tprev}')
             if args.apply:
                 try:
                     with conn:
