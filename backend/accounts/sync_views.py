@@ -247,6 +247,255 @@ def trigger_sync(request):
     }, status=201)
 
 
+def _run_project_script(job_id, steps):
+    """Background runner for repo-level maintenance jobs made of one or
+    more sequential script steps.
+
+    steps: list of (label, script_path, args, timeout) tuples. Steps run
+    in order; a failed step aborts the chain and marks the job failed.
+    Lifecycle mirrors _run_scraper (queued → running → completed/failed)
+    with each step's stdout tail captured into Metadata.
+    """
+    with connection.cursor() as cur:
+        cur.execute(
+            'UPDATE "SyncJob" SET "Status" = %s, "StartedAt" = NOW() WHERE "JobID" = %s',
+            ['running', job_id],
+        )
+
+    env = os.environ.copy()
+    env['PYTHONIOENCODING'] = 'utf-8'
+
+    tails = []
+    status_final, error_msg = 'completed', None
+    for label, script_path, args, timeout in steps:
+        cmd = ['python', str(script_path)] + args
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True,
+                encoding='utf-8', errors='replace',
+                env=env, timeout=timeout, cwd=str(PROJECT_ROOT),
+            )
+            tails.append(f'=== {label} ===\n' + (result.stdout or '')[-1500:])
+            if result.returncode != 0:
+                status_final = 'failed'
+                error_msg = f'[{label}] ' + (result.stderr or 'non-zero exit')[-400:]
+                break
+        except subprocess.TimeoutExpired:
+            status_final = 'failed'
+            error_msg = f'[{label}] Timeout ({timeout // 60}min)'
+            break
+        except Exception as e:
+            status_final = 'failed'
+            error_msg = f'[{label}] {e}'
+            break
+
+    with connection.cursor() as cur:
+        cur.execute('''
+            UPDATE "SyncJob"
+            SET "Status" = %s,
+                "FinishedAt" = NOW(),
+                "ErrorMessage" = %s,
+                "Metadata" = jsonb_set(
+                    COALESCE("Metadata", '{}'::jsonb),
+                    '{stdout_tail}',
+                    to_jsonb(%s::text)
+                )
+            WHERE "JobID" = %s
+        ''', [status_final, error_msg, '\n\n'.join(tails)[-3000:], job_id])
+
+
+def _run_citation_refresh(job_id, args):
+    """citations/refresh_hybrid.py — citation NUMBERS only on existing papers
+    (never inserts papers, never touches Authors links)."""
+    _run_project_script(job_id, [
+        ('citation-refresh',
+         PROJECT_ROOT / 'citations' / 'refresh_hybrid.py', args, 3600),
+    ])
+
+
+def _run_new_papers_scrape(job_id, args):
+    """Two-step chain (user requirement — scrape MUST verify affiliation):
+
+    1. scrapers/scholar_new_papers.py — NEW papers only: per researcher,
+       fetches Scholar newest-first and stops at the first paper older
+       than their latest stored PubYear. Existing papers are never
+       re-downloaded or modified; cooldown (LastSyncedAt) untouched.
+    2. backend/affiliation_verifier.py --apply --source Scholar — the
+       multi-tier Al-Baha affiliation check (OpenAlex → Crossref → PDF →
+       publisher HTML) runs over the still-unverified Scholar papers,
+       which includes everything step 1 just inserted. Papers confirmed
+       NOT Al-Baha get AffiliationVerified=FALSE and drop out of the
+       dashboards; unresolvable ones stay NULL for manual review.
+    """
+    _run_project_script(job_id, [
+        ('scrape-new-papers',
+         PROJECT_ROOT / 'scrapers' / 'scholar_new_papers.py', args, 3600),
+        ('affiliation-verify',
+         PROJECT_ROOT / 'backend' / 'affiliation_verifier.py',
+         ['--apply', '--source', 'Scholar'], 1800),
+    ])
+
+
+@api_view(['POST'])
+def trigger_citation_refresh(request):
+    """POST /api/auth/sync/refresh-citations/
+
+    Body (all optional):
+        scope       : 'missing' (default — only papers without citation data)
+                      | 'all' (re-refresh every paper's citation numbers)
+        serp_budget : int >= 0, default 0. Hard cap on PAID SerpAPI calls;
+                      0 = OpenAlex only (free). Each call costs 1 credit.
+        user_id     : restrict the refresh to one researcher's papers.
+
+    Citation-numbers-only by design: the underlying script never inserts
+    papers, never edits paper metadata, never touches Authors links, and
+    never modifies Researcher.CitationsByYear (the dashboard's author-level
+    graph stays Scholar-owned).
+    """
+    if not request.user.has_litrix_perm('trigger_sync'):
+        return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+
+    scope = request.data.get('scope', 'missing')
+    if scope not in ('missing', 'all'):
+        return Response({'error': "scope must be 'missing' or 'all'"}, status=400)
+
+    try:
+        serp_budget = max(0, int(request.data.get('serp_budget', 0)))
+    except (TypeError, ValueError):
+        return Response({'error': 'serp_budget must be an integer'}, status=400)
+    # Server-side ceiling so a typo in the UI can't burn the whole quota.
+    serp_budget = min(serp_budget, 500)
+
+    user_id = request.data.get('user_id')
+
+    # One refresh at a time — a second concurrent run would duplicate API
+    # calls (and SerpAPI spend) for zero benefit.
+    with connection.cursor() as cur:
+        cur.execute('''
+            SELECT "JobID" FROM "SyncJob"
+            WHERE "Source" = 'citations' AND "Status" IN ('queued', 'running')
+            LIMIT 1
+        ''')
+        running = cur.fetchone()
+    if running:
+        return Response(
+            {'error': 'already_running',
+             'message': f'Citation refresh job #{running[0]} is still running.'},
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    args = ['--apply']
+    if scope == 'all':
+        args.append('--all')
+    if serp_budget > 0:
+        args += ['--serp-budget', str(serp_budget)]
+    else:
+        args.append('--no-serp')
+    if user_id:
+        args += ['--user', str(int(user_id))]
+
+    with connection.cursor() as cur:
+        cur.execute('''
+            INSERT INTO "SyncJob" (
+                "TenantID", "UserID", "TriggeredBy", "Source", "Status", "Metadata"
+            )
+            VALUES (%s, %s, %s, 'citations', 'queued', %s::jsonb)
+            RETURNING "JobID"
+        ''', [
+            request.user.tenant_id,
+            int(user_id) if user_id else None,
+            request.user.user_id,
+            __import__('json').dumps({
+                'scope': scope,
+                'serp_budget': serp_budget,
+            }),
+        ])
+        job_id = cur.fetchone()[0]
+
+    threading.Thread(
+        target=_run_citation_refresh, args=(job_id, args), daemon=True,
+    ).start()
+
+    return Response({
+        'job_id': job_id,
+        'message': 'Citation refresh started',
+        'scope': scope,
+        'serp_budget': serp_budget,
+    }, status=201)
+
+
+@api_view(['POST'])
+def trigger_new_papers_scrape(request):
+    """POST /api/auth/sync/scrape-new/
+
+    Incremental scrape — NEW papers only (user requirement):
+    for every researcher with a Scholar_ID, look up the year of their most
+    recent stored paper, fetch their Scholar profile newest-first, and stop
+    the moment an older paper appears. Only genuinely-new papers are
+    inserted; existing papers are never re-downloaded or modified.
+
+    Body (optional):
+        serp_budget : int, default 100 — hard cap on SerpAPI calls.
+                      A researcher with no new papers costs exactly 1 call.
+        user_id     : restrict to one researcher.
+    """
+    if not request.user.has_litrix_perm('trigger_sync'):
+        return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        serp_budget = max(1, int(request.data.get('serp_budget', 100)))
+    except (TypeError, ValueError):
+        return Response({'error': 'serp_budget must be an integer'}, status=400)
+    serp_budget = min(serp_budget, 500)
+
+    user_id = request.data.get('user_id')
+
+    # One incremental scrape at a time — concurrent runs would race on the
+    # same researchers and double the SerpAPI spend.
+    with connection.cursor() as cur:
+        cur.execute('''
+            SELECT "JobID" FROM "SyncJob"
+            WHERE "Source" = 'scrape_new' AND "Status" IN ('queued', 'running')
+            LIMIT 1
+        ''')
+        running = cur.fetchone()
+    if running:
+        return Response(
+            {'error': 'already_running',
+             'message': f'New-papers scrape job #{running[0]} is still running.'},
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    args = ['--apply', '--budget', str(serp_budget)]
+    if user_id:
+        args += ['--user', str(int(user_id))]
+
+    with connection.cursor() as cur:
+        cur.execute('''
+            INSERT INTO "SyncJob" (
+                "TenantID", "UserID", "TriggeredBy", "Source", "Status", "Metadata"
+            )
+            VALUES (%s, %s, %s, 'scrape_new', 'queued', %s::jsonb)
+            RETURNING "JobID"
+        ''', [
+            request.user.tenant_id,
+            int(user_id) if user_id else None,
+            request.user.user_id,
+            __import__('json').dumps({'serp_budget': serp_budget}),
+        ])
+        job_id = cur.fetchone()[0]
+
+    threading.Thread(
+        target=_run_new_papers_scrape, args=(job_id, args), daemon=True,
+    ).start()
+
+    return Response({
+        'job_id': job_id,
+        'message': 'New-papers scrape started',
+        'serp_budget': serp_budget,
+    }, status=201)
+
+
 @api_view(['GET'])
 def list_sync_jobs(request):
     if not request.user.has_litrix_perm('trigger_sync'):
