@@ -61,3 +61,15 @@ scimagojr*.csv
 *.egg-info/
 build/
 *.egg
+
+# Google OAuth client secret + token helpers (NEVER commit)
+client_secret*.json
+*.apps.googleusercontent.com.json
+token.json
+
+# Local data / audit / migration working sets — research data + ops
+# artifacts, NOT app source. Kept out of git so deploy.ps1's `git add .`
+# never balloons the repo or publishes researcher/paper data.
+data/
+Scopus_Migration_2026-06/
+*.commit_msg_tmp.txt

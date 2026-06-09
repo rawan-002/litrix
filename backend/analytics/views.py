@@ -255,6 +255,19 @@ def export_excel(request):
     from django.db import connection
 
     # ------------------------------------------------------------------
+    # AuthZ gate. The export carries per-researcher rows (names, Scholar/
+    # ORCID IDs) + full paper lists, so it's limited to roles that may view
+    # researchers. Without this, a plain authenticated Researcher (who has
+    # neither perm and would otherwise fall into the unscoped branch below)
+    # could pull the whole institution.
+    # ------------------------------------------------------------------
+    _u = getattr(request, 'user', None)
+    if not (_u and _u.is_authenticated and (
+            _u.has_litrix_perm('view_all_researchers') or
+            _u.has_litrix_perm('view_dept_researchers'))):
+        return response.Response({'error': 'Forbidden'}, status=403)
+
+    # ------------------------------------------------------------------
     # HoD scoping. A HoD (view_dept_researchers without view_all_researchers)
     # may only export their OWN department, so every sheet below is filtered
     # to `hod_dept_id`. Admin/Dean get the full institution (hod_dept_id is
@@ -1367,6 +1380,16 @@ def overview(request):
     Department.HeadID = current user).
     """
     years = _resolve_years(request)
+
+    # AuthZ gate — institutional dashboard data is for roles that may view
+    # researchers (Admin/Dean/HoD). A plain Researcher (neither perm) would
+    # otherwise fall into the unscoped branch and receive the full
+    # institution view; the UI already routes them to their own dashboard.
+    _u = getattr(request, 'user', None)
+    if not (_u and _u.is_authenticated and (
+            _u.has_litrix_perm('view_all_researchers') or
+            _u.has_litrix_perm('view_dept_researchers'))):
+        return response.Response({'error': 'Forbidden'}, status=403)
 
     # --- HoD scoping ---
     # Admin/Dean keep the full institution view (perm: view_all_researchers).
