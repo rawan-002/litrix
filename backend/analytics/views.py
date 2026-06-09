@@ -1080,12 +1080,52 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
         return response.Response(data)
 
 
+def _hod_scope_department_id(request):
+    """
+    The single department a HoD-scoped user is limited to, or None for
+    institution-wide roles (Admin/Dean see every department).
+
+    A HoD is anyone with `view_dept_researchers` but NOT
+    `view_all_researchers`. Their department is resolved two ways, in
+    order: the canonical `Department.HeadID`, then their current
+    `Works_In` position — invitation-provisioned HoDs are linked via
+    `Works_In`, not `HeadID`. Returns the sentinel -1 when the user IS
+    HoD-scoped but has no department at all, so callers scope to nothing
+    instead of accidentally leaking every department.
+    """
+    u = getattr(request, 'user', None)
+    if not (u and u.is_authenticated):
+        return None
+    if not u.has_litrix_perm('view_dept_researchers'):
+        return None
+    if u.has_litrix_perm('view_all_researchers'):
+        return None
+
+    from django.db import connection
+    with connection.cursor() as cur:
+        cur.execute(
+            'SELECT "DepartmentID" FROM "Department" WHERE "HeadID" = %s LIMIT 1',
+            [u.user_id],
+        )
+        r = cur.fetchone()
+        if not r:
+            cur.execute(
+                'SELECT "DepartmentID" FROM "Works_In" '
+                'WHERE "UserID" = %s AND "IsCurrentPosition" = TRUE '
+                'ORDER BY "StartDate" DESC LIMIT 1',
+                [u.user_id],
+            )
+            r = cur.fetchone()
+    return r[0] if r else -1
+
+
 class DepartmentViewSet(viewsets.ReadOnlyModelViewSet):
     """
     GET /api/departments/         → list with aggregated stats
     GET /api/departments/{id}/    → single department detail
+
+    HoDs are scoped to their own department; Admins/Deans see all.
     """
-    queryset = DepartmentStats.objects.all()
     serializer_class = DepartmentStatsSerializer
     filter_backends = [filters.OrderingFilter]
     ordering_fields = [
@@ -1094,9 +1134,23 @@ class DepartmentViewSet(viewsets.ReadOnlyModelViewSet):
     ]
     ordering = ['-total_papers']
 
+    def get_queryset(self):
+        qs = DepartmentStats.objects.all()
+        scope = _hod_scope_department_id(self.request)
+        if scope is not None:
+            qs = qs.filter(department_id=scope)
+        return qs
+
     @decorators.action(detail=True, methods=['get'])
     def researchers(self, request, pk=None):
         """GET /api/departments/{id}/researchers/ — list of researchers."""
+        # A HoD may only inspect their own department's researchers.
+        scope = _hod_scope_department_id(request)
+        if scope is not None and str(scope) != str(pk):
+            return response.Response(
+                {'error': 'You can only view your own department.'},
+                status=403,
+            )
         qs = ResearcherStats.objects.filter(department_id=pk).order_by(
             '-h_index', '-total_papers'
         )
@@ -1260,21 +1314,32 @@ def overview(request):
             if _r:
                 hod_dept_id = _r[0]
 
+    # avg_h keeps the historical definition (average of dept averages).
+    _dept_qs = DepartmentStats.objects.all()
     if hod_dept_id:
-        # Scope the institution-wide aggregate to just this department.
-        dept_agg = DepartmentStats.objects.filter(
-            department_id=hod_dept_id
-        ).aggregate(
-            researchers=Sum('total_researchers'),
-            active=Sum('active_researchers'),
-            avg_h=Avg('avg_h_index'),
-        )
-    else:
-        dept_agg = DepartmentStats.objects.aggregate(
-            researchers=Sum('total_researchers'),
-            active=Sum('active_researchers'),
-            avg_h=Avg('avg_h_index'),
-        )
+        _dept_qs = _dept_qs.filter(department_id=hod_dept_id)
+    dept_agg = _dept_qs.aggregate(avg_h=Avg('avg_h_index'))
+
+    # Researcher head-count: COUNT(DISTINCT UserID) over current positions.
+    # The previous Sum('total_researchers') across DepartmentStats rows
+    # double-counted any researcher holding positions in TWO departments
+    # (they appear once in each department's row).
+    from django.db import connection as _hc_conn
+    with _hc_conn.cursor() as _hc_cur:
+        _hc_cur.execute('''
+            SELECT COUNT(DISTINCT u."UserID") AS researchers,
+                   COUNT(DISTINCT u."UserID")
+                       FILTER (WHERE r."LastSyncedAt" IS NOT NULL) AS active
+            FROM "Users" u
+            JOIN "Works_In" w ON w."UserID" = u."UserID"
+                             AND w."IsCurrentPosition" = TRUE
+            LEFT JOIN "Researcher" r ON r."UserID" = u."UserID"
+            WHERE u."UserType" = 'Researcher'
+              AND (%s::int IS NULL OR w."DepartmentID" = %s::int)
+        ''', [hod_dept_id, hod_dept_id])
+        _hc_row = _hc_cur.fetchone()
+    dept_agg['researchers'] = _hc_row[0]
+    dept_agg['active'] = _hc_row[1]
 
     from django.db import connection
     with connection.cursor() as cur:
@@ -1418,15 +1483,28 @@ def overview(request):
                 COUNT(DISTINCT rp."PaperID") AS total_papers,
                 COALESCE(MAX(dc.total_citations), 0) AS total_citations,
                 COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q1') AS total_q1_papers,
+                COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q2') AS total_q2_papers,
+                COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q3') AS total_q3_papers,
+                COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q4') AS total_q4_papers,
                 COUNT(DISTINCT rp."PaperID")
                     FILTER (WHERE rp."Indexing" = 'Scopus' OR jr."Quartile" IS NOT NULL) AS total_scopus_papers,
-                COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = 'ISI') AS total_isi_papers
+                COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = 'ISI') AS total_isi_papers,
+                -- Venue split: 'Conference Proceedings' folds into Conference;
+                -- Book/Book Series/NULL fold into Journal (same rule as
+                -- v_department_stats after 20260607_dept_stats_split).
+                COUNT(DISTINCT rp."PaperID")
+                    FILTER (WHERE j."VenueType" ILIKE 'Conference%%') AS conference_papers,
+                COUNT(DISTINCT rp."PaperID")
+                    FILTER (WHERE rp."PaperID" IS NOT NULL
+                            AND (j."VenueType" IS NULL
+                                 OR j."VenueType" NOT ILIKE 'Conference%%')) AS journal_papers
             FROM "Department" d
             LEFT JOIN "Works_In" w ON w."DepartmentID" = d."DepartmentID" AND w."IsCurrentPosition" = TRUE
             LEFT JOIN "Users" u ON u."UserID" = w."UserID" AND u."UserType" = 'Researcher'
             LEFT JOIN "Researcher" r ON r."UserID" = u."UserID"
             LEFT JOIN "Authors" a ON a."UserID" = u."UserID"
             LEFT JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID" AND rp."PubYear" = ANY(%s)
+            LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
             LEFT JOIN LATERAL (    SELECT "Quartile", "ImpactFactor"    FROM "JournalRankings"    WHERE "JournalID" = rp."JournalID"    ORDER BY "RankingYear" DESC NULLS LAST, "Source"    LIMIT 1) jr ON TRUE
             LEFT JOIN dept_citations dc ON dc."DepartmentID" = d."DepartmentID"
             GROUP BY d."DepartmentID", d."DepartmentName", d."CollegeID"

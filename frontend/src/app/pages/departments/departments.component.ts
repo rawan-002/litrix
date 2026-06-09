@@ -26,8 +26,13 @@ interface DeptCard {
   total_papers: number;
   total_citations: number;
   total_q1_papers: number;
+  total_q2_papers: number;
+  total_q3_papers: number;
+  total_q4_papers: number;
   total_scopus_papers: number;
   total_isi_papers: number;
+  journal_papers: number;
+  conference_papers: number;
   avg_h_index: number;
   max_h_index: number;
 }
@@ -67,6 +72,14 @@ export class DepartmentsComponent {
   readonly researchers = signal<ResearcherRow[]>([]);
   readonly resLoading = signal(false);
 
+  /**
+   * Distinct researcher head-count from /api/stats/overview/.
+   * Summing total_researchers across cards double-counts anyone holding
+   * positions in two departments — the overview endpoint counts
+   * DISTINCT UserIDs, so we prefer it once loaded.
+   */
+  readonly headcount = signal<number | null>(null);
+
   readonly sorted = computed(() => {
     const key = this.sortBy();
     const q   = this.search().toLowerCase().trim();
@@ -82,9 +95,15 @@ export class DepartmentsComponent {
   /** Sum across all departments, for the header strip. */
   readonly totals = computed(() => {
     const list = this.departments();
+    // The DISTINCT institution head-count only makes sense when several
+    // departments are shown (it de-dupes researchers holding two posts).
+    // A HoD sees a single, already-scoped card, so use its own count.
+    const useOverviewCount = list.length > 1 && this.headcount() != null;
     return {
       depts:       list.length,
-      researchers: list.reduce((s, d) => s + (d.total_researchers || 0), 0),
+      researchers: useOverviewCount
+                   ? this.headcount()!
+                   : list.reduce((s, d) => s + (d.total_researchers || 0), 0),
       papers:      list.reduce((s, d) => s + (d.total_papers || 0), 0),
       citations:   list.reduce((s, d) => s + (d.total_citations || 0), 0),
     };
@@ -92,6 +111,13 @@ export class DepartmentsComponent {
 
   constructor() {
     this.refresh();
+    this.api.getOverview().subscribe({
+      next: (r: any) => {
+        const n = r?.totals?.researchers;
+        if (typeof n === 'number') this.headcount.set(n);
+      },
+      error: () => { /* keep the card-sum fallback */ },
+    });
   }
 
   refresh() {

@@ -725,6 +725,17 @@ def _provision_invited_user(request, d, metadata, pwd_hash, email, invite):
                     ON CONFLICT DO NOTHING
                 ''', [new_user_id, final_dept])
 
+                # A HoD heads exactly one department — record the canonical
+                # Department.HeadID link so role-scoped views (and exports)
+                # can resolve "this user's department" without leaning on
+                # Works_In. The invite explicitly designated them as head.
+                if user_type == 'HoD':
+                    cur.execute(
+                        'UPDATE "Department" SET "HeadID" = %s '
+                        'WHERE "DepartmentID" = %s',
+                        [new_user_id, final_dept],
+                    )
+
             # Mark the invitation as consumed.
             from .invitation_views import mark_invitation_used
             mark_invitation_used(invite['invitation_id'], new_user_id)
