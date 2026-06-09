@@ -133,6 +133,22 @@
         </div>
       </div>
 
+      <!-- Venue tabs: split into Journals vs Conferences -->
+      <div class="flex items-center gap-1.5 mb-3">
+        @for (tab of venueTabs; track tab.key) {
+          <button (click)="setVenue(tab.key)"
+                  class="px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors"
+                  [class.bg-ink-900]="activeVenue() === tab.key"
+                  [class.text-white]="activeVenue() === tab.key"
+                  [class.bg-ink-100]="activeVenue() !== tab.key"
+                  [class.text-ink-600]="activeVenue() !== tab.key"
+                  [class.hover:bg-ink-200]="activeVenue() !== tab.key">
+            {{ tab.label }}
+            <span class="ml-1 opacity-60">{{ venueCounts()[tab.key] }}</span>
+          </button>
+        }
+      </div>
+
       <p class="text-xs text-ink-400">
         Click a title to view full details
       </p>
@@ -202,6 +218,11 @@
                   </div>
                 }
               </li>
+            } @empty {
+              <li class="px-6 py-10 text-center text-sm text-ink-400">
+                No {{ activeVenue() === 'conference' ? 'conference papers' :
+                      activeVenue() === 'journal' ? 'journal papers' : 'papers' }} to show.
+              </li>
             }
           </ul>
         </div>
@@ -213,7 +234,7 @@
                   class="text-xs text-accent hover:text-accent-hover font-medium
                          px-5 py-2 rounded-full hover:bg-accent-light transition-colors">
             Load More
-            ({{ d.papers.length - visibleCount() }} more)
+            ({{ sortedPapers().length - visibleCount() }} more)
           </button>
         </div>
       }

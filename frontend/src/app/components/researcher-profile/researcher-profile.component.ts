@@ -53,6 +53,33 @@ export class ResearcherProfileComponent implements OnInit {
   // Quartile filter — multi-select. Empty Set = no filter (show all).
   readonly activeQuartiles = signal<Set<string>>(new Set());
 
+  // Venue tab — split the papers list into Journals vs Conferences (same
+  // rule as the dashboard/export: a venue starting with "conf" is a
+  // conference; everything else — journals, books, unknown — is a journal).
+  readonly activeVenue = signal<'all' | 'journal' | 'conference'>('all');
+  readonly venueTabs = [
+    { key: 'all'        as const, label: 'All' },
+    { key: 'journal'    as const, label: 'Journals' },
+    { key: 'conference' as const, label: 'Conferences' },
+  ];
+
+  private isConference(p: ProfilePaper): boolean {
+    return (p.venue_type || '').toLowerCase().startsWith('conf');
+  }
+
+  /** Paper counts per venue tab, for the badges. */
+  readonly venueCounts = computed(() => {
+    const papers = this.data()?.papers ?? [];
+    let conf = 0;
+    for (const p of papers) if (this.isConference(p)) conf++;
+    return { all: papers.length, conference: conf, journal: papers.length - conf };
+  });
+
+  setVenue(v: 'all' | 'journal' | 'conference') {
+    this.activeVenue.set(v);
+    this.visibleCount.set(this.LOAD_BATCH);
+  }
+
   /**
    * Chart window floor — matches the admin dashboard CHART_YEAR_FLOOR.
    * Anything before this is clipped from the citations chart for visual
@@ -83,6 +110,14 @@ export class ResearcherProfileComponent implements OnInit {
   // Filter papers by selected quartiles, then sort by chosen field+direction.
   readonly sortedPapers = computed(() => {
     let all = [...(this.data()?.papers ?? [])];
+
+    // Venue tab filter (Journals vs Conferences)
+    const venue = this.activeVenue();
+    if (venue === 'journal') {
+      all = all.filter(p => !this.isConference(p));
+    } else if (venue === 'conference') {
+      all = all.filter(p => this.isConference(p));
+    }
 
     // Quartile filter — empty Set means "show all" (no filter)
     const quartiles = this.activeQuartiles();
