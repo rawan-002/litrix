@@ -21,11 +21,13 @@ import {
 } from '../../models/litrix.models';
 import { PaperDetailModalComponent } from
   '../paper-detail-modal/paper-detail-modal.component';
+import { CitationsChartComponent } from
+  '../citations-chart/citations-chart.component';
 
 @Component({
   selector: 'app-researcher-profile',
   standalone: true,
-  imports: [CommonModule, PaperDetailModalComponent],
+  imports: [CommonModule, PaperDetailModalComponent, CitationsChartComponent],
   templateUrl: './researcher-profile.component.html',
 })
 export class ResearcherProfileComponent implements OnInit {

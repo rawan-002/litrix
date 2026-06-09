@@ -20,6 +20,7 @@ import { Component, OnInit, Input, inject, signal, computed } from '@angular/cor
 import { CommonModule } from '@angular/common';
 import { LitrixApiService } from '../../services/litrix-api.service';
 import { ResearcherProfilePayload } from '../../models/litrix.models';
+import { CitationsChartComponent } from '../citations-chart/citations-chart.component';
 
 interface DonutSlice {
   label: string;
@@ -34,7 +35,7 @@ interface DonutSlice {
 @Component({
   selector: 'app-researcher-dashboard',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, CitationsChartComponent],
   templateUrl: './researcher-dashboard.component.html',
 })
 export class ResearcherDashboardComponent implements OnInit {
