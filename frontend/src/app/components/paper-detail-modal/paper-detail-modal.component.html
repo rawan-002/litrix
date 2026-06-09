@@ -57,12 +57,14 @@
         <!-- Body -->
         <div class="px-7 py-5 space-y-5">
 
-          <!-- Abstract — truncated by default, "Show more" expands -->
-          @if (p.abstract) {
-            <div>
-              <h4 class="text-xs uppercase tracking-wide text-ink-500 font-medium mb-2">
-                Abstract
-              </h4>
+          <!-- Abstract — always shown for a consistent layout; truncated
+               by default with "Show more". Falls back to a muted note when
+               the source didn't provide one. -->
+          <div>
+            <h4 class="text-xs uppercase tracking-wide text-ink-500 font-medium mb-2">
+              Abstract
+            </h4>
+            @if (p.abstract) {
               <p class="text-sm text-ink-700 leading-relaxed whitespace-pre-line">
                 {{ abstractDisplay() }}
               </p>
@@ -73,23 +75,30 @@
                   {{ abstractExpanded() ? 'Show less' : 'Show more' }}
                 </button>
               }
-            </div>
-          }
+            } @else {
+              <p class="text-sm text-ink-300 italic">No abstract available.</p>
+            }
+          </div>
 
           <!-- All authors with their affiliations.
                Each authorship is one chip: name + institution(s).
                Al-Baha-affiliated authors get the accent treatment so
                the operator can see at a glance whether this paper
                actually belongs to a Litrix researcher. -->
-          @if (p.authorships && p.authorships.length > 0) {
-            <div>
-              <h4 class="text-xs uppercase tracking-wide text-ink-500 font-medium mb-2
-                         flex items-center justify-between">
-                <span>Authors &amp; Affiliations</span>
+          <!-- Authors — always shown for a consistent layout. Prefer the
+               structured affiliations; fall back to the raw string, then to
+               a muted note, so every paper renders the same section. -->
+          <div>
+            <h4 class="text-xs uppercase tracking-wide text-ink-500 font-medium mb-2
+                       flex items-center justify-between">
+              <span>Authors &amp; Affiliations</span>
+              @if (p.authorships && p.authorships.length > 0) {
                 <span class="text-[10px] normal-case tracking-normal text-ink-400 font-normal">
                   Al-Baha highlighted
                 </span>
-              </h4>
+              }
+            </h4>
+            @if (p.authorships && p.authorships.length > 0) {
               <ul class="space-y-1.5">
                 @for (a of p.authorships; track a.name + $index) {
                   <li class="text-sm leading-snug"
@@ -107,69 +116,72 @@
                   </li>
                 }
               </ul>
-            </div>
-          } @else if (p.raw_authors) {
-            <!-- Fallback: no structured authorships yet (paper not
-                 enriched). Show the raw author string as a hint. -->
-            <div>
-              <h4 class="text-xs uppercase tracking-wide text-ink-500 font-medium mb-2">
-                Authors
-                <span class="text-[10px] normal-case tracking-normal text-ink-400 font-normal">
-                  · affiliations not yet enriched
-                </span>
-              </h4>
+            } @else if (p.raw_authors) {
               <p class="text-sm text-ink-700">{{ p.raw_authors }}</p>
-            </div>
-          }
+              <p class="text-[10px] text-ink-400 mt-1">Affiliations not yet enriched.</p>
+            } @else {
+              <p class="text-sm text-ink-300 italic">Not available.</p>
+            }
+          </div>
 
           <!-- Publication info -->
           <div>
             <h4 class="text-xs uppercase tracking-wide text-ink-500 font-medium mb-2">
               Publication Information
             </h4>
+            <!-- Always render the same canonical rows regardless of source,
+                 so a sparse Scopus/manual paper has the SAME shape as a rich
+                 Scholar one. Missing values show a muted em dash. -->
             <dl class="grid grid-cols-2 gap-y-2 gap-x-4 text-sm">
-              @if (p.pub_year) {
-                <dt class="text-ink-500">Year:</dt>
-                <dd class="text-ink-900 font-medium">{{ p.pub_year }}</dd>
-              }
-              @if (p.publication) {
-                <dt class="text-ink-500">Publisher:</dt>
-                <dd class="text-ink-900 font-medium">{{ p.publication }}</dd>
-              }
-              @if (p.journal_name) {
-                <dt class="text-ink-500">Journal:</dt>
-                <dd class="text-ink-900 font-medium">{{ p.journal_name }}</dd>
-              }
-              @if (p.venue_type) {
-                <dt class="text-ink-500">Venue:</dt>
-                <dd class="text-ink-900 font-medium">{{ p.venue_type }}</dd>
-              }
-              @if (p.quartile) {
-                <dt class="text-ink-500">Quartile:</dt>
-                <dd>
+              <dt class="text-ink-500">Year:</dt>
+              <dd class="font-medium"
+                  [class.text-ink-900]="!!p.pub_year" [class.text-ink-300]="!p.pub_year">
+                {{ p.pub_year || '—' }}
+              </dd>
+
+              <dt class="text-ink-500">Journal:</dt>
+              <dd class="font-medium"
+                  [class.text-ink-900]="!!p.journal_name" [class.text-ink-300]="!p.journal_name">
+                {{ p.journal_name || p.publication || '—' }}
+              </dd>
+
+              <dt class="text-ink-500">Venue:</dt>
+              <dd class="font-medium"
+                  [class.text-ink-900]="!!p.venue_type" [class.text-ink-300]="!p.venue_type">
+                {{ p.venue_type || '—' }}
+              </dd>
+
+              <dt class="text-ink-500">Quartile:</dt>
+              <dd>
+                @if (p.quartile) {
                   <span class="px-1.5 py-0.5 rounded bg-ink-900 text-white text-[10px]">
                     {{ p.quartile }}
                   </span>
-                </dd>
-              }
-              @if (p.impact_factor) {
-                <dt class="text-ink-500">Impact Factor:</dt>
-                <dd class="text-ink-900 font-medium">{{ p.impact_factor }}</dd>
-              }
-              @if (p.indexing) {
-                <dt class="text-ink-500">Indexing:</dt>
-                <dd class="text-ink-900 font-medium">{{ p.indexing }}</dd>
-              }
-              @if (p.source) {
-                <dt class="text-ink-500">Source:</dt>
-                <dd class="text-ink-900 font-medium">{{ p.source }}</dd>
-              }
+                } @else {
+                  <span class="text-ink-300">—</span>
+                }
+              </dd>
+
+              <dt class="text-ink-500">Impact Factor:</dt>
+              <dd class="font-medium"
+                  [class.text-ink-900]="!!p.impact_factor" [class.text-ink-300]="!p.impact_factor">
+                {{ p.impact_factor || '—' }}
+              </dd>
+
+              <dt class="text-ink-500">Indexing:</dt>
+              <dd class="font-medium"
+                  [class.text-ink-900]="!!p.indexing" [class.text-ink-300]="!p.indexing">
+                {{ p.indexing || '—' }}
+              </dd>
+
+              <dt class="text-ink-500">Source:</dt>
+              <dd class="font-medium"
+                  [class.text-ink-900]="!!p.source" [class.text-ink-300]="!p.source">
+                {{ p.source || '—' }}
+              </dd>
+
               <dt class="text-ink-500">Total Citations:</dt>
               <dd class="text-ink-900 font-bold">{{ fmt(p.total_citations) }}</dd>
-              @if (p.cites_id) {
-                <dt class="text-ink-500">Cites ID:</dt>
-                <dd class="text-ink-700 font-mono text-xs break-all">{{ p.cites_id }}</dd>
-              }
             </dl>
           </div>
 
