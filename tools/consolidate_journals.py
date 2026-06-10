@@ -14,12 +14,9 @@ except Exception:
 load_dotenv()
 
 
-def db():
-    return psycopg2.connect(
-        os.getenv("DATABASE_URL") or
-        f"postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}"
-        f"@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
-    )
+# Shared DB helper (single source — see litrix_db.py at repo root).
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from litrix_db import db
 
 
 def main():

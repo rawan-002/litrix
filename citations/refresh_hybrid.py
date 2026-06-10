@@ -84,22 +84,9 @@ AUDIT_DIR = PROJECT_ROOT / "data" / "citation_audit"
 # DB (same pattern as scrapers/scholar.py — DATABASE_URL switch, local fallback)
 # ---------------------------------------------------------------------------
 
-def db():
-    keepalive_kwargs = dict(
-        keepalives=1, keepalives_idle=30,
-        keepalives_interval=10, keepalives_count=5,
-    )
-    url = os.getenv("DATABASE_URL")
-    if url:
-        return psycopg2.connect(url, **keepalive_kwargs)
-    return psycopg2.connect(
-        host=os.getenv("DB_HOST", "localhost"),
-        port=os.getenv("DB_PORT", "5432"),
-        dbname=os.getenv("DB_NAME", "LitrixDB"),
-        user=os.getenv("DB_USER", "postgres"),
-        password=os.getenv("DB_PASSWORD", ""),
-        **keepalive_kwargs,
-    )
+# Shared DB helper (single source — see litrix_db.py at repo root).
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from litrix_db import db
 
 
 # ---------------------------------------------------------------------------

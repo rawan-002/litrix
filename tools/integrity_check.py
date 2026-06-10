@@ -33,41 +33,17 @@ pipeline scripts. Empty -> local Postgres via DB_* vars.
 from __future__ import annotations
 
 import argparse
-import io
 import json
 import os
 import sys
 
 import psycopg2
 
-# UTF-8 stdout so Arabic titles / box-drawing don't crash on Windows consoles
-# (matches the repo's other scripts).
-try:
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', line_buffering=True)
-except Exception:
-    pass
+# Shared DB + console helpers (single source — see litrix_db.py at repo root).
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from litrix_db import db, setup_utf8_stdout
 
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except Exception:
-    pass
-
-
-def db():
-    url = os.getenv('DATABASE_URL')
-    keepalive = dict(keepalives=1, keepalives_idle=30,
-                     keepalives_interval=10, keepalives_count=5)
-    if url:
-        return psycopg2.connect(url, connect_timeout=20, **keepalive)
-    return psycopg2.connect(
-        host=os.getenv('DB_HOST', 'localhost'),
-        port=os.getenv('DB_PORT', '5432'),
-        dbname=os.getenv('DB_NAME', 'LitrixDB'),
-        user=os.getenv('DB_USER', 'postgres'),
-        password=os.getenv('DB_PASSWORD', ''),
-        connect_timeout=20, **keepalive,
-    )
+setup_utf8_stdout()
 
 
 def _scalar(cur, sql, params=None):

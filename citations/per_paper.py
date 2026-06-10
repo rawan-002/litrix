@@ -18,12 +18,9 @@ except Exception:
 load_dotenv()
 
 
-def db():
-    keepalive_kwargs = dict(
-        keepalives=1, keepalives_idle=30,
-        keepalives_interval=10, keepalives_count=5,
-    )
-    return psycopg2.connect(os.getenv("DATABASE_URL"), **keepalive_kwargs)
+# Shared DB helper (single source — see litrix_db.py at repo root).
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from litrix_db import db
 
 
 def normalize_title(t):

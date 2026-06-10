@@ -69,11 +69,9 @@ YEAR_TOLERANCE = 1      # allow print/online year drift
 API_DELAY      = 0.15
 
 
-def db():
-    if not DATABASE_URL:
-        print("ERROR: DATABASE_URL not set (.env).")
-        sys.exit(1)
-    return psycopg2.connect(DATABASE_URL, connect_timeout=15)
+# Shared DB helper (single source — see litrix_db.py at repo root).
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from litrix_db import db  # noqa: E402
 
 
 _WS = re.compile(r'\s+')
