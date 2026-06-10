@@ -1458,34 +1458,18 @@ def overview(request):
         # for "publications" KPI).
         # KPI papers + Q1/Scopus/ISI counts. Author-in-dept clause added
         # at the end for HoDs only.
-        # Citations now derive from the per-paper graph stored on each
-        # ResearchPaper (CitationsByYear), summed over the window years and
-        # folded into THIS same query. That means the Citations KPI covers
-        # exactly the same paper set as the Publications KPI — so the
-        # affiliation filter AND the HoD/dept scope apply to citations too.
-        # (Previously citations came from Researcher.CitationsByYear at the
-        # author level, which couldn't be filtered per-paper.) Consistent
-        # with how the departments + top-researchers blocks already count
-        # citations. One row per paper (LATERAL jr is LIMIT 1), so SUM is safe.
-        rp_cite_expr = ' + '.join([
-            'COALESCE((rp."CitationsByYear"->>%s)::int, 0)'
-            for _ in years
-        ])
         kpi_sql = (
             'SELECT COUNT(DISTINCT rp."PaperID") AS papers, '
             '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q1\') AS q1, '
             '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = \'Scopus\' OR jr."Quartile" IS NOT NULL) AS scopus, '
-            '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = \'ISI\') AS isi, '
-            f'      COALESCE(SUM({rp_cite_expr}), 0) AS citations '
+            '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = \'ISI\') AS isi '
             'FROM "ResearchPaper" rp '
             'LEFT JOIN LATERAL (SELECT "Quartile","ImpactFactor" FROM "JournalRankings" '
             '  WHERE "JournalID" = rp."JournalID" ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1) jr ON TRUE '
             'WHERE rp."PubYear" = ANY(%s) '
             '  AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"'
         )
-        # Params: one per year for the citations SELECT expr, then the
-        # PubYear ANY() list, then the optional HoD dept id.
-        kpi_params = [str(y) for y in years] + [years]
+        kpi_params = [years]
         if hod_dept_id:
             kpi_sql += (
                 ' AND EXISTS (SELECT 1 FROM "Works_In" w2 '
@@ -1499,11 +1483,43 @@ def overview(request):
         cur.execute(kpi_sql, kpi_params)
         paper_count_row = cur.fetchone()
 
+        # Citations RECEIVED in the window — summed per-paper over the
+        # selected years across ALL the scope's papers (ANY publication year),
+        # so the metric stays meaningful when a single recent year is picked:
+        # older highly-cited papers still contribute the citations they earned
+        # that year. (Folding citations into the papers-PUBLISHED-in-window
+        # query above made e.g. "2026 only" read ~1, since papers published in
+        # 2026 have barely been cited yet.) The per-paper CitationsByYear graph
+        # keeps it filterable by affiliation + HoD scope; EXISTS (not JOIN)
+        # counts each paper once even when several scope authors share it.
+        cites_year_expr = ' + '.join([
+            'COALESCE((rp."CitationsByYear"->>%s)::int, 0)'
+            for _ in years
+        ])
+        cit_sql = (
+            f'SELECT COALESCE(SUM({cites_year_expr}), 0) AS citations '
+            'FROM "ResearchPaper" rp '
+            'WHERE EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"'
+        )
+        cit_params = [str(y) for y in years]
+        if hod_dept_id:
+            cit_sql += (
+                ' AND EXISTS (SELECT 1 FROM "Works_In" w2 '
+                '              WHERE w2."UserID" = a."UserID" '
+                '                AND w2."DepartmentID" = %s '
+                '                AND w2."IsCurrentPosition" = TRUE)'
+            )
+            cit_params.append(hod_dept_id)
+        cit_sql += ')'
+        cit_sql += AFFIL_CLAUSE
+        cur.execute(cit_sql, cit_params)
+        citations_row = cur.fetchone()
+
         # Combine into the (papers, citations, q1, scopus, isi) shape.
-        # paper_count_row = (papers, q1, scopus, isi, citations).
+        # paper_count_row = (papers, q1, scopus, isi).
         paper_totals = (
             paper_count_row[0],
-            paper_count_row[4],
+            citations_row[0],
             paper_count_row[1],
             paper_count_row[2],
             paper_count_row[3],
