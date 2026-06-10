@@ -1469,6 +1469,15 @@ class PublicationTrendViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_fields = ['department_id', 'year']
     ordering = ['department_name', 'year']
 
+    def get_queryset(self):
+        # A HoD only sees their own department's trend; Admin/Dean see all
+        # (consistent with the overview + departments scoping).
+        qs = PublicationTrend.objects.all()
+        scope = _hod_scope_department_id(self.request)
+        if scope is not None:
+            qs = qs.filter(department_id=scope)
+        return qs
+
 
 @decorators.api_view(['GET'])
 def yearly_breakdown(request):
@@ -1494,9 +1503,21 @@ def yearly_breakdown(request):
             {'error': 'year must be an integer'}, status=400
         )
 
+    # This drill-down belongs to the institutional overview — same gate +
+    # HoD scoping so a plain Researcher can't pull it and a HoD only sees
+    # their own department (was unscoped: every dept leaked to every viewer).
+    _u = getattr(request, 'user', None)
+    if not (_u and _u.is_authenticated and (
+            _u.has_litrix_perm('view_all_researchers') or
+            _u.has_litrix_perm('view_dept_researchers'))):
+        return response.Response({'error': 'Forbidden'}, status=403)
+    hod_dept_id = _hod_scope_department_id(request)
+    dept_clause = ' AND department_id = %s' if hod_dept_id else ''
+    dept_param = [hod_dept_id] if hod_dept_id else []
+
     from django.db import connection
     with connection.cursor() as cur:
-        cur.execute('''
+        cur.execute(f'''
             SELECT
                 department_id,
                 department_name,
@@ -1506,10 +1527,10 @@ def yearly_breakdown(request):
                 COALESCE(SUM(citations), 0)                       AS total_citations
             FROM v_paper_details
             WHERE pub_year = %s
-              AND department_id IS NOT NULL
+              AND department_id IS NOT NULL{dept_clause}
             GROUP BY department_id, department_name
             ORDER BY total_papers DESC
-        ''', [year_int])
+        ''', [year_int] + dept_param)
         dept_rows = cur.fetchall()
         departments = [
             {
@@ -1523,16 +1544,16 @@ def yearly_breakdown(request):
             for r in dept_rows
         ]
 
-        cur.execute('''
+        cur.execute(f'''
             SELECT
                 paper_id, title, doi, citations, journal_name,
                 venue_type, quartile, impact_factor, indexing,
                 department_id, department_name, authors_ar
             FROM v_paper_details
             WHERE pub_year = %s
-              AND department_id IS NOT NULL
+              AND department_id IS NOT NULL{dept_clause}
             ORDER BY citations DESC NULLS LAST, paper_id
-        ''', [year_int])
+        ''', [year_int] + dept_param)
         cols = [c[0] for c in cur.description]
         papers = [dict(zip(cols, row)) for row in cur.fetchall()]
 

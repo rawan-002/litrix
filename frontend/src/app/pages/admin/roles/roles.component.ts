@@ -74,13 +74,21 @@ export class RolesComponent {
 
   loadPermissions() {
     this.http.get<{ permissions: Permission[] }>(`${this.API}/permissions/`)
-      .subscribe(r => this.permissions.set(r.permissions || []));
+      .subscribe({
+        next: r => this.permissions.set(r.permissions || []),
+        error: () => this.permissions.set([]),
+      });
   }
 
   selectRole(id: number) {
     this.selectedRoleId.set(id);
     this.http.get<{ permission_ids: number[] }>(`${this.API}/roles/${id}/permissions/`)
-      .subscribe(r => this.rolePermIds.set(new Set(r.permission_ids || [])));
+      .subscribe({
+        next: r => this.rolePermIds.set(new Set(r.permission_ids || [])),
+        // Don't leave the checkboxes silently empty (admin could then save a
+        // wiped permission set); clear + surface the failure instead.
+        error: () => { this.rolePermIds.set(new Set()); alert('Failed to load role permissions'); },
+      });
   }
 
   togglePerm(pid: number) {
@@ -129,6 +137,11 @@ export class RolesComponent {
     this.http.delete(`${this.API}/roles/${id}/`).subscribe({
       next: () => {
         if (this.selectedRoleId() === id) this.selectedRoleId.set(null);
+        this.loadRoles();
+      },
+      error: (err) => {
+        // Re-sync so a failed delete doesn't leave the row missing locally.
+        alert(err?.error?.error || 'Failed to delete role');
         this.loadRoles();
       },
     });

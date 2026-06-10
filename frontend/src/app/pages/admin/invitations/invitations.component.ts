@@ -67,7 +67,10 @@ export class InvitationsComponent {
     this.load();
     this.http.get<{ departments: Department[] }>(
       `${this.API}/departments-public/`,
-    ).subscribe(r => this.departments.set(r.departments || []));
+    ).subscribe({
+      next: r => this.departments.set(r.departments || []),
+      error: () => this.departments.set([]),
+    });
   }
 
   load() {

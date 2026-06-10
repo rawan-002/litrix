@@ -205,13 +205,17 @@ Chart.register(...registerables);
           </div>
         </div>
 
-        <!-- Loading shimmer -->
-        <div *ngIf="!kpis()" class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Loading shimmer (stops if the fetch failed) -->
+        <div *ngIf="!kpis() && !loadFailed()" class="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div *ngFor="let i of [1,2,3]" class="rounded-2xl border border-gray-100 p-8 animate-pulse">
             <div class="h-4 bg-gray-100 rounded w-2/3 mb-4"></div>
             <div class="h-12 bg-gray-100 rounded w-1/2 mb-4"></div>
             <div class="h-2 bg-gray-100 rounded w-full"></div>
           </div>
+        </div>
+        <!-- Fetch failed -->
+        <div *ngIf="loadFailed()" class="rounded-2xl border border-gray-100 p-8 text-center text-sm text-gray-500">
+          Couldn't load the dashboard data. Please refresh the page.
         </div>
       </section>
 
@@ -400,6 +404,9 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
   // KPI section state — uses globalYear when set to a specific year,
   // defaults to 2026 when 'all' (the KPIs need a specific anchor year).
   readonly kpis = signal<KpisResponse | null>(null);
+  /** Set when a data fetch fails, so the KPI shimmer stops and we show a
+   *  short "couldn't load" note instead of pulsing forever. */
+  readonly loadFailed = signal<boolean>(false);
   readonly availableYears: number[] = [2026, 2025];
 
   // ---- Export modal state ------------------------------------------
@@ -471,9 +478,9 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
   ngOnInit(): void {
     this.refreshScopedData();
     // Trend chart always shows both years for context — it's a comparison.
-    this.api.trends().subscribe((d) => {
-      this.trendData.set(d.results);
-      this.renderTrendChart();
+    this.api.trends().subscribe({
+      next: (d) => { this.trendData.set(d.results); this.renderTrendChart(); },
+      error: () => this.loadFailed.set(true),
     });
   }
 
@@ -489,10 +496,14 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
     this.departments.set([]);
     this.researchers.set([]);
     this.kpis.set(null);
+    this.loadFailed.set(false);
 
-    this.api.overview(y).subscribe((d) => this.overview.set(d));
-    this.api.departments(y).subscribe((d) => this.departments.set(d.results));
-    this.api.researchers(undefined, y).subscribe((d) => this.researchers.set(d.results));
+    this.api.overview(y).subscribe({
+      next: (d) => this.overview.set(d), error: () => this.loadFailed.set(true) });
+    this.api.departments(y).subscribe({
+      next: (d) => this.departments.set(d.results), error: () => this.loadFailed.set(true) });
+    this.api.researchers(undefined, y).subscribe({
+      next: (d) => this.researchers.set(d.results), error: () => this.loadFailed.set(true) });
     this.loadKpis();
   }
 
@@ -557,7 +568,10 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
   private loadKpis(): void {
     const g = this.globalYear();
     const anchorYear = g === 'all' ? 2026 : g;
-    this.api.kpis(anchorYear).subscribe((data) => this.kpis.set(data));
+    this.api.kpis(anchorYear).subscribe({
+      next: (data) => this.kpis.set(data),
+      error: () => this.loadFailed.set(true),
+    });
   }
 
   /**

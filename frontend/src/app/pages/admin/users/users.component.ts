@@ -95,7 +95,10 @@ export class UsersComponent {
   constructor() {
     this.load();
     this.http.get<{ roles: Role[] }>(`${this.API}/roles/`)
-      .subscribe(r => this.roles.set(r.roles || []));
+      .subscribe({
+        next: r => this.roles.set(r.roles || []),
+        error: () => this.roles.set([]),
+      });
   }
 
   load() {
@@ -120,6 +123,8 @@ export class UsersComponent {
   private update(userId: number, payload: any) {
     this.http.patch(`${this.API}/users/${userId}/`, payload).subscribe({
       next: () => this.load(),
+      // Re-sync on failure so the row doesn't keep an optimistic, wrong value.
+      error: (err) => { alert(err?.error?.error || 'Failed to update user'); this.load(); },
     });
   }
 
