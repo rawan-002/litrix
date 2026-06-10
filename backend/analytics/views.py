@@ -323,9 +323,9 @@ def export_excel(request):
     # passes ?affiliation=albaha; every paper/citation query below then drops
     # papers confirmed authored elsewhere, so the workbook matches the screen.
     albaha_only = _albaha_only(request)
-    AFFIL     = ' AND (rp."AffiliationVerified" IS DISTINCT FROM FALSE)'     if albaha_only else ''
-    AFFIL_RP2 = ' AND (rp2."AffiliationVerified" IS DISTINCT FROM FALSE)'    if albaha_only else ''
-    AFFIL_RPW = ' AND (rp_w."AffiliationVerified" IS DISTINCT FROM FALSE)'   if albaha_only else ''
+    AFFIL     = _affil_clause(albaha_only, 'rp')
+    AFFIL_RP2 = _affil_clause(albaha_only, 'rp2')
+    AFFIL_RPW = _affil_clause(albaha_only, 'rp_w')
 
     sheets_param = request.query_params.get('sheets', '').strip()
     if sheets_param:
@@ -406,9 +406,7 @@ def export_excel(request):
             # (ResearchPaper.CitationsByYear) — the SAME definition the
             # overview dashboard uses, so the export and the dashboard agree.
             # EXISTS (not JOIN) counts each paper once across co-authors.
-            year_keys_expr = ' + '.join([
-                'COALESCE((rp."CitationsByYear"->>%s)::int, 0)' for _ in years
-            ])
+            year_keys_expr = _cites_expr('rp', years)
             cit_sql = (
                 f'SELECT COALESCE(SUM({year_keys_expr}), 0) FROM "ResearchPaper" rp '
                 'WHERE EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"'
@@ -533,7 +531,7 @@ def export_excel(request):
                 # (ResearchPaper.CitationsByYear[year]) — same definition as
                 # the overview dashboard. EXISTS counts each paper once.
                 cit_sql = (
-                    'SELECT COALESCE(SUM(COALESCE((rp."CitationsByYear"->>%s)::int, 0)), 0) '
+                    f'SELECT COALESCE(SUM({_cites_expr("rp", [year])}), 0) '
                     'FROM "ResearchPaper" rp '
                     'WHERE EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"'
                 )
@@ -583,7 +581,7 @@ def export_excel(request):
                     'WITH dept_cites AS ('
                     '    SELECT dept AS "DepartmentID", SUM(cites) AS cites FROM ('
                     '        SELECT DISTINCT w."DepartmentID" AS dept, rp2."PaperID" AS pid, '
-                    '               COALESCE((rp2."CitationsByYear"->>%s)::int, 0) AS cites '
+                    f'               {_cites_expr("rp2", [year])} AS cites '
                     '        FROM "Works_In" w '
                     '        JOIN "Authors" a2 ON a2."UserID" = w."UserID" '
                     '        JOIN "ResearchPaper" rp2 ON rp2."PaperID" = a2."PaperID" '
@@ -1262,6 +1260,36 @@ def _albaha_only(request):
     return v in ('albaha', 'al-baha', 'verified', 'true', '1')
 
 
+# ===========================================================================
+# CANONICAL SQL FRAGMENTS  (single source of truth)
+# ===========================================================================
+# These two helpers define, in ONE place, how every dashboard/report surface
+# expresses (a) the per-paper "citations received in a set of years" sum and
+# (b) the Al-Baha affiliation filter. The formulas used to be copy-pasted
+# across overview(), the /departments helpers, and export_excel() — which is
+# exactly how the surfaces drifted apart before. Change the rule here and it
+# propagates everywhere; the surfaces can no longer disagree.
+#
+# `alias` is the ResearchPaper alias in the target query (rp, rp_all, rp2,
+# rp_w, ...). `_cites_expr` emits one %s per year; the caller appends
+# [str(y) for y in years] to its params, in the position the expr appears.
+
+def _cites_expr(alias, years):
+    """Per-paper citations RECEIVED in `years` (sum of CitationsByYear keys)."""
+    return ' + '.join(
+        f'COALESCE(({alias}."CitationsByYear"->>%s)::int, 0)' for _ in years
+    ) or '0'
+
+
+def _affil_clause(albaha_only, alias):
+    """SQL fragment dropping papers confirmed authored elsewhere, or '' when
+    the filter is off. AffiliationVerified IS DISTINCT FROM FALSE keeps TRUE +
+    not-yet-verified NULL, excludes only confirmed-elsewhere FALSE."""
+    if not albaha_only:
+        return ''
+    return f' AND ({alias}."AffiliationVerified" IS DISTINCT FROM FALSE)'
+
+
 def _dept_cards_windowed(years, albaha_only=False):
     """Returns {department_id: {windowed paper/citation fields}} matching the
     overview dashboard's departments block. Citations are deduped per
@@ -1270,9 +1298,9 @@ def _dept_cards_windowed(years, albaha_only=False):
     = FALSE) are dropped — same predicate the overview uses."""
     from django.db import connection
     year_strs = [str(y) for y in years]
-    yk = ' + '.join(['COALESCE((rp_all."CitationsByYear"->>%s)::int, 0)' for _ in years])
-    affil_rp    = ' AND (rp."AffiliationVerified" IS DISTINCT FROM FALSE)' if albaha_only else ''
-    affil_rpall = ' AND (rp_all."AffiliationVerified" IS DISTINCT FROM FALSE)' if albaha_only else ''
+    yk = _cites_expr('rp_all', years)
+    affil_rp    = _affil_clause(albaha_only, 'rp')
+    affil_rpall = _affil_clause(albaha_only, 'rp_all')
     sql = f'''
         WITH dept_citations AS (
             SELECT dept AS did, SUM(cites) AS total_citations FROM (
@@ -1327,8 +1355,8 @@ def _researcher_rows_windowed(years, user_ids, albaha_only=False):
     if not user_ids:
         return {}
     year_strs = [str(y) for y in years]
-    yk = ' + '.join(['COALESCE((rp."CitationsByYear"->>%s)::int, 0)' for _ in years])
-    affil = ' AND (rp."AffiliationVerified" IS DISTINCT FROM FALSE)' if albaha_only else ''
+    yk = _cites_expr('rp', years)
+    affil = _affil_clause(albaha_only, 'rp')
     sql = f'''
         SELECT a."UserID" AS uid,
             COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."PubYear" = ANY(%s)) AS total_papers,
@@ -1562,19 +1590,11 @@ def overview(request):
     """
     years = _resolve_years(request)
 
-    _affil = (request.query_params.get('affiliation') or '').strip().lower()
-    albaha_only = _affil in ('albaha', 'al-baha', 'verified', 'true', '1')
-    AFFIL_CLAUSE = (
-        ' AND (rp."AffiliationVerified" IS DISTINCT FROM FALSE)'
-        if albaha_only else ''
-    )
+    albaha_only = _albaha_only(request)
+    AFFIL_CLAUSE = _affil_clause(albaha_only, 'rp')
     # Same predicate for the citation CTEs that alias the paper table as
-    # rp_all (top-researchers + departments citations), so the toggle filters
-    # every paper-derived metric — counts AND citations — consistently.
-    AFFIL_CLAUSE_RPALL = (
-        ' AND (rp_all."AffiliationVerified" IS DISTINCT FROM FALSE)'
-        if albaha_only else ''
-    )
+    # rp_all (top-researchers + departments citations).
+    AFFIL_CLAUSE_RPALL = _affil_clause(albaha_only, 'rp_all')
 
     # AuthZ gate — institutional dashboard data is for roles that may view
     # researchers (Admin/Dean/HoD). A plain Researcher (neither perm) would
@@ -1664,10 +1684,7 @@ def overview(request):
         # 2026 have barely been cited yet.) The per-paper CitationsByYear graph
         # keeps it filterable by affiliation + HoD scope; EXISTS (not JOIN)
         # counts each paper once even when several scope authors share it.
-        cites_year_expr = ' + '.join([
-            'COALESCE((rp."CitationsByYear"->>%s)::int, 0)'
-            for _ in years
-        ])
+        cites_year_expr = _cites_expr('rp', years)
         cit_sql = (
             f'SELECT COALESCE(SUM({cites_year_expr}), 0) AS citations '
             'FROM "ResearchPaper" rp '
@@ -1699,10 +1716,7 @@ def overview(request):
 
         # Top researchers: papers PUBLISHED in window + citations
         # RECEIVED in window (per-year sum across ALL their papers).
-        year_keys_expr_alias = ' + '.join([
-            f"COALESCE((rp_all.\"CitationsByYear\"->>%s)::int, 0)"
-            for _ in years
-        ])
+        year_keys_expr_alias = _cites_expr('rp_all', years)
         cur.execute(f'''
             WITH papers_in_window AS (
                 SELECT a."UserID",
@@ -1767,10 +1781,7 @@ def overview(request):
         # window (per-year). Citation aggregation lives in a separate CTE
         # to avoid the cartesian explosion of joining authors→papers→
         # citations (each Department-Researcher contributes once).
-        year_keys_dept = ' + '.join([
-            f"COALESCE((rp_all.\"CitationsByYear\"->>%s)::int, 0)"
-            for _ in years
-        ])
+        year_keys_dept = _cites_expr('rp_all', years)
         cur.execute(f'''
             WITH dept_citations AS (
                 SELECT dept AS "DepartmentID", SUM(cites) AS total_citations
