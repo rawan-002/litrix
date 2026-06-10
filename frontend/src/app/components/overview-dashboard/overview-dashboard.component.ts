@@ -397,7 +397,8 @@ export class OverviewDashboardComponent implements OnInit {
   toggleYearMenu()  { this.yearMenuOpen.update(v => !v); }
   closeYearMenu()   { this.yearMenuOpen.set(false); }
 
-  /** Toggle a single year in/out of the selection. */
+  /** Toggle a single year in/out of the selection. Closes the popover
+   *  afterwards — picking a year shouldn't leave the menu hanging open. */
   toggleYear(y: number) {
     this.selectedYears.update(s => {
       const next = new Set(s);
@@ -405,12 +406,14 @@ export class OverviewDashboardComponent implements OnInit {
       else next.add(y);
       return next;
     });
+    this.closeYearMenu();
     this.loadOverview();
   }
 
   /** Clear the selection — equivalent to "All Years". */
   clearYears() {
     this.selectedYears.set(new Set());
+    this.closeYearMenu();
     this.loadOverview();
   }
 

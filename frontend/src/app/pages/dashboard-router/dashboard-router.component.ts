@@ -1,11 +1,10 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../../core/services/auth.service';
 import { OverviewDashboardComponent } from
   '../../components/overview-dashboard/overview-dashboard.component';
 import { ResearcherDashboardComponent } from
   '../../components/researcher-dashboard/researcher-dashboard.component';
-import { FireworksComponent } from '../../shared/fireworks/fireworks.component';
 
 
 /**
@@ -22,7 +21,6 @@ import { FireworksComponent } from '../../shared/fireworks/fireworks.component';
   standalone: true,
   imports: [
     CommonModule, OverviewDashboardComponent, ResearcherDashboardComponent,
-    FireworksComponent,
   ],
   template: `
     @if (auth.hasPermission('view_all_researchers') ||
@@ -31,38 +29,8 @@ import { FireworksComponent } from '../../shared/fireworks/fireworks.component';
     } @else if (auth.user()?.litrix_id; as lid) {
       <app-researcher-dashboard [litrixId]="lid"></app-researcher-dashboard>
     }
-
-    <!-- Warm one-per-session welcome for the project supervisor 💚 -->
-    @if (showWelcome()) {
-      <app-fireworks [name]="supervisorName()" (closed)="showWelcome.set(false)" />
-    }
   `,
 })
 export class DashboardRouterComponent {
   protected auth = inject(AuthService);
-
-  // The supervisor's account (UserID 1). Greet him with fireworks once per
-  // session — a small thank-you for overseeing the project.
-  private static readonly SUPERVISOR_USER_ID = 1;
-  private static readonly SEEN_KEY = 'litrix_welcome_v1';
-
-  readonly showWelcome = signal<boolean>(this.shouldWelcome());
-
-  private shouldWelcome(): boolean {
-    const u = this.auth.user();
-    if (!u || u.user_id !== DashboardRouterComponent.SUPERVISOR_USER_ID) return false;
-    try {
-      if (sessionStorage.getItem(DashboardRouterComponent.SEEN_KEY)) return false;
-      sessionStorage.setItem(DashboardRouterComponent.SEEN_KEY, '1');
-    } catch { /* sessionStorage unavailable — just show it */ }
-    return true;
-  }
-
-  supervisorName(): string {
-    // "Dr." + first name; the name itself stays as-is (Arabic if that's
-    // what's stored). Falls back to the English name, then a generic title.
-    const u = this.auth.user();
-    const first = (u?.full_name_ar || u?.full_name || '').trim().split(' ')[0];
-    return first ? `Dr. ${first}` : 'Doctor';
-  }
 }
