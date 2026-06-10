@@ -291,22 +291,9 @@ def parse_scopus_author_ids(ids_str: str) -> list[str]:
 # DATABASE INSPECTION (READ-ONLY)
 # =============================================================================
 
-def db_connect():
-    """Postgres connection from env vars.
-
-    Prefers DATABASE_URL (production) over DB_* discrete vars (local dev) —
-    same precedence as Django settings.py uses.
-    """
-    url = os.getenv('DATABASE_URL')
-    if url:
-        return psycopg2.connect(url)
-    return psycopg2.connect(
-        dbname=os.getenv('DB_NAME', 'LitrixDB'),
-        user=os.getenv('DB_USER', 'postgres'),
-        password=os.getenv('DB_PASSWORD', ''),
-        host=os.getenv('DB_HOST', 'localhost'),
-        port=os.getenv('DB_PORT', '5432'),
-    )
+# Shared DB helper (single source — see litrix_db.py at repo root).
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from litrix_db import db as db_connect
 
 
 def fetch_researcher_current_state(conn, user_id: int) -> dict[str, Any]:

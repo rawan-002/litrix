@@ -56,17 +56,9 @@ AFFECTED_USER_IDS = [6, 8, 81, 89, 92, 93, 106]
 BACKUP_DIR = PROJECT_ROOT / "data" / "scopus_audit"
 
 
-def db_connect():
-    url = os.getenv('DATABASE_URL')
-    if url:
-        return psycopg2.connect(url)
-    return psycopg2.connect(
-        dbname=os.getenv('DB_NAME', 'LitrixDB'),
-        user=os.getenv('DB_USER', 'postgres'),
-        password=os.getenv('DB_PASSWORD', ''),
-        host=os.getenv('DB_HOST', 'localhost'),
-        port=os.getenv('DB_PORT', '5432'),
-    )
+# Shared DB helper (single source — see litrix_db.py at repo root).
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from litrix_db import db as db_connect
 
 
 def snapshot_researcher(cur, user_id: int) -> dict:
