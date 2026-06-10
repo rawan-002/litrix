@@ -1378,8 +1378,24 @@ def overview(request):
     A one-shot payload that powers the Admin/Dean/HoD landing page.
     HoDs are auto-scoped to their own department (detected via
     Department.HeadID = current user).
+
+    Affiliation filter: pass ?affiliation=albaha to restrict every
+    PAPER-derived metric to papers NOT confirmed authored elsewhere
+    (AffiliationVerified IS DISTINCT FROM FALSE — keeps confirmed-Al-Baha
+    TRUE and not-yet-verified NULL, drops only confirmed-elsewhere FALSE).
+    Mirrors the public dashboard's AFFILIATION_VERIFIED_SQL. The default
+    (all) preserves the historical numbers untouched. Citation totals come
+    from Scholar's author-level CitationsByYear graph and can't be
+    paper-filtered, so the toggle intentionally affects paper counts only.
     """
     years = _resolve_years(request)
+
+    _affil = (request.query_params.get('affiliation') or '').strip().lower()
+    albaha_only = _affil in ('albaha', 'al-baha', 'verified', 'true', '1')
+    AFFIL_CLAUSE = (
+        ' AND (rp."AffiliationVerified" IS DISTINCT FROM FALSE)'
+        if albaha_only else ''
+    )
 
     # AuthZ gate — institutional dashboard data is for roles that may view
     # researchers (Admin/Dean/HoD). A plain Researcher (neither perm) would
@@ -1456,6 +1472,7 @@ def overview(request):
             )
             kpi_params.append(hod_dept_id)
         kpi_sql += ')'
+        kpi_sql += AFFIL_CLAUSE
         cur.execute(kpi_sql, kpi_params)
         paper_count_row = cur.fetchone()
 
@@ -1548,6 +1565,11 @@ def overview(request):
                 '               AND w_tp."DepartmentID" = %s)'
             )
             top_papers_params.append(hod_dept_id)
+        if albaha_only:
+            top_papers_sql += (
+                ' AND (SELECT rp_af."AffiliationVerified" FROM "ResearchPaper" rp_af '
+                'WHERE rp_af."PaperID" = v_top_papers.paper_id) IS DISTINCT FROM FALSE'
+            )
         top_papers_sql += ' ORDER BY citations DESC NULLS LAST LIMIT 5'
         cur.execute(top_papers_sql, top_papers_params)
         top_paper_cols = [c[0] for c in cur.description]
@@ -1601,7 +1623,7 @@ def overview(request):
             LEFT JOIN "Users" u ON u."UserID" = w."UserID" AND u."UserType" = 'Researcher'
             LEFT JOIN "Researcher" r ON r."UserID" = u."UserID"
             LEFT JOIN "Authors" a ON a."UserID" = u."UserID"
-            LEFT JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID" AND rp."PubYear" = ANY(%s)
+            LEFT JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID" AND rp."PubYear" = ANY(%s){AFFIL_CLAUSE}
             LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
             LEFT JOIN LATERAL (    SELECT "Quartile", "ImpactFactor"    FROM "JournalRankings"    WHERE "JournalID" = rp."JournalID"    ORDER BY "RankingYear" DESC NULLS LAST, "Source"    LIMIT 1) jr ON TRUE
             LEFT JOIN dept_citations dc ON dc."DepartmentID" = d."DepartmentID"
@@ -1633,7 +1655,7 @@ def overview(request):
         # double-counting papers shared across multiple co-authored faculty.
         # Citations: sum of Researcher.CitationsByYear[year] for each
         # researcher in the dept (Scholar's authoritative author-level graph).
-        cur.execute('''
+        cur.execute(f'''
             SELECT w."DepartmentID", rp."PubYear",
                    COUNT(DISTINCT rp."PaperID") AS papers
             FROM "Works_In" w
@@ -1641,7 +1663,7 @@ def overview(request):
             JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
             WHERE w."IsCurrentPosition" = TRUE
               AND rp."PubYear" = ANY(%s)
-              AND (%s::int IS NULL OR w."DepartmentID" = %s::int)
+              AND (%s::int IS NULL OR w."DepartmentID" = %s::int){AFFIL_CLAUSE}
             GROUP BY w."DepartmentID", rp."PubYear"
         ''', [chart_years, hod_dept_id, hod_dept_id])
         papers_by_dept_year = {}
@@ -1682,6 +1704,9 @@ def overview(request):
 
     return response.Response({
         'focus_years': years,
+        # Echo the affiliation filter back so the UI can reflect the
+        # active mode ('albaha' = Al-Baha-only, 'all' = unfiltered).
+        'affiliation_filter': 'albaha' if albaha_only else 'all',
         # Separate axis-year list for any frontend chart so it doesn't
         # have to re-derive the window from the by_year length.
         'chart_years': sorted(chart_years),

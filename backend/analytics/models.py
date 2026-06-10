@@ -129,6 +129,12 @@ class DepartmentStats(models.Model):
     total_isi_papers     = models.IntegerField(default=0)
     avg_h_index          = models.DecimalField(max_digits=10, decimal_places=2)
     max_h_index          = models.IntegerField()
+    # Venue split + full quartile breakdown (migration 20260607_dept_stats_split)
+    journal_papers       = models.IntegerField(default=0)
+    conference_papers    = models.IntegerField(default=0)
+    total_q2_papers      = models.IntegerField(default=0)
+    total_q3_papers      = models.IntegerField(default=0)
+    total_q4_papers      = models.IntegerField(default=0)
 
     class Meta:
         managed = False

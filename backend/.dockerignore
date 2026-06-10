@@ -1,0 +1,67 @@
+# =============================================================================
+# .dockerignore — Keep the build context small & secrets out
+# =============================================================================
+# Why this matters:
+#   Cloud Build uploads the entire context to GCS before building. A bloated
+#   context = slow builds + leaked secrets if .env sneaks in.
+# =============================================================================
+
+# Secrets — NEVER ship these into a container image.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.pytest_cache/
+
+# Virtual environments (huge, never needed in a container)
+.venv/
+venv/
+env/
+
+# Local DB & migrations dumps
+db.sqlite3
+*.dump
+*.sql.gz
+litrix_backup*
+
+# Diagnostic & scraper-only outputs (these run locally, not on the API server)
+*.xlsx
+*.csv
+!analytics/fixtures/*.csv
+ghost_papers_review.xlsx
+audit_orcid_assignments.xlsx
+manual_orphans_review.xlsx
+scholar_orphans_review.xlsx
+missing_papers.csv
+missing_papers_diagnosed.csv
+orphan_papers_full.csv
+.authorships_cache.json
+
+# Static files generated at build time inside the container (don't ship local copy)
+staticfiles/
+media/
+
+# IDE / OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Git internals (not needed in image)
+.git/
+.gitignore
+
+# Tests we don't run inside the container
+tests/
+*_test.py
+test_*.py

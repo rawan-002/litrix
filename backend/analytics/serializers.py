@@ -38,7 +38,9 @@ class DepartmentStatsSerializer(serializers.ModelSerializer):
             'department_id', 'department_name', 'college_id',
             'total_researchers', 'active_researchers',
             'total_papers', 'total_citations', 'total_q1_papers',
+            'total_q2_papers', 'total_q3_papers', 'total_q4_papers',
             'total_scopus_papers', 'total_isi_papers',
+            'journal_papers', 'conference_papers',
             'avg_h_index', 'max_h_index',
         ]
 

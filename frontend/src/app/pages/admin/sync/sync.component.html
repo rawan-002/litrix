@@ -8,6 +8,111 @@
     </p>
   </div>
 
+  <!-- ============== Citation refresh (numbers-only) ============== -->
+  <div class="bg-white rounded-2xl shadow-card p-5">
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+      <div class="min-w-0">
+        <h2 class="text-sm font-semibold text-ink-900">Citation Refresh</h2>
+        <p class="text-xs text-ink-500 mt-1 max-w-xl">
+          Updates citation <span class="font-semibold">numbers only</span> on existing
+          papers (OpenAlex first — free; optional SerpAPI fallback).
+          Never adds papers, never edits titles, never changes researcher links.
+        </p>
+      </div>
+      <div class="flex items-end gap-3 flex-wrap">
+        <div>
+          <label class="block text-[10px] uppercase tracking-wider text-ink-400 mb-1">
+            Scope
+          </label>
+          <select [ngModel]="citScope()" (ngModelChange)="citScope.set($event)"
+                  class="px-3 py-1.5 rounded-lg border border-ink-200 text-xs
+                         focus:border-accent outline-none bg-white">
+            <option value="missing">Missing citations only</option>
+            <option value="all">All papers</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[10px] uppercase tracking-wider text-ink-400 mb-1"
+                 title="Paid Google Scholar lookups for papers OpenAlex can't resolve. 0 = free OpenAlex only.">
+            SerpAPI budget
+          </label>
+          <input type="number" min="0" max="500"
+                 [ngModel]="citBudget()" (ngModelChange)="citBudget.set($event)"
+                 class="px-3 py-1.5 rounded-lg border border-ink-200 text-xs w-24
+                        focus:border-accent outline-none" />
+        </div>
+        <button (click)="triggerCitations()"
+                [disabled]="citTriggering() || citRunning()"
+                class="text-xs px-4 py-2 rounded-lg bg-ink-900 text-white
+                       hover:bg-ink-700 disabled:opacity-50">
+          @if (citRunning()) {
+            Running...
+          } @else if (citTriggering()) {
+            Starting...
+          } @else {
+            Refresh Citations
+          }
+        </button>
+      </div>
+    </div>
+    @if (citRunning()) {
+      <div class="mt-3 text-[11px] text-blue-700 bg-blue-50 rounded-lg px-3 py-2">
+        A citation refresh is in progress — track it under Recent Jobs below.
+        Only one refresh can run at a time.
+      </div>
+    }
+  </div>
+
+  <!-- ============== Incremental scrape (NEW papers only) ============== -->
+  <div class="bg-white rounded-2xl shadow-card p-5">
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+      <div class="min-w-0">
+        <h2 class="text-sm font-semibold text-ink-900">Scrape New Papers</h2>
+        <p class="text-xs text-ink-500 mt-1 max-w-xl">
+          For every researcher: checks the year of their
+          <span class="font-semibold">latest stored paper</span>, then fetches
+          Scholar newest-first and stops as soon as an older paper appears —
+          so only <span class="font-semibold">genuinely new papers</span> are
+          added. Existing papers are never re-downloaded or modified.
+          Afterwards, every new paper goes through the
+          <span class="font-semibold">Al-Baha affiliation verifier</span>
+          (OpenAlex → Crossref → PDF) — papers confirmed NOT Al-Baha are
+          flagged and excluded from the dashboards.
+        </p>
+      </div>
+      <div class="flex items-end gap-3 flex-wrap">
+        <div>
+          <label class="block text-[10px] uppercase tracking-wider text-ink-400 mb-1"
+                 title="Hard cap on SerpAPI calls. A researcher with no new papers costs exactly 1 call.">
+            SerpAPI budget
+          </label>
+          <input type="number" min="1" max="500"
+                 [ngModel]="newBudget()" (ngModelChange)="newBudget.set($event)"
+                 class="px-3 py-1.5 rounded-lg border border-ink-200 text-xs w-24
+                        focus:border-accent outline-none" />
+        </div>
+        <button (click)="triggerNewPapers()"
+                [disabled]="newTriggering() || newRunning()"
+                class="text-xs px-4 py-2 rounded-lg bg-ink-900 text-white
+                       hover:bg-ink-700 disabled:opacity-50">
+          @if (newRunning()) {
+            Running...
+          } @else if (newTriggering()) {
+            Starting...
+          } @else {
+            Scrape New Papers
+          }
+        </button>
+      </div>
+    </div>
+    @if (newRunning()) {
+      <div class="mt-3 text-[11px] text-blue-700 bg-blue-50 rounded-lg px-3 py-2">
+        A new-papers scrape is in progress — track it under Recent Jobs below.
+        Only one scrape can run at a time.
+      </div>
+    }
+  </div>
+
   @if (jobs().length > 0) {
     <div class="bg-white rounded-2xl shadow-card p-5">
       <h2 class="text-sm font-semibold text-ink-900 mb-3">Recent Jobs</h2>

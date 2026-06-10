@@ -152,17 +152,25 @@ export class LitrixApiService {
    *   • single number           → filter to that year
    *   • array of numbers        → filter to those years (CSV on the wire)
    */
-  getOverview(years?: number | number[]): Observable<OverviewPayload> {
-    let params: HttpParams | undefined;
+  getOverview(
+    years?: number | number[],
+    albahaOnly = false,
+  ): Observable<OverviewPayload> {
+    let params = new HttpParams();
     if (years != null) {
       const list = Array.isArray(years) ? years : [years];
       if (list.length > 0) {
-        params = new HttpParams().set('year', list.join(','));
+        params = params.set('year', list.join(','));
       }
+    }
+    // Al-Baha-only: exclude papers confirmed authored under a non-Al-Baha
+    // affiliation. Omitted (default) keeps the institution-wide numbers.
+    if (albahaOnly) {
+      params = params.set('affiliation', 'albaha');
     }
     return this.http.get<OverviewPayload>(
       `${this.baseUrl}/stats/overview/`,
-      params ? { params } : {}
+      params.keys().length ? { params } : {}
     );
   }
 

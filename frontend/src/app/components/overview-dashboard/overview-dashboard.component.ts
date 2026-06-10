@@ -91,6 +91,15 @@ export class OverviewDashboardComponent implements OnInit {
   readonly yearMenuOpen = signal<boolean>(false);
 
   /**
+   * Affiliation filter. false = all papers (default, institution-wide
+   * numbers untouched). true = Al-Baha only — drops papers the verifier
+   * confirmed were authored under a non-Al-Baha affiliation
+   * (AffiliationVerified = FALSE). Re-queries the backend on toggle so
+   * every paper-derived KPI/chart reflects the choice.
+   */
+  readonly albahaOnly = signal<boolean>(false);
+
+  /**
    * Hover state for each interactive chart. We keep them separate (not
    * one shared signal) so multiple charts can be in flight visually
    * without the SVGs fighting over a single tooltip render slot.
@@ -354,7 +363,7 @@ export class OverviewDashboardComponent implements OnInit {
   loadOverview() {
     this.loading.set(true);
     const years = [...this.selectedYears()];
-    this.api.getOverview(years.length ? years : undefined).subscribe({
+    this.api.getOverview(years.length ? years : undefined, this.albahaOnly()).subscribe({
       next: (payload) => {
         this.data.set(payload);
         this.loading.set(false);
@@ -383,6 +392,12 @@ export class OverviewDashboardComponent implements OnInit {
   /** Clear the selection — equivalent to "All Years". */
   clearYears() {
     this.selectedYears.set(new Set());
+    this.loadOverview();
+  }
+
+  /** Flip the Al-Baha-only affiliation filter and re-query. */
+  toggleAffiliation() {
+    this.albahaOnly.update(v => !v);
     this.loadOverview();
   }
 

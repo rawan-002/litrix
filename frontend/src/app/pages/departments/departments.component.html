@@ -113,6 +113,29 @@
                     </div>
                   </div>
                 </div>
+                <!-- Venue split + full quartile breakdown -->
+                <div class="flex flex-wrap gap-2 mt-3">
+                  <span class="px-2.5 py-1 rounded-full bg-ink-50 border border-ink-200
+                               text-[11px] text-ink-600">
+                    Journal <span class="font-semibold text-ink-900">{{ d.journal_papers ?? 0 }}</span>
+                  </span>
+                  <span class="px-2.5 py-1 rounded-full bg-ink-50 border border-ink-200
+                               text-[11px] text-ink-600">
+                    Conference <span class="font-semibold text-ink-900">{{ d.conference_papers ?? 0 }}</span>
+                  </span>
+                  <span class="px-2.5 py-1 rounded-full bg-ink-50 border border-ink-200
+                               text-[11px] text-ink-600">
+                    Q2 <span class="font-semibold text-ink-900">{{ d.total_q2_papers ?? 0 }}</span>
+                  </span>
+                  <span class="px-2.5 py-1 rounded-full bg-ink-50 border border-ink-200
+                               text-[11px] text-ink-600">
+                    Q3 <span class="font-semibold text-ink-900">{{ d.total_q3_papers ?? 0 }}</span>
+                  </span>
+                  <span class="px-2.5 py-1 rounded-full bg-ink-50 border border-ink-200
+                               text-[11px] text-ink-600">
+                    Q4 <span class="font-semibold text-ink-900">{{ d.total_q4_papers ?? 0 }}</span>
+                  </span>
+                </div>
               </div>
               <span class="text-ink-300 text-lg flex-shrink-0">
                 {{ expandedId() === d.department_id ? '▾' : '▸' }}

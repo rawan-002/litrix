@@ -855,6 +855,7 @@ def fetch_pending_papers(
     retry_pending: bool = False,
     years: Optional[list[int]] = None,
     user_id: Optional[int] = None,
+    department_id: Optional[int] = None,
 ) -> list[dict]:
     """
     Selects papers needing verification.
@@ -865,6 +866,9 @@ def fetch_pending_papers(
       - years: PubYear scope (default: dynamic dashboard window)
       - user_id: restrict to papers authored by this Users.UserID (testing
         a single researcher's profile)
+      - department_id: restrict to papers authored by a researcher whose
+        CURRENT position is in this DepartmentID (department-level run —
+        matches the dashboard's department scoping exactly)
     """
     where = ['1=1']
     params: list[Any] = []
@@ -879,6 +883,15 @@ def fetch_pending_papers(
             'AND a."UserID" = %s)'
         )
         params.append(user_id)
+
+    if department_id is not None:
+        where.append(
+            'EXISTS (SELECT 1 FROM "Authors" a '
+            'JOIN "Works_In" w ON w."UserID" = a."UserID" '
+            '                 AND w."IsCurrentPosition" = TRUE '
+            'WHERE a."PaperID" = rp."PaperID" AND w."DepartmentID" = %s)'
+        )
+        params.append(department_id)
 
     if retry_pending:
         # Special path: pick up only the papers Tier 3 (PDF) couldn't resolve.
@@ -1022,6 +1035,7 @@ def cmd_verify(conn, args):
         retry_pending=args.retry_pending,
         years=years,
         user_id=getattr(args, 'user', None),
+        department_id=getattr(args, 'department', None),
     )
     log.info(f'Fetched {len(papers)} pending papers')
     if not papers:
@@ -1094,6 +1108,16 @@ def cmd_verify(conn, args):
 
 
 def main():
+    # Windows consoles default to cp1252 — wrap stdout/stderr in UTF-8 so the
+    # box-drawing run summary and Arabic paper titles don't crash the run
+    # (matches the repo's other pipeline scripts).
+    for _stream in ('stdout', 'stderr'):
+        s = getattr(sys, _stream)
+        if getattr(s, 'encoding', '') and s.encoding.lower() != 'utf-8' and hasattr(s, 'buffer'):
+            import io
+            setattr(sys, _stream,
+                    io.TextIOWrapper(s.buffer, encoding='utf-8', errors='replace'))
+
     parser = argparse.ArgumentParser(
         description='Litrix multi-tier affiliation verifier',
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1111,6 +1135,8 @@ def main():
     parser.add_argument('--limit', type=int, help='Process at most N papers (testing)')
     parser.add_argument('--user', type=int,
                         help='Restrict to papers authored by this Users.UserID')
+    parser.add_argument('--department', type=int,
+                        help='Restrict to papers by current researchers in this DepartmentID')
     parser.add_argument('--resume',    dest='resume', action='store_true',  default=True,
                         help='Skip already-verified papers (default)')
     parser.add_argument('--no-resume', dest='resume', action='store_false',

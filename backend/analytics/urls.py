@@ -30,7 +30,10 @@ from .views import (
     overview, yearly_breakdown, export_excel, paper_detail,
     universal_search,
 )
-from . import campaign_views, my_reports_views, reconciliation_views, network_views
+from . import (
+    campaign_views, my_reports_views, reconciliation_views,
+    network_views, public_views,
+)
 
 router = DefaultRouter()
 router.register(r'researchers',  ResearcherViewSet,       basename='researcher')
@@ -108,4 +111,34 @@ urlpatterns = [
     path('admin/author-review-queue/<int:review_id>/decide/',
          reconciliation_views.review_queue_decide,
          name='author-review-queue-decide'),
+
+    # ---- PUBLIC DASHBOARD (no auth, read-only for supervisor) ----
+    # See public_views.py for the security stance + endpoint contract.
+    path('public/overview/',
+         public_views.overview,
+         name='public-overview'),
+    path('public/departments/',
+         public_views.departments_list,
+         name='public-departments'),
+    path('public/researchers/',
+         public_views.researchers_list,
+         name='public-researchers'),
+    path('public/researchers/<str:litrix_id>/profile/',
+         public_views.researcher_profile,
+         name='public-researcher-profile'),
+    path('public/papers/',
+         public_views.papers_list,
+         name='public-papers'),
+    path('public/trends/',
+         public_views.trends,
+         name='public-trends'),
+    path('public/kpis/',
+         public_views.kpis,
+         name='public-kpis'),
+    path('public/papers/<int:paper_id>/detail/',
+         public_views.paper_detail,
+         name='public-paper-detail'),
+    path('public/export/excel/',
+         public_views.export_excel,
+         name='public-export-excel'),
 ]

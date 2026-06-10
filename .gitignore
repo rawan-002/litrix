@@ -73,3 +73,6 @@ token.json
 data/
 Scopus_Migration_2026-06/
 *.commit_msg_tmp.txt
+
+# Claude Code working memory — local assistant notes, not app source.
+memory/
