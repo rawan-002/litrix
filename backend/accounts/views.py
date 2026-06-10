@@ -1552,19 +1552,27 @@ def _unregister_user(request, user_id: int, snapshot: dict):
             email = r[0] if r else None
 
             # Registration records tied to this email + invitations.
+            #
+            # We RE-OPEN the invitation (RevokedAt/UsedAt/UsedByUserID → NULL)
+            # instead of revoking it, so the SAME invitation link works again
+            # to register this researcher anew. Re-registration then reclaims
+            # this very Users row through the Scholar_ID/ORCID claim-profile
+            # path (keeping every paper). Revoking it — the old behaviour —
+            # left the original link dead ("invalid_invitation · revoked")
+            # whenever an un-registered account tried to sign up again.
             if email:
                 cur.execute(
                     'DELETE FROM "RegistrationRequest" WHERE LOWER("Email") = LOWER(%s)',
                     [email],
                 )
                 cur.execute(
-                    'UPDATE "Invitation" SET "RevokedAt" = NOW(), "UsedAt" = NULL, '
+                    'UPDATE "Invitation" SET "RevokedAt" = NULL, "UsedAt" = NULL, '
                     '"UsedByUserID" = NULL WHERE LOWER("InvitedEmail") = LOWER(%s)',
                     [email],
                 )
             cur.execute(
-                'UPDATE "Invitation" SET "UsedAt" = NULL, "UsedByUserID" = NULL '
-                'WHERE "UsedByUserID" = %s',
+                'UPDATE "Invitation" SET "RevokedAt" = NULL, "UsedAt" = NULL, '
+                '"UsedByUserID" = NULL WHERE "UsedByUserID" = %s',
                 [user_id],
             )
 

@@ -78,7 +78,7 @@
                   class="w-full p-5 text-left hover:bg-ink-50/50 transition">
             <div class="flex items-center justify-between gap-4">
               <div class="flex-1 min-w-0">
-                <h3 class="text-base font-semibold text-ink-900" dir="rtl">
+                <h3 class="text-base font-semibold text-ink-900">
                   {{ d.department_name }}
                 </h3>
                 <div class="grid grid-cols-5 gap-6 mt-3 max-w-2xl">
@@ -156,7 +156,7 @@
                 <table class="w-full text-sm">
                   <thead class="text-xs text-ink-400 uppercase tracking-wider">
                     <tr>
-                      <th class="text-right py-2 pr-3" dir="rtl">الباحث</th>
+                      <th class="text-left py-2 pr-3">Researcher</th>
                       <th class="text-left py-2 px-3">Rank</th>
                       <th class="text-right py-2 px-3">Papers</th>
                       <th class="text-right py-2 px-3">Citations</th>
@@ -168,10 +168,10 @@
                   <tbody class="divide-y divide-ink-100">
                     @for (r of researchers(); track r.user_id) {
                       <tr class="hover:bg-white">
-                        <td class="py-2 pr-3 text-right" dir="rtl">
+                        <td class="py-2 pr-3 text-left">
                           {{ r.full_name_ar || r.full_name_en || '—' }}
                         </td>
-                        <td class="py-2 px-3 text-ink-600">{{ r.academic_rank || '—' }}</td>
+                        <td class="py-2 px-3 text-ink-600">{{ rankLabel(r.academic_rank) }}</td>
                         <td class="py-2 px-3 text-right text-ink-700 font-medium">
                           {{ r.total_papers }}
                         </td>

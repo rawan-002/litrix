@@ -168,4 +168,32 @@ export class DepartmentsComponent {
       total_researchers: 'Researchers',
     }[key];
   }
+
+  /**
+   * Academic ranks come in mixed forms — Arabic (from the scrape) and
+   * English camelCase (from the registration dropdown, e.g.
+   * "AssistantProfessor"). Normalise both to one clean English label so the
+   * Departments table reads consistently. Keys are space-stripped +
+   * lower-cased so "أستاذ مساعد" and "AssistantProfessor" both resolve.
+   * Unknown values fall through unchanged rather than showing a dash.
+   */
+  private static readonly RANK_EN: Record<string, string> = {
+    'أستاذ':         'Professor',
+    'أستاذمشارك':    'Associate Professor',
+    'أستاذمساعد':    'Assistant Professor',
+    'محاضر':         'Lecturer',
+    'معيد':          'Teaching Assistant',
+    'professor':           'Professor',
+    'associateprofessor':  'Associate Professor',
+    'assistantprofessor':  'Assistant Professor',
+    'lecturer':            'Lecturer',
+    'teachingassistant':   'Teaching Assistant',
+    'demonstrator':        'Teaching Assistant',
+  };
+
+  rankLabel(rank: string | null | undefined): string {
+    if (!rank) return '—';
+    const key = rank.trim().toLowerCase().replace(/\s+/g, '');
+    return DepartmentsComponent.RANK_EN[key] ?? rank.trim();
+  }
 }
