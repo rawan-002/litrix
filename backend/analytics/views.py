@@ -1396,6 +1396,13 @@ def overview(request):
         ' AND (rp."AffiliationVerified" IS DISTINCT FROM FALSE)'
         if albaha_only else ''
     )
+    # Same predicate for the citation CTEs that alias the paper table as
+    # rp_all (top-researchers + departments citations), so the toggle filters
+    # every paper-derived metric — counts AND citations — consistently.
+    AFFIL_CLAUSE_RPALL = (
+        ' AND (rp_all."AffiliationVerified" IS DISTINCT FROM FALSE)'
+        if albaha_only else ''
+    )
 
     # AuthZ gate — institutional dashboard data is for roles that may view
     # researchers (Admin/Dean/HoD). A plain Researcher (neither perm) would
@@ -1451,18 +1458,34 @@ def overview(request):
         # for "publications" KPI).
         # KPI papers + Q1/Scopus/ISI counts. Author-in-dept clause added
         # at the end for HoDs only.
+        # Citations now derive from the per-paper graph stored on each
+        # ResearchPaper (CitationsByYear), summed over the window years and
+        # folded into THIS same query. That means the Citations KPI covers
+        # exactly the same paper set as the Publications KPI — so the
+        # affiliation filter AND the HoD/dept scope apply to citations too.
+        # (Previously citations came from Researcher.CitationsByYear at the
+        # author level, which couldn't be filtered per-paper.) Consistent
+        # with how the departments + top-researchers blocks already count
+        # citations. One row per paper (LATERAL jr is LIMIT 1), so SUM is safe.
+        rp_cite_expr = ' + '.join([
+            'COALESCE((rp."CitationsByYear"->>%s)::int, 0)'
+            for _ in years
+        ])
         kpi_sql = (
             'SELECT COUNT(DISTINCT rp."PaperID") AS papers, '
             '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q1\') AS q1, '
             '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = \'Scopus\' OR jr."Quartile" IS NOT NULL) AS scopus, '
-            '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = \'ISI\') AS isi '
+            '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = \'ISI\') AS isi, '
+            f'      COALESCE(SUM({rp_cite_expr}), 0) AS citations '
             'FROM "ResearchPaper" rp '
             'LEFT JOIN LATERAL (SELECT "Quartile","ImpactFactor" FROM "JournalRankings" '
             '  WHERE "JournalID" = rp."JournalID" ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1) jr ON TRUE '
             'WHERE rp."PubYear" = ANY(%s) '
             '  AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"'
         )
-        kpi_params = [years]
+        # Params: one per year for the citations SELECT expr, then the
+        # PubYear ANY() list, then the optional HoD dept id.
+        kpi_params = [str(y) for y in years] + [years]
         if hod_dept_id:
             kpi_sql += (
                 ' AND EXISTS (SELECT 1 FROM "Works_In" w2 '
@@ -1476,35 +1499,11 @@ def overview(request):
         cur.execute(kpi_sql, kpi_params)
         paper_count_row = cur.fetchone()
 
-        # Citations: SUM Researcher.CitationsByYear for the requested years.
-        # This is Scholar's authoritative per-year graph at the AUTHOR level
-        # (no per-paper backfill needed). Slight over-count risk on co-authored
-        # papers between our own researchers, but acceptable given Scholar's
-        # native granularity and the cost of per-paper SerpAPI fetches.
-        year_keys_expr = ' + '.join([
-            f"COALESCE((r.\"CitationsByYear\"->>%s)::int, 0)"
-            for _ in years
-        ])
-        # HoD-scoped: restrict the citations sum to researchers whose
-        # current Works_In matches the HoD's department. For Admin/Dean,
-        # the filter is bypassed (%s IS NULL).
-        cur.execute(f'''
-            SELECT COALESCE(SUM({year_keys_expr}), 0) AS citations
-            FROM "Researcher" r
-            WHERE r."CitationsByYear" IS NOT NULL
-              AND (%s::int IS NULL OR EXISTS (
-                    SELECT 1 FROM "Works_In" w_cit
-                    WHERE w_cit."UserID" = r."UserID"
-                      AND w_cit."DepartmentID" = %s::int
-                      AND w_cit."IsCurrentPosition" = TRUE
-              ))
-        ''', [str(y) for y in years] + [hod_dept_id, hod_dept_id])
-        citations_row = cur.fetchone()
-
-        # Combine into the (papers, citations, q1, scopus, isi) shape
+        # Combine into the (papers, citations, q1, scopus, isi) shape.
+        # paper_count_row = (papers, q1, scopus, isi, citations).
         paper_totals = (
             paper_count_row[0],
-            citations_row[0],
+            paper_count_row[4],
             paper_count_row[1],
             paper_count_row[2],
             paper_count_row[3],
@@ -1522,7 +1521,7 @@ def overview(request):
                        COUNT(DISTINCT rp."PaperID") AS focus_papers
                 FROM "Authors" a
                 JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
-                WHERE rp."PubYear" = ANY(%s)
+                WHERE rp."PubYear" = ANY(%s){AFFIL_CLAUSE}
                 GROUP BY a."UserID"
             ),
             citations_in_window AS (
@@ -1530,6 +1529,7 @@ def overview(request):
                        COALESCE(SUM({year_keys_expr_alias}), 0) AS focus_citations
                 FROM "Authors" a
                 JOIN "ResearchPaper" rp_all ON rp_all."PaperID" = a."PaperID"
+                WHERE 1=1{AFFIL_CLAUSE_RPALL}
                 GROUP BY a."UserID"
             )
             SELECT
@@ -1591,7 +1591,7 @@ def overview(request):
                 FROM "Works_In" w
                 JOIN "Authors" a ON a."UserID" = w."UserID"
                 JOIN "ResearchPaper" rp_all ON rp_all."PaperID" = a."PaperID"
-                WHERE w."IsCurrentPosition" = TRUE
+                WHERE w."IsCurrentPosition" = TRUE{AFFIL_CLAUSE_RPALL}
                 GROUP BY w."DepartmentID"
             )
             SELECT
@@ -1670,20 +1670,32 @@ def overview(request):
         for did, yr, n in cur.fetchall():
             papers_by_dept_year.setdefault(did, {})[int(yr)] = int(n)
 
-        cur.execute('''
-            SELECT w."DepartmentID",
-                   year_kv.key::int AS year,
-                   SUM((year_kv.value)::int) AS citations
-            FROM "Works_In" w
-            JOIN "Researcher" r ON r."UserID" = w."UserID"
-            CROSS JOIN LATERAL jsonb_each_text(
-                COALESCE(r."CitationsByYear", '{}'::jsonb)
-            ) AS year_kv
-            WHERE w."IsCurrentPosition" = TRUE
-              AND year_kv.value ~ '^[0-9]+$'
-              AND year_kv.key::int = ANY(%s)
-              AND (%s::int IS NULL OR w."DepartmentID" = %s::int)
-            GROUP BY w."DepartmentID", year_kv.key::int
+        # Per-year citations per department, from the per-paper graph so the
+        # affiliation filter applies (the KPI uses the same source). DISTINCT
+        # on (dept, paper, year) dedupes papers co-authored by two researchers
+        # in the SAME department — otherwise the paper's citations would be
+        # double-counted for that department. A paper spanning two departments
+        # still counts once per department, which is intended.
+        cur.execute(f'''
+            SELECT dept, yr, SUM(cites) AS citations
+            FROM (
+                SELECT DISTINCT
+                    w."DepartmentID"      AS dept,
+                    rp."PaperID"          AS pid,
+                    year_kv.key::int      AS yr,
+                    (year_kv.value)::int  AS cites
+                FROM "Works_In" w
+                JOIN "Authors" a ON a."UserID" = w."UserID"
+                JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
+                CROSS JOIN LATERAL jsonb_each_text(
+                    COALESCE(rp."CitationsByYear", '{{}}'::jsonb)
+                ) AS year_kv
+                WHERE w."IsCurrentPosition" = TRUE
+                  AND year_kv.value ~ '^[0-9]+$'
+                  AND year_kv.key::int = ANY(%s)
+                  AND (%s::int IS NULL OR w."DepartmentID" = %s::int){AFFIL_CLAUSE}
+            ) ded
+            GROUP BY dept, yr
         ''', [chart_years, hod_dept_id, hod_dept_id])
         cites_by_dept_year = {}
         for did, yr, n in cur.fetchall():
