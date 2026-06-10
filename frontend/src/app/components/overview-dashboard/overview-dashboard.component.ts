@@ -553,9 +553,11 @@ export class OverviewDashboardComponent implements OnInit {
     //   normal HTTP pipeline, then trigger a save via a temporary
     //   anchor — same end result, with auth intact.
     this.exporting.set(true);
-    const params = new HttpParams()
+    let params = new HttpParams()
       .set('years', years)
       .set('sheets', sheets);
+    // Match the on-screen Al-Baha filter so the workbook agrees with the dashboard.
+    if (this.albahaOnly()) params = params.set('affiliation', 'albaha');
 
     this.http.get(
       `${environment.apiBaseUrl}/export/excel/`,

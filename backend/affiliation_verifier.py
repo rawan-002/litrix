@@ -856,6 +856,7 @@ def fetch_pending_papers(
     years: Optional[list[int]] = None,
     user_id: Optional[int] = None,
     department_id: Optional[int] = None,
+    attributed_only: bool = False,
 ) -> list[dict]:
     """
     Selects papers needing verification.
@@ -892,6 +893,13 @@ def fetch_pending_papers(
             'WHERE a."PaperID" = rp."PaperID" AND w."DepartmentID" = %s)'
         )
         params.append(department_id)
+
+    if attributed_only:
+        # Only papers linked to at least one Litrix author — these are the
+        # ones that actually surface on the dashboards. Skips orphan papers.
+        where.append(
+            'EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID")'
+        )
 
     if retry_pending:
         # Special path: pick up only the papers Tier 3 (PDF) couldn't resolve.
@@ -1036,6 +1044,7 @@ def cmd_verify(conn, args):
         years=years,
         user_id=getattr(args, 'user', None),
         department_id=getattr(args, 'department', None),
+        attributed_only=getattr(args, 'attributed', False),
     )
     log.info(f'Fetched {len(papers)} pending papers')
     if not papers:
@@ -1137,6 +1146,8 @@ def main():
                         help='Restrict to papers authored by this Users.UserID')
     parser.add_argument('--department', type=int,
                         help='Restrict to papers by current researchers in this DepartmentID')
+    parser.add_argument('--attributed', action='store_true',
+                        help='Only papers linked to at least one Litrix author (dashboard-visible)')
     parser.add_argument('--resume',    dest='resume', action='store_true',  default=True,
                         help='Skip already-verified papers (default)')
     parser.add_argument('--no-resume', dest='resume', action='store_false',

@@ -68,6 +68,10 @@ export class DepartmentsComponent {
   readonly sortBy = signal<SortKey>('total_papers');
   readonly search = signal('');
 
+  /** Al-Baha-only affiliation filter — drops papers confirmed authored
+   *  elsewhere. Same semantics as the overview dashboard's toggle. */
+  readonly albahaOnly = signal(false);
+
   readonly expandedId = signal<number | null>(null);
   readonly researchers = signal<ResearcherRow[]>([]);
   readonly resLoading = signal(false);
@@ -121,8 +125,12 @@ export class DepartmentsComponent {
   }
 
   refresh() {
-    this.loading.set(true);
-    this.api.listDepartments({ ordering: '-total_papers' }).subscribe({
+    // Keep the current cards on screen while re-fetching (e.g. after toggling
+    // the Al-Baha filter) so the page never blanks.
+    if (this.departments().length === 0) this.loading.set(true);
+    this.api.listDepartments({
+      ordering: '-total_papers', albahaOnly: this.albahaOnly(),
+    }).subscribe({
       next: (r: any) => {
         // Response can be either {results: [...]} (paginated) or [...]
         const items = r?.results ?? r ?? [];
@@ -130,10 +138,23 @@ export class DepartmentsComponent {
         this.loading.set(false);
       },
       error: e => {
-        this.error.set(e?.error?.error || 'Failed to load departments');
+        if (this.departments().length === 0) {
+          this.error.set(e?.error?.error || 'Failed to load departments');
+        }
         this.loading.set(false);
       },
     });
+  }
+
+  /** Flip the Al-Baha-only filter and re-fetch (cards + any open dept). */
+  toggleAffiliation() {
+    this.albahaOnly.update(v => !v);
+    this.refresh();
+    const open = this.expandedId();
+    if (open != null) {
+      const d = this.departments().find(x => x.department_id === open);
+      if (d) { this.expandedId.set(null); this.toggleExpand(d); }
+    }
   }
 
   toggleExpand(d: DeptCard) {
@@ -143,7 +164,7 @@ export class DepartmentsComponent {
     }
     this.expandedId.set(d.department_id);
     this.resLoading.set(true);
-    this.api.getDepartmentResearchers(d.department_id).subscribe({
+    this.api.getDepartmentResearchers(d.department_id, this.albahaOnly()).subscribe({
       next: (r: any) => {
         const items = r?.results ?? r ?? [];
         this.researchers.set(items);

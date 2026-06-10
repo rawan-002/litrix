@@ -319,6 +319,14 @@ def export_excel(request):
     if not years:
         years = list(FOCUS_YEARS)
 
+    # Affiliation filter — when the dashboard exports in "Al-Baha only" mode it
+    # passes ?affiliation=albaha; every paper/citation query below then drops
+    # papers confirmed authored elsewhere, so the workbook matches the screen.
+    albaha_only = _albaha_only(request)
+    AFFIL     = ' AND (rp."AffiliationVerified" IS DISTINCT FROM FALSE)'     if albaha_only else ''
+    AFFIL_RP2 = ' AND (rp2."AffiliationVerified" IS DISTINCT FROM FALSE)'    if albaha_only else ''
+    AFFIL_RPW = ' AND (rp_w."AffiliationVerified" IS DISTINCT FROM FALSE)'   if albaha_only else ''
+
     sheets_param = request.query_params.get('sheets', '').strip()
     if sheets_param:
         sheets = {s.strip().lower() for s in sheets_param.split(',') if s.strip()}
@@ -389,6 +397,7 @@ def export_excel(request):
             if scoped:
                 papers_sql += _dept_paper_clause('rp')
                 papers_params.append(hod_dept_id)
+            papers_sql += AFFIL
             papers_sql += ') sub'
             cur.execute(papers_sql, papers_params)
             p_total, p_q1 = cur.fetchone()
@@ -414,6 +423,7 @@ def export_excel(request):
                 )
                 cit_params.append(hod_dept_id)
             cit_sql += ')'
+            cit_sql += AFFIL
             cur.execute(cit_sql, cit_params)
             c_total = cur.fetchone()[0]
 
@@ -515,6 +525,7 @@ def export_excel(request):
                 if scoped:
                     summary_sql += _dept_paper_clause('rp')
                     summary_params.append(hod_dept_id)
+                summary_sql += AFFIL
                 cur.execute(summary_sql, summary_params)
                 p, q1, q2, q3, q4, jp, cp = cur.fetchone()
 
@@ -536,6 +547,7 @@ def export_excel(request):
                     )
                     cit_params.append(hod_dept_id)
                 cit_sql += ')'
+                cit_sql += AFFIL
                 cur.execute(cit_sql, cit_params)
                 c = cur.fetchone()[0]
             for label, val in [
@@ -575,7 +587,7 @@ def export_excel(request):
                     '        FROM "Works_In" w '
                     '        JOIN "Authors" a2 ON a2."UserID" = w."UserID" '
                     '        JOIN "ResearchPaper" rp2 ON rp2."PaperID" = a2."PaperID" '
-                    '        WHERE w."IsCurrentPosition" = TRUE'
+                    '        WHERE w."IsCurrentPosition" = TRUE' + AFFIL_RP2 +
                     '    ) ded GROUP BY dept'
                     ') '
                     'SELECT '
@@ -593,7 +605,7 @@ def export_excel(request):
                     'LEFT JOIN "Works_In" w ON w."DepartmentID" = d."DepartmentID" AND w."IsCurrentPosition" = TRUE '
                     'LEFT JOIN "Users" u ON u."UserID" = w."UserID" AND u."UserType" = \'Researcher\' '
                     'LEFT JOIN "Authors" a ON a."UserID" = u."UserID" '
-                    'LEFT JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID" AND rp."PubYear" = %s '
+                    'LEFT JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID" AND rp."PubYear" = %s' + AFFIL + ' '
                     'LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID" '
                     'LEFT JOIN LATERAL (SELECT "Quartile", "ImpactFactor" FROM "JournalRankings" '
                     '  WHERE "JournalID" = rp."JournalID" ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1) jr ON TRUE '
@@ -662,7 +674,7 @@ def export_excel(request):
                 LEFT JOIN "Works_In" w ON w."UserID" = u."UserID" AND w."IsCurrentPosition" = TRUE
                 LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
                 LEFT JOIN "Authors" a_w ON a_w."UserID" = u."UserID"
-                LEFT JOIN "ResearchPaper" rp_w ON rp_w."PaperID" = a_w."PaperID"
+                LEFT JOIN "ResearchPaper" rp_w ON rp_w."PaperID" = a_w."PaperID"{affil_rpw}
                 LEFT JOIN v_researcher_h_index hi ON hi."UserID" = u."UserID"
                 WHERE u."UserType" = 'Researcher'
                 {dept_filter}
@@ -682,12 +694,12 @@ def export_excel(request):
             researchers_params.update({f'y{i}': str(y) for i, y in enumerate(years)})
             if scoped:
                 researchers_sql = researchers_sql.format(
-                    cite_window=cite_window_expr,
+                    cite_window=cite_window_expr, affil_rpw=AFFIL_RPW,
                     dept_filter='AND w."DepartmentID" = %(dept)s')
                 researchers_params['dept'] = hod_dept_id
             else:
                 researchers_sql = researchers_sql.format(
-                    cite_window=cite_window_expr, dept_filter='')
+                    cite_window=cite_window_expr, affil_rpw=AFFIL_RPW, dept_filter='')
             cur.execute(researchers_sql, researchers_params)
             for row in cur.fetchall():
                 ws.append(list(row))
@@ -732,6 +744,7 @@ def export_excel(request):
                 if scoped:
                     journals_sql += ' AND v.department_id = %s'
                     journals_params.append(hod_dept_id)
+                journals_sql += AFFIL
                 journals_sql += ' ORDER BY v.department_name, v.citations DESC NULLS LAST'
                 cur.execute(journals_sql, journals_params)
                 for row in cur.fetchall():
@@ -765,6 +778,7 @@ def export_excel(request):
                 if scoped:
                     conf_sql += ' AND v.department_id = %s'
                     conf_params.append(hod_dept_id)
+                conf_sql += AFFIL
                 conf_sql += ' ORDER BY v.department_name, v.citations DESC NULLS LAST'
                 cur.execute(conf_sql, conf_params)
                 for row in cur.fetchall():
@@ -1240,13 +1254,25 @@ def _hod_scope_department_id(request):
 # number. Structural columns the views own (researcher counts, h-index) are
 # left untouched.
 # ----------------------------------------------------------------------------
-def _dept_cards_windowed(years):
+def _albaha_only(request):
+    """True when the caller asked to exclude papers confirmed authored under a
+    non-Al-Baha affiliation (?affiliation=albaha). Mirrors the overview parse."""
+    qp = getattr(request, 'query_params', None) or getattr(request, 'GET', {})
+    v = (qp.get('affiliation') or '').strip().lower()
+    return v in ('albaha', 'al-baha', 'verified', 'true', '1')
+
+
+def _dept_cards_windowed(years, albaha_only=False):
     """Returns {department_id: {windowed paper/citation fields}} matching the
     overview dashboard's departments block. Citations are deduped per
-    (department, paper) so a paper co-authored within a department counts once."""
+    (department, paper) so a paper co-authored within a department counts once.
+    When albaha_only, papers confirmed authored elsewhere (AffiliationVerified
+    = FALSE) are dropped — same predicate the overview uses."""
     from django.db import connection
     year_strs = [str(y) for y in years]
     yk = ' + '.join(['COALESCE((rp_all."CitationsByYear"->>%s)::int, 0)' for _ in years])
+    affil_rp    = ' AND (rp."AffiliationVerified" IS DISTINCT FROM FALSE)' if albaha_only else ''
+    affil_rpall = ' AND (rp_all."AffiliationVerified" IS DISTINCT FROM FALSE)' if albaha_only else ''
     sql = f'''
         WITH dept_citations AS (
             SELECT dept AS did, SUM(cites) AS total_citations FROM (
@@ -1255,7 +1281,7 @@ def _dept_cards_windowed(years):
                 FROM "Works_In" w
                 JOIN "Authors" a ON a."UserID" = w."UserID"
                 JOIN "ResearchPaper" rp_all ON rp_all."PaperID" = a."PaperID"
-                WHERE w."IsCurrentPosition" = TRUE
+                WHERE w."IsCurrentPosition" = TRUE{affil_rpall}
             ) ded GROUP BY dept
         )
         SELECT d."DepartmentID" AS department_id,
@@ -1274,7 +1300,7 @@ def _dept_cards_windowed(years):
         LEFT JOIN "Works_In" w ON w."DepartmentID" = d."DepartmentID" AND w."IsCurrentPosition" = TRUE
         LEFT JOIN "Users" u ON u."UserID" = w."UserID" AND u."UserType" = 'Researcher'
         LEFT JOIN "Authors" a ON a."UserID" = u."UserID"
-        LEFT JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID" AND rp."PubYear" = ANY(%s)
+        LEFT JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID" AND rp."PubYear" = ANY(%s){affil_rp}
         LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
         LEFT JOIN LATERAL (SELECT "Quartile" FROM "JournalRankings"
             WHERE "JournalID" = rp."JournalID"
@@ -1292,15 +1318,17 @@ def _dept_cards_windowed(years):
     return out
 
 
-def _researcher_rows_windowed(years, user_ids):
+def _researcher_rows_windowed(years, user_ids, albaha_only=False):
     """Returns {user_id: {total_papers, q1_papers, total_citations}} for the
     given researchers, this-period per-paper (papers PUBLISHED in window;
-    citations RECEIVED in window across all their papers — matching overview)."""
+    citations RECEIVED in window across all their papers — matching overview).
+    When albaha_only, papers confirmed authored elsewhere are dropped."""
     from django.db import connection
     if not user_ids:
         return {}
     year_strs = [str(y) for y in years]
     yk = ' + '.join(['COALESCE((rp."CitationsByYear"->>%s)::int, 0)' for _ in years])
+    affil = ' AND (rp."AffiliationVerified" IS DISTINCT FROM FALSE)' if albaha_only else ''
     sql = f'''
         SELECT a."UserID" AS uid,
             COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."PubYear" = ANY(%s)) AS total_papers,
@@ -1311,7 +1339,7 @@ def _researcher_rows_windowed(years, user_ids):
         LEFT JOIN LATERAL (SELECT "Quartile" FROM "JournalRankings"
             WHERE "JournalID" = rp."JournalID"
             ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1) jr ON TRUE
-        WHERE a."UserID" = ANY(%s)
+        WHERE a."UserID" = ANY(%s){affil}
         GROUP BY a."UserID"
     '''
     out = {}
@@ -1357,7 +1385,8 @@ class DepartmentViewSet(viewsets.ReadOnlyModelViewSet):
         data = resp.data
         rows = data.get('results') if isinstance(data, dict) else data
         if rows:
-            win = _dept_cards_windowed(list(FOCUS_YEARS))
+            albaha = _albaha_only(request)
+            win = _dept_cards_windowed(list(FOCUS_YEARS), albaha)
             for r in rows:
                 w = win.get(r.get('department_id'))
                 if w:
@@ -1380,7 +1409,7 @@ class DepartmentViewSet(viewsets.ReadOnlyModelViewSet):
         page = self.paginate_queryset(qs)
         rows = [dict(r) for r in ResearcherStatsSerializer(page or qs, many=True).data]
         win = _researcher_rows_windowed(
-            list(FOCUS_YEARS), [r['user_id'] for r in rows])
+            list(FOCUS_YEARS), [r['user_id'] for r in rows], _albaha_only(request))
         for r in rows:
             w = win.get(r['user_id'])
             r.update(w if w else {'total_papers': 0, 'q1_papers': 0, 'total_citations': 0})

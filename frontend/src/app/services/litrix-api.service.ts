@@ -106,11 +106,12 @@ export class LitrixApiService {
     );
   }
 
-  listDepartments(opts?: { ordering?: string }):
+  listDepartments(opts?: { ordering?: string; albahaOnly?: boolean }):
     Observable<Paginated<DepartmentStats>>
   {
     let params = new HttpParams();
     if (opts?.ordering) params = params.set('ordering', opts.ordering);
+    if (opts?.albahaOnly) params = params.set('affiliation', 'albaha');
     return this.http.get<Paginated<DepartmentStats>>(
       `${this.baseUrl}/departments/`, { params }
     );
@@ -120,9 +121,13 @@ export class LitrixApiService {
    * GET /api/departments/<id>/researchers/
    * Returns researchers in this department with their full stats.
    */
-  getDepartmentResearchers(departmentId: number): Observable<any> {
+  getDepartmentResearchers(
+    departmentId: number, albahaOnly = false,
+  ): Observable<any> {
+    let params = new HttpParams();
+    if (albahaOnly) params = params.set('affiliation', 'albaha');
     return this.http.get<any>(
-      `${this.baseUrl}/departments/${departmentId}/researchers/`
+      `${this.baseUrl}/departments/${departmentId}/researchers/`, { params }
     );
   }
 
