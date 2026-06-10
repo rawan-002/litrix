@@ -19,8 +19,10 @@ npm start                             # ng serve → http://localhost:4200
 npm run build                         # production build (strict TS — this is where type errors surface)
 npm test                              # ng test (vitest-based)
 
-# Deploy (from repo root) — commits + pushes; Vercel auto-builds
-.\deploy.ps1 "feat: message"
+# Deploy (from repo root) — runs a local gate (npm run build + manage.py
+# check), then commits + pushes. GitHub Actions CI (.github/workflows/ci.yml)
+# re-runs both on the pushed commit; Render + Vercel auto-build.
+.\deploy.ps1 "feat: message"          # add -SkipChecks to bypass the local gate
 
 # SQL schema migrations (raw SQL files, NOT Django migrations)
 python tools/run_migration.py backend/migrations/<file>.sql
