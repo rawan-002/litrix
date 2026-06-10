@@ -81,8 +81,16 @@ export class OverviewDashboardComponent implements OnInit {
   }
 
   readonly data    = signal<OverviewPayload | null>(null);
+  /** True only for the FIRST load (no data yet) → full-screen skeleton. */
   readonly loading = signal<boolean>(true);
+  /** True while re-fetching after a filter change — the existing data stays
+   *  on screen so the dashboard never blanks; we only show a subtle spinner. */
+  readonly refreshing = signal<boolean>(false);
   readonly error   = signal<string | null>(null);
+
+  /** Monotonic request id so an out-of-order (slower) response from an
+   *  earlier filter state can't overwrite the latest one. */
+  private reqSeq = 0;
 
   /** Currently selected years. Empty Set = "All Years" (no filter). */
   readonly selectedYears = signal<Set<number>>(new Set());
@@ -361,16 +369,27 @@ export class OverviewDashboardComponent implements OnInit {
   }
 
   loadOverview() {
-    this.loading.set(true);
+    // First load → full skeleton. Subsequent filter changes → keep the
+    // current data visible and just flag a background refresh, so toggling
+    // years / Al-Baha feels instant instead of blanking the page.
+    if (this.data()) this.refreshing.set(true);
+    else this.loading.set(true);
+
+    const seq = ++this.reqSeq;
     const years = [...this.selectedYears()];
     this.api.getOverview(years.length ? years : undefined, this.albahaOnly()).subscribe({
       next: (payload) => {
+        if (seq !== this.reqSeq) return;   // superseded by a newer request
         this.data.set(payload);
         this.loading.set(false);
+        this.refreshing.set(false);
       },
       error: (err) => {
-        this.error.set(`Failed to load: ${err.message}`);
+        if (seq !== this.reqSeq) return;
+        // Keep showing the last good data on a refresh failure.
+        if (!this.data()) this.error.set(`Failed to load: ${err.message}`);
         this.loading.set(false);
+        this.refreshing.set(false);
       },
     });
   }
