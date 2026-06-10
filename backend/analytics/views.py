@@ -393,23 +393,27 @@ def export_excel(request):
             cur.execute(papers_sql, papers_params)
             p_total, p_q1 = cur.fetchone()
 
-            # Citations (Researcher.CitationsByYear) summed, scoped to dept.
+            # Citations RECEIVED in the selected years, per-paper
+            # (ResearchPaper.CitationsByYear) — the SAME definition the
+            # overview dashboard uses, so the export and the dashboard agree.
+            # EXISTS (not JOIN) counts each paper once across co-authors.
             year_keys_expr = ' + '.join([
-                "COALESCE((r.\"CitationsByYear\"->>%s)::int, 0)" for _ in years
+                'COALESCE((rp."CitationsByYear"->>%s)::int, 0)' for _ in years
             ])
             cit_sql = (
-                f'SELECT COALESCE(SUM({year_keys_expr}), 0) FROM "Researcher" r '
-                'WHERE r."CitationsByYear" IS NOT NULL'
+                f'SELECT COALESCE(SUM({year_keys_expr}), 0) FROM "ResearchPaper" rp '
+                'WHERE EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"'
             )
             cit_params = list(year_strs)
             if scoped:
                 cit_sql += (
                     ' AND EXISTS (SELECT 1 FROM "Works_In" w '
-                    '             WHERE w."UserID" = r."UserID" '
+                    '             WHERE w."UserID" = a."UserID" '
                     '               AND w."IsCurrentPosition" = TRUE '
                     '               AND w."DepartmentID" = %s)'
                 )
                 cit_params.append(hod_dept_id)
+            cit_sql += ')'
             cur.execute(cit_sql, cit_params)
             c_total = cur.fetchone()[0]
 
@@ -514,22 +518,24 @@ def export_excel(request):
                 cur.execute(summary_sql, summary_params)
                 p, q1, q2, q3, q4, jp, cp = cur.fetchone()
 
-                # Citations: SUM Researcher.CitationsByYear[year] across
-                # researchers (scoped to the dept's current members for HoDs).
-                # Year-of-receipt semantics: citations RECEIVED this year.
+                # Citations RECEIVED this year, per-paper
+                # (ResearchPaper.CitationsByYear[year]) — same definition as
+                # the overview dashboard. EXISTS counts each paper once.
                 cit_sql = (
-                    'SELECT COALESCE(SUM(COALESCE((r."CitationsByYear"->>%s)::int, 0)), 0) '
-                    'FROM "Researcher" r WHERE r."CitationsByYear" IS NOT NULL'
+                    'SELECT COALESCE(SUM(COALESCE((rp."CitationsByYear"->>%s)::int, 0)), 0) '
+                    'FROM "ResearchPaper" rp '
+                    'WHERE EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"'
                 )
                 cit_params = [str(year)]
                 if scoped:
                     cit_sql += (
                         ' AND EXISTS (SELECT 1 FROM "Works_In" w '
-                        '             WHERE w."UserID" = r."UserID" '
+                        '             WHERE w."UserID" = a."UserID" '
                         '               AND w."IsCurrentPosition" = TRUE '
                         '               AND w."DepartmentID" = %s)'
                     )
                     cit_params.append(hod_dept_id)
+                cit_sql += ')'
                 cur.execute(cit_sql, cit_params)
                 c = cur.fetchone()[0]
             for label, val in [
@@ -556,17 +562,21 @@ def export_excel(request):
             ])
             style_header(ws, 10)
             with connection.cursor() as cur:
-                # Citations come from Researcher.CitationsByYear[year] —
-                # same source as the dashboard. Computed in a separate
-                # subquery so it's not multiplied by the papers JOIN.
+                # Citations RECEIVED this year, per-paper
+                # (ResearchPaper.CitationsByYear[year]) — same definition as
+                # the overview dashboard. DISTINCT on (dept, paper) dedupes a
+                # paper co-authored by two members of the same department so
+                # its citations aren't double-counted for that department.
                 dept_sql = (
                     'WITH dept_cites AS ('
-                    '    SELECT w."DepartmentID", '
-                    '           SUM(COALESCE((r."CitationsByYear"->>%s)::int, 0)) AS cites '
-                    '    FROM "Works_In" w '
-                    '    JOIN "Researcher" r ON r."UserID" = w."UserID" '
-                    '    WHERE w."IsCurrentPosition" = TRUE AND r."CitationsByYear" IS NOT NULL '
-                    '    GROUP BY w."DepartmentID"'
+                    '    SELECT dept AS "DepartmentID", SUM(cites) AS cites FROM ('
+                    '        SELECT DISTINCT w."DepartmentID" AS dept, rp2."PaperID" AS pid, '
+                    '               COALESCE((rp2."CitationsByYear"->>%s)::int, 0) AS cites '
+                    '        FROM "Works_In" w '
+                    '        JOIN "Authors" a2 ON a2."UserID" = w."UserID" '
+                    '        JOIN "ResearchPaper" rp2 ON rp2."PaperID" = a2."PaperID" '
+                    '        WHERE w."IsCurrentPosition" = TRUE'
+                    '    ) ded GROUP BY dept'
                     ') '
                     'SELECT '
                     '    d."DepartmentName", '
@@ -615,11 +625,15 @@ def export_excel(request):
                     u."FullName_Ar",
                     d."DepartmentName",
                     r."AcademicRank",
-                    -- Window stats (focus years only)
+                    -- Window stats. Papers = published in the focus years.
+                    -- Citations = RECEIVED in the focus years across ALL the
+                    -- researcher's papers (per-paper ResearchPaper.CitationsByYear),
+                    -- matching the overview dashboard's definition.
                     COUNT(DISTINCT a_w."PaperID") FILTER (WHERE rp_w."PubYear" = ANY(%(years)s)) AS papers_window,
-                    COALESCE(SUM(COALESCE((rp_w."RawData_Log"->'cited_by'->>'value')::int, 0))
-                        FILTER (WHERE rp_w."PubYear" = ANY(%(years)s)), 0) AS citations_window,
-                    -- All-time stats
+                    COALESCE(SUM({cite_window}), 0) AS citations_window,
+                    -- All-time stats. Citations here stay the lifetime snapshot
+                    -- (every citation the paper ever earned) — a distinct,
+                    -- explicitly-labelled "all-time" column.
                     COUNT(DISTINCT a_w."PaperID") AS papers_all,
                     COALESCE(SUM(COALESCE((rp_w."RawData_Log"->'cited_by'->>'value')::int, 0)), 0) AS citations_all,
                     COALESCE(hi.h_index, 0) AS h_index,
@@ -658,13 +672,22 @@ def export_excel(request):
                          r."LastSyncedAt"
                 ORDER BY papers_window DESC, h_index DESC
             '''
+            # Per-year keys for the windowed citation sum (named params so they
+            # coexist with the dict-style %(years)s / %(dept)s params).
+            cite_window_expr = ' + '.join([
+                f'COALESCE((rp_w."CitationsByYear"->>%(y{i})s)::int, 0)'
+                for i in range(len(years))
+            ]) or '0'
             researchers_params = {'years': years}
+            researchers_params.update({f'y{i}': str(y) for i, y in enumerate(years)})
             if scoped:
                 researchers_sql = researchers_sql.format(
+                    cite_window=cite_window_expr,
                     dept_filter='AND w."DepartmentID" = %(dept)s')
                 researchers_params['dept'] = hod_dept_id
             else:
-                researchers_sql = researchers_sql.format(dept_filter='')
+                researchers_sql = researchers_sql.format(
+                    cite_window=cite_window_expr, dept_filter='')
             cur.execute(researchers_sql, researchers_params)
             for row in cur.fetchall():
                 ws.append(list(row))
@@ -1601,14 +1624,18 @@ def overview(request):
         ])
         cur.execute(f'''
             WITH dept_citations AS (
-                SELECT
-                    w."DepartmentID",
-                    COALESCE(SUM({year_keys_dept}), 0) AS total_citations
-                FROM "Works_In" w
-                JOIN "Authors" a ON a."UserID" = w."UserID"
-                JOIN "ResearchPaper" rp_all ON rp_all."PaperID" = a."PaperID"
-                WHERE w."IsCurrentPosition" = TRUE{AFFIL_CLAUSE_RPALL}
-                GROUP BY w."DepartmentID"
+                SELECT dept AS "DepartmentID", SUM(cites) AS total_citations
+                FROM (
+                    SELECT DISTINCT
+                        w."DepartmentID"     AS dept,
+                        rp_all."PaperID"     AS pid,
+                        ({year_keys_dept})   AS cites
+                    FROM "Works_In" w
+                    JOIN "Authors" a ON a."UserID" = w."UserID"
+                    JOIN "ResearchPaper" rp_all ON rp_all."PaperID" = a."PaperID"
+                    WHERE w."IsCurrentPosition" = TRUE{AFFIL_CLAUSE_RPALL}
+                ) ded
+                GROUP BY dept
             )
             SELECT
                 d."DepartmentID"   AS department_id,
