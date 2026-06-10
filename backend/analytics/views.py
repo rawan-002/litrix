@@ -1227,12 +1227,115 @@ def _hod_scope_department_id(request):
     return r[0] if r else -1
 
 
+# ----------------------------------------------------------------------------
+# This-period (FOCUS_YEARS) per-paper stats for the /departments page.
+#
+# The v_department_stats / v_researcher_stats views are ALL-TIME + lifetime
+# citations, which disagreed with the overview dashboard (this-period
+# per-paper). Rather than rewrite those shared views (they feed other places
+# and an individual researcher's "lifetime total" is legitimately different),
+# we recompute the period-scoped numbers here with the SAME definition the
+# overview uses, and override them onto the serialized rows. Result: the
+# /departments cards + researcher rows now agree with the overview to the
+# number. Structural columns the views own (researcher counts, h-index) are
+# left untouched.
+# ----------------------------------------------------------------------------
+def _dept_cards_windowed(years):
+    """Returns {department_id: {windowed paper/citation fields}} matching the
+    overview dashboard's departments block. Citations are deduped per
+    (department, paper) so a paper co-authored within a department counts once."""
+    from django.db import connection
+    year_strs = [str(y) for y in years]
+    yk = ' + '.join(['COALESCE((rp_all."CitationsByYear"->>%s)::int, 0)' for _ in years])
+    sql = f'''
+        WITH dept_citations AS (
+            SELECT dept AS did, SUM(cites) AS total_citations FROM (
+                SELECT DISTINCT w."DepartmentID" AS dept, rp_all."PaperID" AS pid,
+                       ({yk}) AS cites
+                FROM "Works_In" w
+                JOIN "Authors" a ON a."UserID" = w."UserID"
+                JOIN "ResearchPaper" rp_all ON rp_all."PaperID" = a."PaperID"
+                WHERE w."IsCurrentPosition" = TRUE
+            ) ded GROUP BY dept
+        )
+        SELECT d."DepartmentID" AS department_id,
+            COUNT(DISTINCT rp."PaperID") AS total_papers,
+            COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q1') AS total_q1_papers,
+            COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q2') AS total_q2_papers,
+            COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q3') AS total_q3_papers,
+            COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q4') AS total_q4_papers,
+            COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = 'Scopus' OR jr."Quartile" IS NOT NULL) AS total_scopus_papers,
+            COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = 'ISI') AS total_isi_papers,
+            COUNT(DISTINCT rp."PaperID") FILTER (WHERE j."VenueType" ILIKE 'Conference%%') AS conference_papers,
+            COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."PaperID" IS NOT NULL
+                AND (j."VenueType" IS NULL OR j."VenueType" NOT ILIKE 'Conference%%')) AS journal_papers,
+            COALESCE(MAX(dc.total_citations), 0) AS total_citations
+        FROM "Department" d
+        LEFT JOIN "Works_In" w ON w."DepartmentID" = d."DepartmentID" AND w."IsCurrentPosition" = TRUE
+        LEFT JOIN "Users" u ON u."UserID" = w."UserID" AND u."UserType" = 'Researcher'
+        LEFT JOIN "Authors" a ON a."UserID" = u."UserID"
+        LEFT JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID" AND rp."PubYear" = ANY(%s)
+        LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
+        LEFT JOIN LATERAL (SELECT "Quartile" FROM "JournalRankings"
+            WHERE "JournalID" = rp."JournalID"
+            ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1) jr ON TRUE
+        LEFT JOIN dept_citations dc ON dc.did = d."DepartmentID"
+        GROUP BY d."DepartmentID"
+    '''
+    out = {}
+    with connection.cursor() as cur:
+        cur.execute(sql, year_strs + [years])
+        cols = [c[0] for c in cur.description]
+        for row in cur.fetchall():
+            rec = dict(zip(cols, row))
+            out[rec.pop('department_id')] = {k: int(v or 0) for k, v in rec.items()}
+    return out
+
+
+def _researcher_rows_windowed(years, user_ids):
+    """Returns {user_id: {total_papers, q1_papers, total_citations}} for the
+    given researchers, this-period per-paper (papers PUBLISHED in window;
+    citations RECEIVED in window across all their papers — matching overview)."""
+    from django.db import connection
+    if not user_ids:
+        return {}
+    year_strs = [str(y) for y in years]
+    yk = ' + '.join(['COALESCE((rp."CitationsByYear"->>%s)::int, 0)' for _ in years])
+    sql = f'''
+        SELECT a."UserID" AS uid,
+            COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."PubYear" = ANY(%s)) AS total_papers,
+            COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."PubYear" = ANY(%s) AND jr."Quartile" = 'Q1') AS q1_papers,
+            COALESCE(SUM({yk}), 0) AS total_citations
+        FROM "Authors" a
+        JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
+        LEFT JOIN LATERAL (SELECT "Quartile" FROM "JournalRankings"
+            WHERE "JournalID" = rp."JournalID"
+            ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1) jr ON TRUE
+        WHERE a."UserID" = ANY(%s)
+        GROUP BY a."UserID"
+    '''
+    out = {}
+    with connection.cursor() as cur:
+        cur.execute(sql, [years, years] + year_strs + [list(user_ids)])
+        for uid, papers, q1, cites in cur.fetchall():
+            out[uid] = {
+                'total_papers':    int(papers or 0),
+                'q1_papers':       int(q1 or 0),
+                'total_citations': int(cites or 0),
+            }
+    return out
+
+
 class DepartmentViewSet(viewsets.ReadOnlyModelViewSet):
     """
     GET /api/departments/         → list with aggregated stats
     GET /api/departments/{id}/    → single department detail
 
     HoDs are scoped to their own department; Admins/Deans see all.
+
+    Paper + citation figures are recomputed this-period (per-paper) before
+    returning, so this page agrees with the overview dashboard rather than
+    showing the all-time/lifetime numbers stored in v_department_stats.
     """
     serializer_class = DepartmentStatsSerializer
     filter_backends = [filters.OrderingFilter]
@@ -1249,6 +1352,18 @@ class DepartmentViewSet(viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(department_id=scope)
         return qs
 
+    def list(self, request, *args, **kwargs):
+        resp = super().list(request, *args, **kwargs)
+        data = resp.data
+        rows = data.get('results') if isinstance(data, dict) else data
+        if rows:
+            win = _dept_cards_windowed(list(FOCUS_YEARS))
+            for r in rows:
+                w = win.get(r.get('department_id'))
+                if w:
+                    r.update(w)
+        return resp
+
     @decorators.action(detail=True, methods=['get'])
     def researchers(self, request, pk=None):
         """GET /api/departments/{id}/researchers/ — list of researchers."""
@@ -1263,8 +1378,13 @@ class DepartmentViewSet(viewsets.ReadOnlyModelViewSet):
             '-h_index', '-total_papers'
         )
         page = self.paginate_queryset(qs)
-        ser = ResearcherStatsSerializer(page or qs, many=True)
-        return self.get_paginated_response(ser.data) if page else response.Response(ser.data)
+        rows = [dict(r) for r in ResearcherStatsSerializer(page or qs, many=True).data]
+        win = _researcher_rows_windowed(
+            list(FOCUS_YEARS), [r['user_id'] for r in rows])
+        for r in rows:
+            w = win.get(r['user_id'])
+            r.update(w if w else {'total_papers': 0, 'q1_papers': 0, 'total_citations': 0})
+        return self.get_paginated_response(rows) if page else response.Response(rows)
 
 
 class TopPaperViewSet(viewsets.ReadOnlyModelViewSet):
