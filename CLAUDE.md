@@ -35,7 +35,8 @@ python scrapers/scholar.py <scholar_id> <user_id>     # ingest via Google Schola
 python scrapers/orcid.py --orcid <ORCID> --user <id>  # ORCID/OpenAlex fallback
 python classification/classify.py                     # journal Q1–Q4 classification (run after any import)
 python citations/researcher.py                        # refresh Scholar citation graphs
-python tools/verify_attributions.py                   # detect cross-author contamination
+python tools/verify_attributions.py                   # detect + DELETE cross-author contamination (SerpAPI, destructive)
+python tools/integrity_check.py                       # read-only health check (safe; CI runs it daily — see .github/workflows/integrity.yml)
 python tools/rescrape.py                              # re-sync researchers with 0 papers
 ```
 

@@ -1,0 +1,37 @@
+name: Data integrity
+
+# Daily read-only health check over the domain tables (tools/integrity_check.py).
+# It hard-fails on corruption invariants (duplicate DOIs, name-collision
+# over-attribution, dangling links) — and a failed scheduled run makes GitHub
+# email the repo admins, which is the alert. Watch metrics (orphans, sync gaps)
+# are reported but don't fail unless they blow past a generous ceiling.
+#
+# SETUP (one-time): add a repository secret named DATABASE_URL
+#   (Settings -> Secrets and variables -> Actions -> New repository secret)
+#   pointing at the production database. Until it's set, the job no-ops.
+
+on:
+  schedule:
+    - cron: '0 5 * * *'   # 05:00 UTC daily (= 08:00 Riyadh)
+  workflow_dispatch:       # allow manual runs from the Actions tab
+
+jobs:
+  integrity:
+    name: Read-only integrity check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install psycopg2-binary python-dotenv
+      - name: Run integrity check
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::warning::DATABASE_URL secret is not set — skipping integrity check."
+            exit 0
+          fi
+          python tools/integrity_check.py
