@@ -44,7 +44,7 @@ python tools/rescrape.py                              # re-sync researchers with
 
 The defining design decision — **Django does NOT own the domain schema**:
 
-1. **Standalone Python scripts** (`scrapers/`, `classification/`, `citations/`, `tools/`, and the many one-off scripts in `backend/*.py`) connect directly via `psycopg2` and are the **only writers** of domain tables (`Users`, `Researcher`, `ResearchPaper`, `Authors`, `Journals`, `JournalRankings`, `ExternalAuthors`, …). Each defines its own `db()` helper reading `.env`.
+1. **Standalone Python scripts** (`scrapers/`, `classification/`, `citations/`, `tools/`, and the many one-off scripts in `backend/*.py`) connect directly via `psycopg2` and are the **only writers** of domain tables (`Users`, `Researcher`, `ResearchPaper`, `Authors`, `Journals`, `JournalRankings`, `ExternalAuthors`, …). They share one connection helper — `from litrix_db import db` (repo-root `litrix_db.py`, single source for `db()` + `setup_utf8_stdout()`) — via a 2-line `sys.path` bootstrap. Don't reintroduce a per-script `db()`. (`backend/affiliation_verifier.py` keeps its own Django-settings-aware variant on purpose.)
 2. **Django backend** maps those same tables with `managed = False` models (`backend/analytics/models.py`, `backend/accounts/models.py`). `python manage.py migrate` only touches Django's own auth/admin/JWT tables. Domain schema changes are raw SQL files in `backend/migrations/` applied with `tools/run_migration.py`.
 
 Table/column names in SQL are quoted PascalCase (`"ResearchPaper"."PaperID"`) — match exactly.
