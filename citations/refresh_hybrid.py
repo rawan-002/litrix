@@ -1,50 +1,20 @@
-"""
-Hybrid per-paper citation refresher — OpenAlex first, SerpAPI Scholar fallback.
+"""Hybrid per-paper citation refresher — OpenAlex first, SerpAPI Scholar fallback.
 
-=============================================================================
-WHY THIS EXISTS
-=============================================================================
-citations/per_paper.py backfills CitationsByYear from OpenAlex only. OpenAlex
-coverage is weaker for local/Arabic venues, and its counts differ from Google
-Scholar (the number researchers actually compare against). This script does a
-two-stage refresh:
+Unlike citations/per_paper.py (OpenAlex only), this covers the local/Arabic
+venues OpenAlex misses and the Scholar counts researchers actually compare
+against. Stage 1 is OpenAlex (free): DOI lookup, else a strict title+lastname
+match. Stage 2 is a SerpAPI Scholar title search for whatever Stage 1 couldn't
+resolve, hard-capped by --serp-budget so a run can't silently drain the quota.
 
-    Stage 1 (FREE)  : OpenAlex — DOI lookup, else strict title+lastname match.
-    Stage 2 (PAID)  : SerpAPI google_scholar title search for the papers
-                      Stage 1 could not resolve. Hard-capped by --serp-budget
-                      so a run can never silently burn the SerpAPI quota.
+In apply mode it writes "ResearchPaper"."CitationsByYear" (Scholar only gives a
+total, so a Scholar-only result becomes {"<PubYear>": total}, flagged
+`serp_total_only`) and the "RawData_Log" total. It never touches
+"Researcher"."CitationsByYear" — that author-level graph is the single source
+of truth for dashboard totals (see CLAUDE.md).
 
-=============================================================================
-WHAT IT WRITES (apply mode only)
-=============================================================================
-    • "ResearchPaper"."CitationsByYear"  — per-year dict {"YYYY": N}.
-      OpenAlex gives real per-year data. Scholar gives a TOTAL only, so a
-      Scholar-only result is stored as {"<PubYear>": total} and flagged
-      `serp_total_only` in the report (synthetic single-year bucket).
-    • "RawData_Log".cited_by_count — the total the dashboard's per-paper
-      COALESCE reads. If the log already has Scholar's cited_by.value object
-      (COALESCE reads that FIRST), we update it too — otherwise the displayed
-      number would never move.
-    • OPTIONAL (--write-citations-table): UPSERT "Citations" + append
-      "CitationsHistory" (tables currently maintained by the Scopus import).
-
-NEVER touches "Researcher"."CitationsByYear" — that author-level graph is the
-single source of truth for dashboard totals (see CLAUDE.md).
-
-=============================================================================
-USAGE
-=============================================================================
-    # Report-only (OpenAlex calls happen — free; SerpAPI stays OFF in dry-run
-    # unless you explicitly pass --serp-budget N)
     python citations/refresh_hybrid.py --dry-run --user 106
-
-    # First real run, tightly scoped
     python citations/refresh_hybrid.py --apply --user 106 --limit 3 --serp-budget 2
-
-    # Full backfill of papers missing citation data
     python citations/refresh_hybrid.py --apply --serp-budget 50
-
-    # Re-refresh EVERYTHING (not just missing) — careful, slower
     python citations/refresh_hybrid.py --apply --all --no-serp
 """
 
@@ -80,18 +50,9 @@ CONTACT_EMAIL = os.getenv("CONTACT_EMAIL", "noreply@example.com")
 AUDIT_DIR = PROJECT_ROOT / "data" / "citation_audit"
 
 
-# ---------------------------------------------------------------------------
-# DB (same pattern as scrapers/scholar.py — DATABASE_URL switch, local fallback)
-# ---------------------------------------------------------------------------
-
-# Shared DB helper (single source — see litrix_db.py at repo root).
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from litrix_db import db
 
-
-# ---------------------------------------------------------------------------
-# Normalization / matching (same conventions as citations/per_paper.py)
-# ---------------------------------------------------------------------------
 
 def normalize_title(t):
     return ''.join(c for c in (t or '').lower() if c.isalnum() or c.isspace()).strip()
@@ -125,10 +86,6 @@ def has_lastname_match(authorships, lastnames):
     text = ''.join(c if c.isalpha() else ' ' for c in text)
     return any(ln in text for ln in lastnames)
 
-
-# ---------------------------------------------------------------------------
-# Stage 1 — OpenAlex (free, threaded)
-# ---------------------------------------------------------------------------
 
 _local = threading.local()
 
@@ -176,8 +133,8 @@ def to_year_dict(counts_by_year):
 
 
 def openalex_fetch_one(paper_row):
-    """(pid, year_dict|None, method). Same strategy as per_paper.fetch_one:
-    DOI lookup first, else strict normalized-title + lastname-overlap search."""
+    # Returns (pid, year_dict|None, method). DOI lookup first, else a strict
+    # normalized-title + lastname-overlap search (same as per_paper.fetch_one).
     pid, doi, title, authors_str = paper_row[:4]
 
     if doi:
@@ -209,13 +166,9 @@ def openalex_fetch_one(paper_row):
     return (pid, None, 'no_match')
 
 
-# ---------------------------------------------------------------------------
-# Stage 2 — SerpAPI Google Scholar title search (paid, serial, budget-capped)
-# ---------------------------------------------------------------------------
-
 def serp_scholar_search(title, retries=5):
-    """organic_results for a Scholar title query (empty list on failure).
-    Retry/backoff mirrors scrapers/scholar.py serp_page()."""
+    # organic_results for a Scholar title query, [] on failure. Retry/backoff
+    # mirrors scrapers/scholar.py serp_page().
     from serpapi import GoogleSearch
     for attempt in range(retries):
         try:
@@ -239,7 +192,8 @@ def serp_scholar_search(title, retries=5):
 
 
 def serp_best_match(title, results):
-    """(cited_by_total|None, matched_title, score) — highest title similarity."""
+    # Returns (cited_by_total|None, matched_title, score) for the highest-
+    # similarity title.
     best = (None, "", 0.0)
     for res in results:
         cand = res.get("title", "")
@@ -250,19 +204,15 @@ def serp_best_match(title, results):
     return best
 
 
-# ---------------------------------------------------------------------------
-# Writes
-# ---------------------------------------------------------------------------
-
 def write_paper(cur, pid, year_dict, total, write_citations_table):
-    """Update CitationsByYear (when we have one) + the RawData_Log total.
+    """Update CitationsByYear (when we have one) and the RawData_Log total.
 
-    RawData_Log subtlety: the dashboard reads
+    The dashboard reads
         COALESCE((RawData_Log->'cited_by'->>'value')::int,
                  (RawData_Log->>'cited_by_count')::int, 0)
-    Scholar-scraped papers already carry cited_by.value — COALESCE picks it
-    FIRST, so updating only cited_by_count would never change the display.
-    We patch cited_by.value too whenever it exists as an object.
+    so for Scholar-scraped papers that carry a cited_by.value object COALESCE
+    reads it first — we have to patch cited_by.value too, otherwise the
+    displayed number would never move.
     """
     if year_dict is not None:
         cur.execute(
@@ -309,12 +259,8 @@ def write_paper(cur, pid, year_dict, total, write_citations_table):
             print(f"     [warn] Citations table upsert failed for {pid}: {e}")
 
 
-# ---------------------------------------------------------------------------
-# Orchestration
-# ---------------------------------------------------------------------------
-
 def select_papers(cur, user_id, only_missing, limit):
-    """Rows: (PaperID, DOI, Title, authors_str, PubYear, old_total, has_year_dict)."""
+    # Rows: (PaperID, DOI, Title, authors_str, PubYear, old_total, has_year_dict).
     where = ['TRUE']
     params = []
     if only_missing:
@@ -402,9 +348,8 @@ def main():
     stats = {"oa_doi": 0, "oa_title": 0, "oa_empty": 0,
              "serp_ok": 0, "serp_flagged": 0, "unresolved": 0, "serp_calls": 0}
 
-    # ---------------- Stage 1 — OpenAlex (threaded) ----------------
     print(f"=== Stage 1: OpenAlex ({args.workers} workers) ===")
-    residuals = []          # pids that OpenAlex could not resolve to a year dict
+    residuals = []          # pids OpenAlex couldn't resolve to a year dict
     oa_results = {}         # pid -> (year_dict, method)
     done = 0
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
@@ -427,7 +372,6 @@ def main():
     print(f"OpenAlex resolved {len(papers) - len(residuals)}/{len(papers)} — "
           f"{len(residuals)} residuals for Stage 2\n")
 
-    # ---------------- Stage 2 — SerpAPI (serial, budgeted) ----------------
     serp_results = {}       # pid -> (total|None, matched_title, score, status)
     if use_serp and residuals:
         print(f"=== Stage 2: SerpAPI Scholar title search "
@@ -457,7 +401,6 @@ def main():
             time.sleep(1.0)
         print()
 
-    # ---------------- Decide + write + report ----------------
     n_written = 0
     for p in papers:
         pid = p[0]
@@ -472,7 +415,7 @@ def main():
             "year_dict_source": "unchanged", "accepted": "no",
         }
 
-        if cby:                                            # OpenAlex success
+        if cby:
             total = sum(cby.values())
             row.update(stage="openalex", status=oa_method,
                        new_total=total, delta=total - m["old_total"],
@@ -484,17 +427,17 @@ def main():
                 conn.commit()
                 n_written += 1
 
-        elif pid in serp_results:                          # SerpAPI attempted
+        elif pid in serp_results:
             total, matched, score, status = serp_results[pid]
             row.update(stage="serpapi", status=status,
                        score=round(score, 3), matched_title=(matched or "")[:80])
             if status == "OK":
                 stats["serp_ok"] += 1
                 row.update(new_total=total, delta=total - m["old_total"], accepted="yes")
-                # Scholar gives a TOTAL only. Keep any existing per-year dict;
-                # synthesize {"PubYear": total} only when nothing exists.
+                # Scholar gives a total only, so keep any existing per-year
+                # dict and synthesize {"PubYear": total} only when none exists.
                 if m["has_year_dict"]:
-                    year_dict = None                       # leave years untouched
+                    year_dict = None
                     row["year_dict_source"] = "unchanged"
                 elif m["pub_year"]:
                     year_dict = {str(m["pub_year"]): total}
@@ -510,7 +453,7 @@ def main():
                     row["accepted"] = "no (lower than current)"
             else:
                 stats["serp_flagged"] += 1
-        else:                                              # unresolved
+        else:
             if oa_method in ('doi_empty', 'title_empty'):
                 stats["oa_empty"] += 1
                 row.update(stage="openalex", status=oa_method)
@@ -519,7 +462,6 @@ def main():
 
         report_rows.append(row)
 
-    # ---------------- Report ----------------
     AUDIT_DIR.mkdir(parents=True, exist_ok=True)
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     report_path = Path(args.report) if args.report else AUDIT_DIR / f"refresh_hybrid_{ts}.csv"

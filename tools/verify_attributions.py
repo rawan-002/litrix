@@ -15,7 +15,7 @@ load_dotenv()
 SERP_KEY = os.getenv("SERP_API_KEY")
 
 
-# Shared DB helper (single source — see litrix_db.py at repo root).
+# db() lives in litrix_db.py at the repo root
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from litrix_db import db

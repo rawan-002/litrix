@@ -1,86 +1,26 @@
-"""
-============================================================================
-LITRIX AFFILIATION VERIFIER
-============================================================================
-Multi-tier verification tool that determines whether each paper in
-ResearchPaper was actually authored under Al-Baha University affiliation
-(vs. attributed to an Al-Baha researcher who at the time was at a
-different institution).
+"""Decide whether each ResearchPaper was actually authored under Al-Baha
+University affiliation, vs. attributed to an Al-Baha researcher who wrote it
+while at another institution.
 
-WHY THIS EXISTS
----------------
-The Scholar scraper imports every paper from a researcher's profile —
-including papers they wrote BEFORE joining Al-Baha (PhD work elsewhere,
-postdoc at other institutions, sabbatical/visiting positions).
+The Scholar scraper pulls every paper off a researcher's profile, including
+work from before they joined Al-Baha (PhD/postdoc elsewhere, visiting
+positions). NCAAA reporting needs the dashboard to count only papers truly
+authored under Al-Baha, so this labels each one.
 
-For NCAAA reporting and accurate research-output metrics, the dashboard
-must show ONLY papers actually authored under Al-Baha affiliation. This
-script identifies and labels each paper.
+Verification cascades through tiers (cheapest/most reliable first), stopping
+at the first conclusive answer: OpenAlex by DOI, then Crossref by DOI, then
+the publisher's HTML landing page, then an Unpaywall OA PDF scan. Anything
+left unresolved is marked pending-review for a human. Each tier looks for
+"Al-Baha University" (and dash/space/no-dash/Arabic variants) or the
+definitive Scopus AF-ID / ROR identifiers.
 
-ARCHITECTURE
-------------
-Four cascading verification tiers (cheapest first, fallback chain):
-
-    ┌───────────────────────────────────────────────────────────────┐
-    │ Tier 1: OpenAlex API by DOI                                   │
-    │   → reads authorships[].institutions[].display_name + ROR ID  │
-    │   → free, 100k req/day, ~95% coverage of post-2010 papers     │
-    ├───────────────────────────────────────────────────────────────┤
-    │ Tier 2: Crossref API by DOI (fallback)                        │
-    │   → reads author[].affiliation[].name                         │
-    │   → free, ~50 req/sec, broader DOI coverage                   │
-    ├───────────────────────────────────────────────────────────────┤
-    │ Tier 3: PDF download + first-page text scan                   │
-    │   → Unpaywall API → OA PDF URL → pypdf → regex search         │
-    │   → catches papers where API metadata is incomplete           │
-    ├───────────────────────────────────────────────────────────────┤
-    │ Tier 4: Mark as 'pending-review'                              │
-    │   → human reviewer decides via /admin                         │
-    └───────────────────────────────────────────────────────────────┘
-
-DETECTION PATTERNS
-------------------
-Each tier searches text returned by its source for any of:
-    • "Al-Baha University"   (and dash/space variants)
-    • "Albaha University"    (no-dash variant)
-    • "جامعة الباحة"          (Arabic)
-    • "60104698"             (Scopus AF-ID — definitive)
-    • "0270eb240"            (ROR ID — definitive)
-
-CLI USAGE
----------
-    # Dry-run: walks through all pending papers and reports what would
-    # happen, WITHOUT touching the DB.
-    python affiliation_verifier.py --dry-run
-
-    # Apply: actually update AffiliationVerified column.
-    python affiliation_verifier.py --apply
-
-    # Limit to first N papers (for testing).
-    python affiliation_verifier.py --dry-run --limit 10
-
-    # Restrict to one source (Scholar is the main contaminator).
-    python affiliation_verifier.py --apply --source Scholar
-
-    # Run a single tier only (useful for incremental rollouts).
-    python affiliation_verifier.py --apply --tier openalex
-
-    # Resume from last paper (auto by default; --no-resume to restart).
-    python affiliation_verifier.py --apply --no-resume
-
-    # Report what's already been verified, no API calls.
-    python affiliation_verifier.py --report
-
-SAFETY
-------
-* All UPDATEs run inside transactions per paper. A crash mid-run never
-  leaves the DB in an inconsistent state.
-* Rate-limiting honors each API's stated quota (0.1s between calls).
-* Network failures DO NOT mark a paper as 'not-Al-Baha' — they leave it
-  NULL so a retry can pick it up.
-* The script is idempotent: re-running on already-verified papers skips
-  them by default (use --re-verify to override).
-============================================================================
+Two things are deliberate and easy to break: a network/API failure leaves a
+paper NULL rather than marking it not-Al-Baha (a retry picks it up), and a
+"not Al-Baha" verdict is only returned when a tier actually had affiliation
+data to inspect — never on missing data. Per-paper transactions, polite
+per-API rate limiting, and idempotent (re-runs skip verified papers unless
+--re-verify). Run with --dry-run / --apply / --report; see argparse --help
+for the source/tier/scope flags.
 """
 
 from __future__ import annotations
@@ -105,10 +45,6 @@ except ImportError:
     print("ERROR: 'requests' library not installed. Run: pip install requests")
     sys.exit(1)
 
-
-# ============================================================================
-# CONFIG
-# ============================================================================
 
 # DB connection priority: env var DATABASE_URL > Django settings.
 # Stored as kwargs (cleaner than DSN string — avoids quoting issues with
@@ -178,46 +114,32 @@ logging.basicConfig(
 log = logging.getLogger('verifier')
 
 
-# ============================================================================
-# DETECTION
-# ============================================================================
-
 def detect_albaha_in_text(text: Optional[str]) -> Optional[str]:
-    """
-    Returns the matched substring if Al-Baha is detected, else None.
-    Designed to be cheap: regex compiled once, short-circuits on first match.
-    """
+    """Return the matched substring if Al-Baha is detected, else None.
+    Short-circuits on the first match to stay cheap."""
     if not text:
         return None
     text_lower = text.lower()
-    # Check regex patterns
     for pat in ALBAHA_NAME_PATTERNS:
         m = re.search(pat, text_lower)
         if m:
             return m.group(0)
-    # Check exact identifiers
     for ident in ALBAHA_IDENTIFIERS:
         if ident.lower() in text_lower:
             return ident
     return None
 
 
-# ============================================================================
-# TIER 1: OpenAlex API
-# ============================================================================
+# Tier 1: OpenAlex by DOI.
 
 def verify_via_openalex(doi: str) -> tuple[Optional[bool], dict[str, Any]]:
-    """
-    Looks up paper by DOI in OpenAlex and inspects authorships[].institutions[].
-    Returns (verified, evidence):
-        verified = True  → Al-Baha confirmed
-        verified = False → checked & no Al-Baha (papers we should EXCLUDE)
-        verified = None  → API failed (retry later, don't mark)
-    """
+    """Look up the DOI in OpenAlex and inspect authorships[].institutions[].
+    Returns (verified, evidence) where verified is True (Al-Baha confirmed),
+    False (checked, no Al-Baha — exclude), or None (API failed, retry later
+    without marking)."""
     if not doi:
         return None, {'reason': 'no_doi'}
 
-    # Normalize DOI (strip URL prefix if present)
     clean_doi = doi.strip()
     for prefix in ('https://doi.org/', 'http://doi.org/', 'doi:'):
         if clean_doi.lower().startswith(prefix):
@@ -240,11 +162,10 @@ def verify_via_openalex(doi: str) -> tuple[Optional[bool], dict[str, Any]]:
     if not authorships:
         return None, {'tier': 'openalex', 'reason': 'openalex_no_authorships'}
 
-    # Walk every (author × institution) pair. Track whether ANY institution
-    # was present — a conclusive "not Al-Baha" requires that OpenAlex
-    # actually had affiliation data to inspect. If every authorship lacks
-    # institutions we return None (inconclusive) so a later tier / retry can
-    # resolve it, instead of falsely excluding the paper.
+    # A conclusive "not Al-Baha" requires that OpenAlex actually had
+    # affiliation data to inspect. If no authorship lists institutions we
+    # return None (inconclusive) so a later tier / retry can resolve it,
+    # rather than falsely excluding the paper.
     institutions_seen = 0
     for auth in authorships:
         author_name = (auth.get('author') or {}).get('display_name', '')
@@ -275,9 +196,7 @@ def verify_via_openalex(doi: str) -> tuple[Optional[bool], dict[str, Any]]:
     }
 
 
-# ============================================================================
-# TIER 2: Crossref API
-# ============================================================================
+# Tier 2: Crossref by DOI (fallback).
 
 def verify_via_crossref(doi: str) -> tuple[Optional[bool], dict[str, Any]]:
     """Same contract as verify_via_openalex but uses Crossref's metadata."""
@@ -306,10 +225,10 @@ def verify_via_crossref(doi: str) -> tuple[Optional[bool], dict[str, Any]]:
     if not authors:
         return None, {'tier': 'crossref', 'reason': 'crossref_no_authors'}
 
-    # Crossref very often omits affiliations entirely. So we only return a
-    # conclusive "not Al-Baha" when at least one affiliation string was
-    # actually present; otherwise it's inconclusive (None) and we fall
-    # through to the HTML/PDF tiers instead of falsely excluding the paper.
+    # Crossref very often omits affiliations entirely, so only call it
+    # conclusively "not Al-Baha" when at least one affiliation string was
+    # present; otherwise stay inconclusive (None) and fall through to the
+    # HTML/PDF tiers rather than excluding the paper.
     affiliations_seen = 0
     for auth in authors:
         author_name = f"{auth.get('given', '')} {auth.get('family', '')}".strip()
@@ -337,9 +256,7 @@ def verify_via_crossref(doi: str) -> tuple[Optional[bool], dict[str, Any]]:
     }
 
 
-# ============================================================================
-# TIER 3: PDF download + extraction
-# ============================================================================
+# Tier 3 (PDF) helpers — see verify_via_pdf below.
 
 def _import_pdf_lib():
     """Lazy-import the PDF library so the verifier still runs Tier 1+2 even
@@ -356,13 +273,8 @@ def _import_pdf_lib():
 
 
 def verify_via_pdf(doi: str) -> tuple[Optional[bool], dict[str, Any]]:
-    """
-    Steps:
-      1. Unpaywall API → find Open Access PDF URL for the DOI.
-      2. Download PDF (max ~10MB to avoid wasted bandwidth on giant docs).
-      3. Extract text from first 2 pages (affiliation is always page 1).
-      4. Search for Al-Baha patterns.
-    """
+    """Find the OA PDF via Unpaywall, download it (capped ~10MB), read the
+    first two pages (affiliations live on page 1) and look for Al-Baha."""
     if not doi:
         return None, {'reason': 'no_doi'}
 
@@ -445,35 +357,11 @@ def verify_via_pdf(doi: str) -> tuple[Optional[bool], dict[str, Any]]:
     }
 
 
-# ============================================================================
-# TIER 4: Publisher HTML — Smart scraping with multiple strategies
-# ============================================================================
-# Unlike Tier 3 (PDF) which only sees the document body, this tier reads the
-# RICH HTML page on the publisher's site. That page typically exposes the
-# authors' affiliations via:
-#
-#   1. Citation meta tags  — Google Scholar standard
-#      <meta name="citation_author_institution" content="Al-Baha University">
-#
-#   2. Dublin Core meta tags — academic publishing standard
-#      <meta name="DC.contributor.affiliation" content="...">
-#
-#   3. JSON-LD structured data — schema.org/ScholarlyArticle
-#      <script type="application/ld+json">{...}</script>
-#
-#   4. Publisher-specific CSS selectors
-#      Springer:  .c-article-author-affiliation__address
-#      IEEE:      .author-affiliation
-#      Elsevier:  .author .affiliation
-#      Wiley:     .author-info .affiliation
-#      MDPI:      .affiliation-item
-#      Frontiers: .affiliation-info
-#
-#   5. Full HTML text search (fallback)
-#
-# This tier handles the "show more authors" case the user noted: those
-# affiliations ARE in the HTML, they're just visually hidden until JS unhides
-# them. Reading the raw HTML bypasses the click requirement entirely.
+# Tier 4: the publisher's HTML landing page. Unlike the PDF tier it sees the
+# page's structured metadata — citation/Dublin Core meta tags, JSON-LD, and
+# publisher-specific affiliation selectors — falling back to a full-text
+# scan. This also catches affiliations hidden behind a "show more authors"
+# toggle: they're in the raw HTML, just not rendered until JS unhides them.
 
 def _search_jsonld_for_albaha(obj: Any, path: str = '$') -> Optional[dict]:
     """Walks a JSON-LD tree looking for any string mentioning Al-Baha."""
@@ -496,10 +384,8 @@ def _search_jsonld_for_albaha(obj: Any, path: str = '$') -> Optional[dict]:
 
 
 def verify_via_publisher_html(doi: str) -> tuple[Optional[bool], dict[str, Any]]:
-    """
-    Resolves DOI to the publisher's HTML page and checks affiliation info
-    via the 5 strategies above (most reliable first).
-    """
+    """Resolve the DOI to the publisher's page and check affiliation info,
+    most reliable strategy first (meta tags, JSON-LD, selectors, full text)."""
     if not doi:
         return None, {'reason': 'no_doi'}
 
@@ -549,9 +435,7 @@ def verify_via_publisher_html(doi: str) -> tuple[Optional[bool], dict[str, Any]]
     except Exception as e:
         return None, {'reason': 'html_parse_failed', 'detail': str(e)[:200]}
 
-    # -------------------------------------------------------------------
-    # Strategy 1: Citation meta tags (highest confidence)
-    # -------------------------------------------------------------------
+    # Strategy 1: citation / Dublin Core meta tags (highest confidence).
     meta_patterns = [
         'citation_author_institution',
         'citation_institution',
@@ -579,9 +463,7 @@ def verify_via_publisher_html(doi: str) -> tuple[Optional[bool], dict[str, Any]]
                     'url': final_url[:300],
                 }
 
-    # -------------------------------------------------------------------
-    # Strategy 2: JSON-LD structured data
-    # -------------------------------------------------------------------
+    # Strategy 2: JSON-LD structured data.
     for script in soup.find_all('script', type='application/ld+json'):
         try:
             raw = script.string or script.get_text() or ''
@@ -601,9 +483,7 @@ def verify_via_publisher_html(doi: str) -> tuple[Optional[bool], dict[str, Any]]
                 'url': final_url[:300],
             }
 
-    # -------------------------------------------------------------------
-    # Strategy 3: Publisher-specific CSS selectors
-    # -------------------------------------------------------------------
+    # Strategy 3: publisher-specific CSS selectors.
     publisher_selectors = [
         # Springer / Nature / BMC family
         '.c-article-author-affiliation__address',
@@ -685,13 +565,10 @@ def verify_via_publisher_html(doi: str) -> tuple[Optional[bool], dict[str, Any]]
                     'url': final_url[:300],
                 }
 
-    # -------------------------------------------------------------------
-    # Strategy 4: Full HTML text search (fallback — last resort)
-    # We strip noisy elements first to reduce false matches on navigation,
-    # ads, footers etc. CRITICALLY we also drop the references / bibliography
-    # / acknowledgements / cited-by blocks: a paper that merely CITES or
-    # THANKS an Al-Baha author would otherwise be mislabelled as Al-Baha.
-    # -------------------------------------------------------------------
+    # Strategy 4: full HTML text search (last resort). Strip nav/ads/footers
+    # first, and crucially drop the references / bibliography / acknowledgement
+    # / cited-by blocks — a paper that merely cites or thanks an Al-Baha author
+    # would otherwise be mislabelled as Al-Baha.
     for tag in soup(['script', 'style', 'nav', 'footer', 'header', 'iframe']):
         tag.decompose()
 
@@ -740,10 +617,6 @@ def verify_via_publisher_html(doi: str) -> tuple[Optional[bool], dict[str, Any]]
     }
 
 
-# ============================================================================
-# TIER ORCHESTRATION
-# ============================================================================
-
 TIERS = {
     'openalex':        verify_via_openalex,
     'crossref':        verify_via_crossref,
@@ -769,15 +642,9 @@ def verify_paper(
     source: str,
     tiers_to_run: list[str],
 ) -> dict[str, Any]:
-    """
-    Runs verification tiers in order until ONE succeeds (or all fail).
-    Returns a dict ready to write to the DB:
-        {
-            'verified': True/False/None,
-            'verification_source': 'openalex'|'crossref'|'pdf'|'pending-review',
-            'details': {...evidence...},
-        }
-    """
+    """Run the tiers in order until one gives a positive match (or all fail),
+    returning a dict ready for the DB: verified (True/False/None),
+    verification_source, and the evidence details."""
     last_evidence: dict[str, Any] = {}
     conclusive_negative: Optional[dict[str, Any]] = None
 
@@ -829,17 +696,12 @@ def verify_paper(
     }
 
 
-# ============================================================================
-# DB OPERATIONS
-# ============================================================================
-
 def default_verification_years() -> list[int]:
-    """Dashboard-scope years, computed dynamically.
+    """Dashboard-scope years, computed dynamically (last year through next).
 
-    Previously hard-coded to [2025, 2026], which silently skipped papers
-    published in later years (an incremental scrape can pull next-year
-    papers — Scholar lists in-press 2027 items today). Window: last year
-    through next year, overridable via --years.
+    It used to be hard-coded to [2025, 2026], which silently skipped papers
+    in later years — an incremental scrape can pull next-year papers (Scholar
+    lists in-press 2027 items today). Overridable via --years.
     """
     from datetime import date
     y = date.today().year
@@ -959,10 +821,6 @@ def update_paper_verification(
             ],
         )
 
-
-# ============================================================================
-# CLI
-# ============================================================================
 
 def cmd_report(conn, years: Optional[list[int]] = None):
     """Prints per-source verification stats. No API calls."""
@@ -1130,7 +988,7 @@ def main():
     parser = argparse.ArgumentParser(
         description='Litrix multi-tier affiliation verifier',
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__.split('CLI USAGE')[1].split('SAFETY')[0] if '__doc__' in dir() else '',
+        epilog='Modes: --dry-run / --apply / --report. See flags below for source, tier and scope.',
     )
     g = parser.add_mutually_exclusive_group(required=True)
     g.add_argument('--dry-run', action='store_true', help='Walk through, do not write to DB')

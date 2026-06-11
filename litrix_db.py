@@ -1,23 +1,14 @@
-"""
-Shared DB + console helpers for Litrix standalone scripts (single source).
+"""Shared DB + console helpers for the standalone pipeline scripts.
 
-Every scrapers/ citations/ classification/ tools/ backend/ script that talks to
-the domain DB via psycopg2 used to redefine its OWN identical `db()` (and its
-own UTF-8 stdout wrapper). That is ~30 lines copy-pasted ~20 times, and it
-meant connection behaviour (keepalives, timeouts) could silently drift between
-scripts. This module is the one place that logic lives.
+Every scraper/classifier/tool used to carry its own copy of `db()` plus a
+UTF-8 stdout wrapper — the same ~30 lines pasted ~20 times, which let
+connection behaviour (keepalives, timeouts) drift between scripts. They all
+import from here instead now.
 
-USAGE (from a script one level under the repo root, e.g. tools/foo.py):
-
-    import os as _o, sys as _s
-    _s.path.insert(0, _o.path.dirname(_o.path.dirname(_o.path.abspath(__file__))))
-    from litrix_db import db, setup_utf8_stdout
-
-    setup_utf8_stdout()
-    conn = db()
-
-DB switch (identical to the Django backend): DATABASE_URL set -> production
-(Neon); empty -> local Postgres via discrete DB_* vars.
+Scripts one level under the repo root bootstrap it with a 2-line sys.path
+insert, then `from litrix_db import db, setup_utf8_stdout`. The DB switch is
+the same one Django uses: DATABASE_URL set means prod (Neon), empty means
+local Postgres via the discrete DB_* vars.
 """
 import io
 import os

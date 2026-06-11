@@ -1,42 +1,14 @@
-"""
-Paper-level dedup — detect duplicate ResearchPaper rows and merge them.
+"""Detect and merge duplicate ResearchPaper rows.
 
-=============================================================================
-WHY THIS EXISTS
-=============================================================================
-backend/find_duplicate_papers.py DETECTS duplicates (exact DOI / NormalizedTitle
-matches) but never merges. Real duplicates also hide behind near-identical
-titles (preprint vs published, punctuation variants) that exact matching
-misses. This script does the full report-then-apply cycle:
+backend/find_duplicate_papers.py only detects exact DOI/NormalizedTitle dups;
+this also catches near-identical titles (preprint vs published, punctuation)
+via fuzzy matching, and actually merges. --dry-run writes a reviewable
+JSON+CSV report; --apply merges each group inside one atomic transaction after
+dumping a full snapshot to data/dedup_audit/snapshot_<ts>.json.
 
-    --dry-run : detect groups (exact SQL blocks + fuzzy SequenceMatcher >= 0.90
-                inside small title blocks), pick the copy to KEEP, and write a
-                reviewable JSON + CSV report. No DB writes.
-    --apply   : merge each group — remap child rows from every loser onto the
-                kept paper, merge citation data, AuditLog every loser, then
-                delete it. Atomic transaction + full JSON snapshot beforehand.
-
-KEEP-CHOICE (ported from the Excel pipeline): has_doi > citations > title
-length, tie-break IsVerified then lowest PaperID.
-
-=============================================================================
-SAFETY
-=============================================================================
-  • Backup snapshot of every paper + child rows in every group is written to
-    data/dedup_audit/snapshot_<ts>.json BEFORE any write.
-  • Every merged loser gets an AuditLog row (Action='paper.merge.dedup') with
-    the kept PaperID + child counts, so post-hoc recovery is queryable.
-  • --apply --report-in <groups.json> merges EXACTLY the reviewed file (you
-    can hand-edit it — delete groups you reject, or swap kept/losers).
-    Without --report-in, --apply re-detects and merges everything it finds.
-  • --limit-groups N caps how many groups merge in one run (use 1 first).
-
-USAGE:
-    python tools/dedup_papers.py --dry-run
-    python tools/dedup_papers.py --dry-run --user 106
-    # review data/dedup_audit/groups_<ts>.json, then:
-    python tools/dedup_papers.py --apply --report-in data/dedup_audit/groups_<ts>.json --limit-groups 1
-    python tools/dedup_papers.py --apply --report-in data/dedup_audit/groups_<ts>.json
+Recovery is queryable: every merged loser leaves an AuditLog row
+(Action='paper.merge.dedup'). Feed a hand-edited report back with --report-in
+to merge exactly the groups you approved, and --limit-groups 1 on the first run.
 """
 import os
 import sys
@@ -85,11 +57,8 @@ CITATIONS_EXPR = '''COALESCE(
     0)'''
 
 
-# ---------------------------------------------------------------------------
-# Normalization (ported from the Excel pipeline's norm_title — NFKD + strip
-# accents + drop parenthesised text. Distinct from the DB NormalizedTitle.)
-# ---------------------------------------------------------------------------
-
+# Ported from the Excel pipeline's norm_title (NFKD + strip accents + drop
+# parenthesised text). Deliberately distinct from the DB NormalizedTitle column.
 def norm_title(s):
     if not s:
         return ""
@@ -99,10 +68,6 @@ def norm_title(s):
     s = re.sub(r"[^a-z0-9 ]+", " ", s)
     return re.sub(r"\s+", " ", s).strip()
 
-
-# ---------------------------------------------------------------------------
-# Detection
-# ---------------------------------------------------------------------------
 
 def load_papers(cur, user_id):
     """All papers in scope with the fields keep-choice + matching need."""
@@ -224,10 +189,6 @@ def choose_keep(group_pids, papers):
     return ranked[0], ranked[1:]
 
 
-# ---------------------------------------------------------------------------
-# Snapshot / audit
-# ---------------------------------------------------------------------------
-
 def existing_child_tables(cur):
     cur.execute("""
         SELECT table_name FROM information_schema.tables
@@ -247,10 +208,6 @@ def snapshot_paper(cur, pid, child_tables):
         snap["children"][t] = [r[0] for r in cur.fetchall()]
     return snap
 
-
-# ---------------------------------------------------------------------------
-# Merge
-# ---------------------------------------------------------------------------
 
 def authors_columns(cur):
     cur.execute("""
@@ -338,11 +295,10 @@ def merge_citation_fields(cur, keep, loser):
 def merge_group(cur, keep, losers, papers_meta, child_tables, a_cols):
     """Merge every loser into the kept paper. Caller wraps in a transaction.
 
-    PROFILE-PRESERVATION GUARANTEE (user requirement): every researcher who
-    was linked to ANY copy in the group must remain linked to the kept paper
-    — the paper keeps showing in all their profiles. We capture the union of
-    UserIDs BEFORE touching anything and assert it AFTER the merge; a failed
-    assertion raises, which aborts the whole atomic transaction (no deletes).
+    Every researcher linked to any copy in the group must stay linked to the
+    kept paper, so it keeps showing in all their profiles. We snapshot the union
+    of UserIDs before touching anything and assert it afterwards — a failed
+    assertion raises and aborts the whole transaction, so nothing gets deleted.
     """
     col_list = ', '.join(f'"{c}"' for c in a_cols)
     sel_list = ', '.join('%s' if c == 'PaperID' else f'"{c}"' for c in a_cols)
@@ -354,7 +310,7 @@ def merge_group(cur, keep, losers, papers_meta, child_tables, a_cols):
     expected_users = {r[0] for r in cur.fetchall()}
 
     for loser in losers:
-        # 1. Authors — remap with the (UserID, PaperID) unique index respected
+        # Authors: remap, respecting the (UserID, PaperID) unique index
         cur.execute(
             f'INSERT INTO "Authors" ({col_list}) '
             f'SELECT {sel_list} FROM "Authors" WHERE "PaperID" = %s '
@@ -363,7 +319,7 @@ def merge_group(cur, keep, losers, papers_meta, child_tables, a_cols):
         )
         cur.execute('DELETE FROM "Authors" WHERE "PaperID" = %s', (loser,))
 
-        # 2. Citations (PK = PaperID) — keep the larger count
+        # Citations is keyed by PaperID alone, so keep the larger count
         if "Citations" in child_tables:
             cur.execute('SELECT "CitationsCount" FROM "Citations" WHERE "PaperID" = %s',
                         (loser,))
@@ -382,15 +338,13 @@ def merge_group(cur, keep, losers, papers_meta, child_tables, a_cols):
                 )
                 cur.execute('DELETE FROM "Citations" WHERE "PaperID" = %s', (loser,))
 
-        # 3. Remaining child tables — generic remap
         for t in SIMPLE_CHILDREN:
             if t in child_tables:
                 remap_simple_child(cur, t, loser, keep)
 
-        # 4. Citation fields on the kept row
         new_total = merge_citation_fields(cur, keep, loser)
 
-        # 5. AuditLog then delete the loser
+        # AuditLog the loser before deleting it, for recovery
         lm = papers_meta[loser]
         audit_meta = {
             "kept_paper_id": keep,
@@ -423,10 +377,6 @@ def merge_group(cur, keep, losers, papers_meta, child_tables, a_cols):
             f"UserIDs {sorted(missing)} lost their link — rolling back."
         )
 
-
-# ---------------------------------------------------------------------------
-# Reports
-# ---------------------------------------------------------------------------
 
 def build_report(groups, papers):
     out = []
@@ -473,10 +423,6 @@ def write_reports(report, ts):
                             l["pub_year"], l["citations"], l["source"], ""])
     return json_path, csv_path
 
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
@@ -549,7 +495,7 @@ def main():
         print(f"  python tools/dedup_papers.py --apply --report-in \"{json_path}\" --limit-groups 1")
         return
 
-    # ----------------------- APPLY -----------------------
+    # --apply: everything below runs in one transaction
     with transaction.atomic():
         with connection.cursor() as cur:
             child_tables = existing_child_tables(cur)

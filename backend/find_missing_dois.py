@@ -1,38 +1,22 @@
-"""
-============================================================================
-STRICT DOI BACKFILL
-============================================================================
-Finds the canonical DOI for ResearchPaper rows that have none, so the
-affiliation verifier (which is DOI-driven) can then process them.
+"""Find canonical DOIs for ResearchPaper rows that lack one, so the
+DOI-driven affiliation verifier can then process them.
 
-WHY A SEPARATE, STRICTER TOOL
------------------------------
-The existing `manage.py backfill_dois` uses analytics.lookups.paper_by_title
-with a LOW title-similarity threshold (0.72) and NO year/author check. On
-common or generic titles that silently attaches the WRONG paper's DOI — the
-exact failure mode behind the ESPR / MJSAT mix-ups we found by hand.
+This exists as a separate, stricter tool because `manage.py backfill_dois`
+matches on title similarity alone at a low threshold (0.72) with no year or
+author check — on generic titles that quietly attaches the wrong paper's DOI
+(the ESPR / MJSAT mix-ups we had to untangle by hand). Here a DOI is only
+written when all three hold: title similarity >= 0.90 (near-exact), pub year
+within +-1 (print/online drift), and at least one of our author surnames
+also appears in the candidate's author list (when we have one to compare).
+Anything weaker is rejected and left for a human.
 
-This tool only writes a DOI when ALL THREE hold:
-    1. normalized title similarity >= 0.90  (near-exact)
-    2. publication year within +-1 of ours  (print/online drift)
-    3. at least one author surname from our record also appears in the
-       candidate's author list (when we have an author string to compare)
+Dry-run by default (--apply to write), per-paper transactions, never
+overwrites an existing DOI or steals one already owned by another paper, and
+re-runs only revisit still-DOI-less rows. Examples:
 
-Anything weaker is REJECTED and left for a human — never guessed.
-
-SAFETY
-------
-* Dry-run by default; --apply required to write.
-* Per-paper transaction; never marks/overwrites an existing DOI.
-* Refuses a DOI already owned by another paper in the DB.
-* Idempotent: re-running only revisits still-DOI-less rows.
-
-USAGE
------
     python backend/find_missing_dois.py --user 1            # dry-run, one researcher
     python backend/find_missing_dois.py --user 1 --apply    # write the strong matches
     python backend/find_missing_dois.py --apply --limit 50  # whole DB, capped
-============================================================================
 """
 from __future__ import annotations
 

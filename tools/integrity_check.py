@@ -1,34 +1,12 @@
-"""
-============================================================================
-LITRIX DATA-INTEGRITY CHECK  (read-only, safe to schedule)
-============================================================================
-A pure-SQL health check over the domain tables. It NEVER writes — unlike
-`verify_attributions.py` (which deletes wrong attributions and calls SerpAPI),
-this is safe to run unattended every day.
+"""Read-only health check over the Litrix domain tables.
 
-It exists because name-based matching once cross-contaminated 602 papers
-between researchers with similar names (see OPERATIONS_LOG.md). The point is
-to catch a regression of that class — or any structural corruption — within a
-day, instead of letting it accumulate silently.
+Safe to run unattended — no writes, no API calls (that's the difference from
+verify_attributions.py, which deletes). It mainly guards against a repeat of the
+name-collision bug that once cross-contaminated 602 papers (OPERATIONS_LOG.md).
+HARD checks exit non-zero so a cron/CI run alerts; WATCH metrics are reported
+only, unless --strict or they cross a generous ceiling.
 
-Two tiers of findings:
-  * HARD  -> invariants that should essentially never hold. ANY hit makes the
-            process exit non-zero, so a CI / cron run FAILS and notifies.
-  * WATCH -> health metrics that drift with the data. Reported every run;
-            they only fail the run with --strict, or when they blow past a
-            generous ceiling (catching an explosion, not normal growth).
-
-USAGE
------
-    python tools/integrity_check.py                 # report + hard-fail gate
-    python tools/integrity_check.py --strict        # watch metrics fail too
-    python tools/integrity_check.py --json          # machine-readable output
-    # tune the hard gates:
-    python tools/integrity_check.py --max-internal-authors 12
-
-Reads DATABASE_URL from the environment (or .env locally), same as the other
-pipeline scripts. Empty -> local Postgres via DB_* vars.
-============================================================================
+    python tools/integrity_check.py [--strict] [--json] [--max-internal-authors N]
 """
 from __future__ import annotations
 
@@ -39,7 +17,6 @@ import sys
 
 import psycopg2
 
-# Shared DB + console helpers (single source — see litrix_db.py at repo root).
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from litrix_db import db, setup_utf8_stdout
 
@@ -52,7 +29,6 @@ def _scalar(cur, sql, params=None):
 
 
 def run_checks(cur, args):
-    """Returns a list of finding dicts."""
     findings = []
 
     def add(key, label, count, tier, ok, detail=''):
@@ -61,10 +37,6 @@ def run_checks(cur, args):
             'tier': tier, 'ok': bool(ok), 'detail': detail,
         })
 
-    # ----- HARD invariants ------------------------------------------------
-
-    # 1. Duplicate DOIs: the same DOI must map to exactly one paper. A repeat
-    #    means a paper was ingested twice (dedup failure) and will double-count.
     dup_dois = _scalar(cur, '''
         SELECT COUNT(*) FROM (
             SELECT LOWER("DOI")
@@ -76,8 +48,8 @@ def run_checks(cur, args):
     add('duplicate_dois', 'Duplicate DOIs (same DOI on >1 paper)', dup_dois,
         'HARD', dup_dois == 0)
 
-    # 2. Over-attribution: a paper credited to an implausible number of OUR
-    #    researchers is the classic name-collision contamination signature.
+    # A paper credited to too many of our own researchers is the classic
+    # name-collision contamination signature.
     over_attr = _scalar(cur, '''
         SELECT COUNT(*) FROM (
             SELECT a."PaperID"
@@ -91,7 +63,6 @@ def run_checks(cur, args):
         over_attr, 'HARD', over_attr == 0,
         'name-collision contamination signal')
 
-    # 3. Authors rows pointing at a non-existent paper or user (referential rot).
     dangling = _scalar(cur, '''
         SELECT COUNT(*) FROM "Authors" a
         WHERE NOT EXISTS (SELECT 1 FROM "ResearchPaper" rp WHERE rp."PaperID" = a."PaperID")
@@ -100,10 +71,6 @@ def run_checks(cur, args):
     add('dangling_author_links', 'Authors links to a missing paper/user',
         dangling, 'HARD', dangling == 0)
 
-    # ----- WATCH metrics --------------------------------------------------
-
-    # 4. Orphan papers: no Litrix author attached. They never surface on the
-    #    dashboard, but a sudden jump means an import attributed nothing.
     total_papers = _scalar(cur, 'SELECT COUNT(*) FROM "ResearchPaper"')
     orphans = _scalar(cur, '''
         SELECT COUNT(*) FROM "ResearchPaper" rp
@@ -115,7 +82,6 @@ def run_checks(cur, args):
         orphans, 'WATCH', orphan_ratio <= args.max_orphan_ratio,
         f'ceiling {args.max_orphan_ratio:.0%}')
 
-    # 5. Researchers with zero attributed papers (sync gaps).
     no_papers = _scalar(cur, '''
         SELECT COUNT(*) FROM "Users" u
         WHERE u."UserType" = 'Researcher'
@@ -125,8 +91,7 @@ def run_checks(cur, args):
         no_papers, 'WATCH', no_papers <= args.max_zero_paper_researchers,
         f'ceiling {args.max_zero_paper_researchers}')
 
-    # 6. Verifier backlog: papers with a DOI, attributed, still unverified.
-    #    Not a corruption — just tells you the affiliation filter is stale.
+    # Not corruption — just signals the affiliation filter is going stale.
     unverified = _scalar(cur, '''
         SELECT COUNT(*) FROM "ResearchPaper" rp
         WHERE rp."AffiliationVerified" IS NULL
@@ -145,12 +110,9 @@ def main():
     p.add_argument('--strict', action='store_true',
                    help='WATCH metrics over their ceiling fail the run too')
     p.add_argument('--json', action='store_true', help='machine-readable output')
-    p.add_argument('--max-internal-authors', type=int, default=10,
-                   help='hard-fail if any paper exceeds this many internal authors')
-    p.add_argument('--max-orphan-ratio', type=float, default=0.60,
-                   help='watch ceiling for orphan-paper share (0-1)')
-    p.add_argument('--max-zero-paper-researchers', type=int, default=45,
-                   help='watch ceiling for researchers with no papers')
+    p.add_argument('--max-internal-authors', type=int, default=10)
+    p.add_argument('--max-orphan-ratio', type=float, default=0.60)
+    p.add_argument('--max-zero-paper-researchers', type=int, default=45)
     args = p.parse_args()
 
     try:
@@ -184,7 +146,6 @@ def main():
                 print(f'    {mark}  {f["count"]:>6}  {f["label"]}{extra}')
         print('\n' + '-' * 72)
 
-    # Exit code: non-zero on any HARD failure, or any WATCH breach under --strict.
     failed = bool(hard_fail) or (args.strict and bool(watch_fail))
     if not args.json:
         if failed:

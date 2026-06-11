@@ -18,7 +18,6 @@ load_dotenv()
 OPENALEX_MAILTO = "ra20awn@gmail.com"
 
 
-# Shared DB helper (single source — see litrix_db.py at repo root).
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from litrix_db import db
 
@@ -93,14 +92,12 @@ def openalex_works_by_author_id(author_id, max_pages=10):
 
 
 def orcid_api_works(orcid):
-    """
-    Hit ORCID's PUBLIC API. Two failure modes worth distinguishing:
-      • 404 → ORCID identifier doesn't exist or is suspended.
-      • 200 with empty `group` → the profile EXISTS but the works
-        section is private (or genuinely empty).
-    We log each so the operator can immediately see which case
-    applies. The public API can't read private works — that needs
-    an OAuth token from the researcher themselves.
+    """Pull works from ORCID's public API.
+
+    Two cases we log separately so the operator can tell them apart: a 404 means
+    the ORCID doesn't exist/is suspended; a 200 with an empty `group` means the
+    profile exists but its works are private. The public API can't read private
+    works — that needs an OAuth token from the researcher.
     """
     try:
         r = httpx.get(
@@ -121,9 +118,9 @@ def orcid_api_works(orcid):
 
     groups = data.get("group") or []
     if not groups:
-        # Distinguish "private works section" from "no works at all"
-        # by also probing the person record. If person exists but
-        # works are empty, it's almost certainly a privacy setting.
+        # Probe the person record to tell "private works" from "no works":
+        # if the person resolves but works are empty it's almost always a
+        # privacy setting.
         try:
             p = httpx.get(
                 f"https://pub.orcid.org/v3.0/{orcid}/person",
@@ -196,29 +193,20 @@ def orcid_to_openalex_shape(ow):
 
 
 def fetch_works_by_orcid(orcid, strict=False):
-    """
-    Pull a researcher's full publication list.
+    """Pull a researcher's full publication list.
 
-    Two modes:
-      • Default (strict=False) — UNION across three sources:
-            1. OpenAlex `author.orcid:` filter
-            2. OpenAlex author lookup
-            3. ORCID canonical record
-        Maximum coverage; may include OpenAlex auto-attributions the
-        researcher never personally claimed.
-      • Strict  (strict=True)  — ORCID canonical ONLY (strategy 3),
-        with OpenAlex DOI lookups used purely for metadata enrichment.
-        Highest precision; only papers the researcher explicitly
-        claimed in their ORCID profile land in the DB.
-
-    Use strict mode when you want to mirror the researcher's curated
-    ORCID record exactly (no name-collision false positives).
+    Default mode unions three sources (OpenAlex orcid filter, OpenAlex author
+    lookup, ORCID canonical record) for maximum coverage, but may pick up
+    OpenAlex auto-attributions the researcher never claimed. Strict mode uses
+    the ORCID canonical record only (OpenAlex just enriches metadata by DOI) so
+    only papers the researcher explicitly claimed land in the DB — use it to
+    mirror a curated ORCID record without name-collision false positives.
     """
 
     def _key(w):
-        # Prefer DOI as the dedup key — globally unique, tolerant of
-        # case + URL prefix differences. Fall back to a title hash
-        # when DOI is absent so two ORCID-only entries don't collide.
+        # DOI is the preferred dedup key — globally unique and tolerant of case
+        # + URL-prefix differences. Fall back to a normalized title when there's
+        # no DOI so two ORCID-only entries don't collide.
         doi = (w.get("doi") or "").lower().strip()
         if doi:
             doi = doi.replace("https://doi.org/", "").replace("http://doi.org/", "")
@@ -233,7 +221,7 @@ def fetch_works_by_orcid(orcid, strict=False):
         print("  [STRICT mode] OpenAlex orcid-filter / author-lookup skipped — "
               "ORCID-claimed papers only.")
     else:
-        # ---- Strategy 1: OpenAlex filter on ORCID -----------------
+        # OpenAlex works filtered by ORCID.
         cursor = "*"
         s1 = []
         for _ in range(10):
@@ -254,7 +242,7 @@ def fetch_works_by_orcid(orcid, strict=False):
         for w in s1:
             merged[_key(w)] = w
 
-        # ---- Strategy 2: OpenAlex author lookup -------------------
+        # OpenAlex author lookup by ORCID.
         s2_added = 0
         author_data = openalex_get(f"authors/orcid:{orcid}")
         if author_data:
@@ -268,10 +256,9 @@ def fetch_works_by_orcid(orcid, strict=False):
                         s2_added += 1
         print(f"  [strategy 2] OpenAlex author lookup → +{s2_added} new works")
 
-    # ---- Strategy 3: ORCID canonical record -----------------------
-    # This is the authoritative list. Anything OpenAlex didn't surface
-    # gets enriched via DOI lookup when possible; otherwise we keep
-    # the ORCID-only shape so the paper still lands in the DB.
+    # ORCID canonical record — the authoritative list. Anything OpenAlex missed
+    # is enriched via DOI lookup when possible, else kept in its ORCID-only
+    # shape so the paper still lands in the DB.
     orcid_works = orcid_api_works(orcid) or []
     print(f"  [strategy 3] ORCID API → {len(orcid_works)} canonical entries")
     s3_added = 0
@@ -279,7 +266,7 @@ def fetch_works_by_orcid(orcid, strict=False):
         k = _key(ow)
         if k in merged:
             continue
-        # Try to upgrade to OpenAlex shape via DOI for richer metadata.
+        # Upgrade to the OpenAlex shape via DOI when we can — richer metadata.
         if ow.get("doi"):
             time.sleep(0.15)
             w = openalex_get(f"works/doi:{ow['doi'].lower()}")
@@ -324,11 +311,9 @@ def find_journal_id(cur, issn, journal_name):
 
 
 def reconstruct_abstract(inverted_index):
-    """
-    OpenAlex stores abstracts as a word→positions inverted index for
-    licensing reasons. This rebuilds plain prose by sorting positions
-    and emitting the words in order. Returns None when the index is
-    missing/empty so the caller can NULL the column cleanly.
+    """Rebuild prose from OpenAlex's word->positions inverted index (they store
+    abstracts that way for licensing reasons). Returns None on a missing/empty
+    index so the caller can NULL the column cleanly.
     """
     if not inverted_index or not isinstance(inverted_index, dict):
         return None
@@ -379,19 +364,17 @@ def upsert_work(cur, w, user_id):
         "doi": doi, "issn_l": issn,
         "cited_by_count": cited,
         "openalex_id": w.get("id"),
-        # Persist the full authorships array (with institutions +
-        # raw_affiliation_strings). Powers the paper-detail modal's
-        # "Authors & Affiliations" section without an extra API call
-        # at view time.
+        # Keep the full authorships array (institutions + raw_affiliation_strings)
+        # so the paper-detail modal's Authors & Affiliations section renders
+        # without another API call at view time.
         "authorships":  authorships,
     }
 
     if row:
         paper_id, existing_doi, existing_journal = row
         jid = existing_journal or find_journal_id(cur, issn, journal_name)
-        # Backfill Abstract on existing rows when we now have one and
-        # the row was missing it. COALESCE preserves whatever was
-        # already there if both sides have data.
+        # COALESCE so we only backfill DOI/journal/abstract when the row was
+        # missing them — never overwrite data that's already there.
         cur.execute('''
             UPDATE "ResearchPaper"
             SET "DOI"       = COALESCE("DOI", %s),
@@ -522,11 +505,8 @@ def mode_sync(works, user_id, criteria, orcid=None, openalex_author_id=None):
     print(f"\nDone — new={n_new} existing={n_existing} linked={n_linked}")
 
 
-# ----------------------------------------------------------------------------
-# Cooldown guard — mirrors backend/accounts/sync_views.py.SYNC_COOLDOWN_DAYS.
-# Refuses to call OpenAlex / the ORCID API when the researcher has been
-# synced within this window unless --force is supplied.
-# ----------------------------------------------------------------------------
+# Mirrors backend/accounts/sync_views.py.SYNC_COOLDOWN_DAYS. Won't call OpenAlex
+# or the ORCID API for a researcher synced within this window unless --force.
 SYNC_COOLDOWN_DAYS = 7
 
 
@@ -585,7 +565,7 @@ def main():
         print("--user required")
         sys.exit(1)
 
-    # Cooldown gate before any external API call.
+    # Check the cooldown before any external API call.
     guard_conn = db()
     eligible, info = check_cooldown(guard_conn, args.user)
     guard_conn.close()

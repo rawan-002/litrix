@@ -22,7 +22,6 @@ if not SERP_KEY:
     sys.exit(1)
 
 
-# Shared DB helper (single source — see litrix_db.py at repo root).
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from litrix_db import db
 
@@ -192,20 +191,15 @@ def find_journal_id(cur, issn, journal_name):
     return None
 
 
-# ----------------------------------------------------------------------------
-# Cooldown guard — same constant as backend/accounts/sync_views.py
-# Defense-in-depth: refuses to call SerpAPI when invoked on a recently-
-# synced researcher unless --force is passed. This protects against
-# direct CLI invocations that bypass the API layer's gate.
-# ----------------------------------------------------------------------------
+# Must stay in sync with backend/accounts/sync_views.py. Guards against direct
+# CLI runs that bypass the API layer's gate and would burn a SerpAPI call on a
+# researcher synced only days ago (--force overrides).
 SYNC_COOLDOWN_DAYS = 7
 
 
 def check_cooldown(conn, user_id):
-    """
-    Returns (eligible, info_dict). When eligible is False, the caller
-    should exit early without calling any external API.
-    """
+    # Returns (eligible, info). When eligible is False the caller exits before
+    # hitting any external API.
     cur = conn.cursor()
     cur.execute('''
         SELECT
@@ -247,7 +241,7 @@ def main():
     user_id = int(sys.argv[2])
     force = '--force' in sys.argv[3:]
 
-    # Cooldown gate FIRST — before we burn a SerpAPI call.
+    # Check the cooldown before spending a SerpAPI call.
     guard_conn = db()
     eligible, info = check_cooldown(guard_conn, user_id)
     guard_conn.close()
