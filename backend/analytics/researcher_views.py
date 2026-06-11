@@ -3,9 +3,8 @@ import re
 
 from rest_framework import viewsets, filters, decorators, response
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db import connection
 
-from .models import ResearcherStats, ResearchPaper
+from .models import ResearcherStats
 from .serializers import ResearcherStatsSerializer
 from .stats import CHART_YEAR_FLOOR
 
@@ -362,7 +361,6 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                 WHERE a."UserID" = %s
                 ORDER BY rp."PubYear" DESC NULLS LAST, rp."PaperID" DESC
             ''', [resolved_user_id])
-            paper_cols = [c[0].lower() for c in cur.description]
             papers = [dict(zip([
                 'paper_id', 'title', 'doi', 'pub_year', 'source',
                 'indexing', 'citations_by_year', 'citations',

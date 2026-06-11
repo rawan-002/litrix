@@ -1,4 +1,5 @@
 """Role + permission management endpoints (RBAC admin)."""
+import psycopg2
 from django.db import connection
 from rest_framework import status
 from rest_framework.decorators import api_view

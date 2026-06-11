@@ -2,7 +2,6 @@ import json
 import logging
 import threading
 
-import psycopg2
 from django.contrib.auth.hashers import make_password, check_password
 from django.db import connection, transaction
 from rest_framework import status, permissions
@@ -12,7 +11,6 @@ from rest_framework.decorators import (
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.views import TokenRefreshView
 
 logger = logging.getLogger(__name__)
 

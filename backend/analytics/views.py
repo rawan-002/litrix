@@ -8,22 +8,19 @@ are scoped to FOCUS_YEARS, so widen or narrow that list to move the window.
 
 from rest_framework import viewsets, filters, decorators, response
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Sum, Count, Avg
-from django.http import HttpResponse
+from django.db.models import Avg
 
 
 from .models import (
     ResearcherStats, DepartmentStats, TopPaper, PublicationTrend,
-    ResearchPaper,
 )
 from .serializers import (
     ResearcherStatsSerializer, DepartmentStatsSerializer,
     TopPaperSerializer, PublicationTrendSerializer,
-    ResearchPaperSerializer,
 )
 
 from .stats import (
-    YEAR_FLOOR, CHART_YEAR_FLOOR, FOCUS_YEARS,
+    CHART_YEAR_FLOOR, FOCUS_YEARS,
     _resolve_years, _hod_scope_department_id, _albaha_only,
     _cites_expr, _affil_clause,
     _dept_cards_windowed, _researcher_rows_windowed,

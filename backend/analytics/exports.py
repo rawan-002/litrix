@@ -3,10 +3,9 @@ workbook; every number runs through the same stats helpers as the overview so
 the file matches what's on screen."""
 from rest_framework import decorators, response
 from django.http import HttpResponse
-from django.db import connection
 
 from .stats import (
-    FOCUS_YEARS, _albaha_only, _resolve_years,
+    FOCUS_YEARS, _albaha_only,
     _cites_expr, _affil_clause, _hod_scope_department_id,
 )
 
@@ -217,9 +216,6 @@ def export_excel(request):
             ('h-index',      str(avg_h or 0),             'avg h-index'),
         ]
         for idx, (label, value, sub) in enumerate(cards):
-            col_label = chr(ord('A') + idx * 2)
-            col_value = chr(ord('A') + idx * 2)  # same col, multiple rows
-
             cell_label = ws_overview.cell(row=4, column=idx * 2 + 1, value=label.upper())
             cell_label.font = label_font
             cell_label.fill = bg_fill
