@@ -23,7 +23,7 @@ interface ChatMessage {
         <div class="w-9 h-9 rounded-xl bg-ink-900 text-white flex items-center
                     justify-center text-lg">✦</div>
         <div>
-          <h1 class="text-lg font-semibold text-ink-900 leading-tight">Litrix AI</h1>
+          <h1 class="text-2xl font-semibold text-ink-900 tracking-tight leading-tight">Litrix AI</h1>
           <p class="text-xs text-ink-400">
             Smart research assistant — soon connected to platform data (RAG)
           </p>
