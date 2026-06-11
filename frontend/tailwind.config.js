@@ -10,7 +10,9 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont',
+        // Latin renders in Inter; Arabic has no Inter glyphs so the browser
+        // falls through to Cairo (a modern Arabic face that pairs with Inter).
+        sans: ['Inter', 'Cairo', '-apple-system', 'BlinkMacSystemFont',
                'Segoe UI', 'Roboto', 'sans-serif'],
       },
       colors: {

@@ -17,11 +17,11 @@
           <div class="flex-1 min-w-0">
           <div class="flex gap-5">
             <div class="w-20 h-20 rounded-2xl bg-accent/10 text-accent flex items-center
-                        justify-center text-2xl font-bold shrink-0">
+                        justify-center text-2xl font-semibold leading-none shrink-0">
               {{ initials() }}
             </div>
             <div class="min-w-0">
-              <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 leading-tight">
+              <h1 class="text-xl sm:text-2xl font-semibold text-ink-900 leading-snug">
                 {{ displayName() }}
               </h1>
               @if (secondaryName()) {
@@ -106,7 +106,7 @@
       <section class="lg:col-span-2 space-y-4">
         <div class="flex items-center justify-between gap-3 flex-wrap">
           <h2 class="text-lg font-semibold text-ink-900">
-            Publications <span class="text-ink-400 font-normal">({{ d.papers.length }})</span>
+            Publications <span class="text-ink-400 font-normal">({{ statsPapers().length }})</span>
           </h2>
           <!-- Sort -->
           <div class="flex items-center gap-1 bg-ink-100 rounded-full p-1">
@@ -150,14 +150,18 @@
             </button>
           }
           <span class="w-px h-5 bg-ink-200 mx-1"></span>
-          <div class="flex items-center gap-1 bg-ink-100 rounded-full p-1">
+          <div class="flex items-center gap-1.5">
             @for (q of ['Q1', 'Q2', 'Q3', 'Q4']; track q) {
               <button (click)="toggleQuartile(q)"
-                      class="text-xs font-medium px-2.5 py-1.5 rounded-full transition-colors"
-                      [class.bg-white]="activeQuartiles().has(q)"
-                      [class.shadow-card]="activeQuartiles().has(q)"
-                      [class.text-ink-700]="activeQuartiles().has(q)"
-                      [class.text-ink-400]="!activeQuartiles().has(q)">
+                      class="text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors"
+                      [class.bg-accent]="activeQuartiles().has(q)"
+                      [class.border-accent]="activeQuartiles().has(q)"
+                      [class.text-white]="activeQuartiles().has(q)"
+                      [class.bg-white]="!activeQuartiles().has(q)"
+                      [class.border-ink-200]="!activeQuartiles().has(q)"
+                      [class.text-ink-600]="!activeQuartiles().has(q)"
+                      [class.hover:border-accent]="!activeQuartiles().has(q)"
+                      [class.hover:text-accent]="!activeQuartiles().has(q)">
                 {{ q }}
               </button>
             }
@@ -175,43 +179,40 @@
           <ul class="divide-y divide-ink-100">
             @for (p of visiblePapers(); track p.paper_id) {
               <li class="px-5 py-4 hover:bg-ink-50 transition-colors">
-                <div class="flex items-start justify-between gap-4">
-                  <div class="flex-1 min-w-0">
-                    <button (click)="openPaper(p)"
-                            class="text-sm font-semibold text-ink-900 leading-snug
-                                   line-clamp-2 text-left hover:text-accent transition-colors">
-                      {{ p.title }}
-                    </button>
-                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5 text-xs">
-                      @if (p.journal_name) {
-                        <span class="text-ink-600 italic">{{ p.journal_name }}</span>
-                      }
-                      @if (p.pub_year) {
-                        <span class="text-ink-400">·</span>
-                        <span class="text-ink-700 font-medium">{{ p.pub_year }}</span>
-                      }
-                      @if (p.quartile) {
-                        <span class="px-1.5 py-0.5 rounded bg-accent/10 text-accent font-semibold text-[10px]">
-                          {{ p.quartile }}
-                        </span>
-                      }
-                      @if (p.indexing) {
-                        <span class="text-ink-400">·</span>
-                        <span class="text-ink-500">{{ p.indexing }}</span>
-                      }
-                      @if (p.doi) {
-                        <span class="text-ink-400">·</span>
-                        <a [href]="'https://doi.org/' + p.doi" target="_blank"
-                           class="text-ink-500 hover:text-accent underline-offset-2 hover:underline">
-                          DOI ↗
-                        </a>
-                      }
-                    </div>
-                  </div>
-                  <div class="text-right shrink-0">
-                    <div class="text-xl font-bold text-ink-900">{{ fmt(p.citations) }}</div>
-                    <div class="text-[10px] text-ink-400 uppercase tracking-wide">cited</div>
-                  </div>
+                <button (click)="openPaper(p)"
+                        class="block w-full text-sm font-semibold text-ink-900 leading-snug
+                               line-clamp-2 text-left hover:text-accent transition-colors">
+                  {{ p.title }}
+                </button>
+                <div class="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5 text-xs">
+                  @if (p.journal_name) {
+                    <span class="text-ink-600 italic">{{ p.journal_name }}</span>
+                  }
+                  @if (p.pub_year) {
+                    <span class="text-ink-400">·</span>
+                    <span class="text-ink-700 font-medium">{{ p.pub_year }}</span>
+                  }
+                  @if (p.quartile) {
+                    <span class="px-1.5 py-0.5 rounded bg-accent/10 text-accent font-semibold text-[10px]">
+                      {{ p.quartile }}
+                    </span>
+                  }
+                  @if (p.indexing) {
+                    <span class="text-ink-400">·</span>
+                    <span class="text-ink-500">{{ p.indexing }}</span>
+                  }
+                  @if (p.doi) {
+                    <span class="text-ink-400">·</span>
+                    <a [href]="'https://doi.org/' + p.doi" target="_blank"
+                       class="text-ink-500 hover:text-accent underline-offset-2 hover:underline">
+                      DOI ↗
+                    </a>
+                  }
+                  <!-- Citations as a compact badge, pushed to the row's end -->
+                  <span class="ml-auto shrink-0 px-2 py-0.5 rounded-md bg-ink-100
+                               text-ink-600 font-semibold text-[11px]">
+                    {{ fmt(p.citations) }} cited
+                  </span>
                 </div>
               </li>
             } @empty {
@@ -245,17 +246,21 @@
               @for (c of visibleCoauthors(); track c.name) {
                 @if (c.is_albaha && c.litrix_id) {
                   <a [routerLink]="['/profile', c.litrix_id]"
-                     class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm
+                     class="inline-flex items-center gap-2 pl-3 pr-1.5 py-1 rounded-full text-sm
                             bg-accent-light text-accent ring-1 ring-accent/40
                             hover:ring-accent hover:bg-accent/10 transition">
-                    {{ c.name }}
-                    <span class="text-[10px] opacity-70">· {{ c.shared_papers }}</span>
+                    <span dir="auto">{{ c.name }}</span>
+                    <span class="shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-white
+                                 text-[10px] font-semibold flex items-center justify-center"
+                          title="shared papers">{{ c.shared_papers }}</span>
                   </a>
                 } @else {
-                  <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm
+                  <span class="inline-flex items-center gap-2 pl-3 pr-1.5 py-1 rounded-full text-sm
                                bg-ink-100 text-ink-600">
-                    {{ c.name }}
-                    <span class="text-[10px] opacity-60">· {{ c.shared_papers }}</span>
+                    <span dir="auto">{{ c.name }}</span>
+                    <span class="shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-ink-300 text-white
+                                 text-[10px] font-semibold flex items-center justify-center"
+                          title="shared papers">{{ c.shared_papers }}</span>
                   </span>
                 }
               }

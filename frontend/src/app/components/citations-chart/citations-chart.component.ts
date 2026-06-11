@@ -41,9 +41,15 @@ interface ChartPoint { x: number; y: number; year: number; value: number; }
         }
 
         <path [attr.d]="c.areaPath" [attr.fill]="'url(#' + gradId + ')'" />
-        <path [attr.d]="c.linePath"
+        <path [attr.d]="c.solidPath"
               fill="none" stroke="#1c1917" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round" />
+        @if (c.dashedPath) {
+          <!-- Current (partial) year drawn dashed — data still updating. -->
+          <path [attr.d]="c.dashedPath"
+                fill="none" stroke="#1c1917" stroke-width="2" opacity="0.5"
+                stroke-linecap="round" stroke-dasharray="3 4" />
+        }
 
         @for (p of c.points; track p.year) {
           <g (mouseenter)="hovered.set(p)">
@@ -119,9 +125,19 @@ export class CitationsChartComponent {
       value: s.citations,
     }));
 
-    const linePath = points
+    const toPath = (pts: ChartPoint[]) => pts
       .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)},${p.y.toFixed(1)}`)
       .join(' ');
+    const linePath = toPath(points);
+
+    // The current year is still in progress, so its citation count is partial.
+    // Draw that last segment dashed to signal "data still coming in" instead of
+    // a misleading sharp drop to the present year.
+    const currentYear = new Date().getFullYear();
+    const lastIsPartial = points.length >= 2
+      && points[points.length - 1].year === currentYear;
+    const solidPath  = toPath(lastIsPartial ? points.slice(0, -1) : points);
+    const dashedPath = lastIsPartial ? toPath(points.slice(-2)) : null;
 
     const baseline = padding.top + innerH;
     const first = points[0];
@@ -131,7 +147,7 @@ export class CitationsChartComponent {
       `L ${first.x.toFixed(1)},${baseline} Z`;
 
     return {
-      W, H, padding, points, linePath, areaPath,
+      W, H, padding, points, linePath, solidPath, dashedPath, areaPath,
       yLabels: [
         { v: max,                              y: padding.top },
         { v: Math.max(1, Math.round(max / 2)), y: padding.top + innerH / 2 },
