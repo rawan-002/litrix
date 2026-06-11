@@ -82,10 +82,11 @@ const CHART_MIN_YEAR = 2019;
                 </div>
               </div>
 
-              <!-- Metrics panel (right, same card): secondary stats + chart -->
-              <div class="shrink-0 lg:w-80 pt-5 border-t border-gray-100
+              <!-- Metrics panel (right, same card): secondary stats + chart.
+                   Nudged down a little on desktop so it sits below the name. -->
+              <div class="shrink-0 lg:w-96 lg:mt-3 pt-5 border-t border-gray-100
                           lg:pt-0 lg:border-t-0 lg:border-l lg:pl-8">
-                <div class="flex gap-8">
+                <div class="flex gap-10">
                   <div>
                     <div class="text-2xl font-semibold text-gray-900">{{ avgCitations() }}</div>
                     <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-0.5">Avg. / paper</div>
@@ -106,23 +107,23 @@ const CHART_MIN_YEAR = 2019;
               </div>
             </div>
 
-            <!-- Metrics strip (4 headline KPIs, full width) -->
-            <div class="grid grid-cols-2 lg:grid-cols-4 border-t border-gray-100 divide-x divide-gray-100">
-              <div class="p-5">
-                <div class="text-3xl font-semibold text-gray-900">{{ p.stats.total_papers | number }}</div>
-                <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-1">Publications</div>
+            <!-- Metrics strip (4 headline KPIs, side by side) -->
+            <div class="grid grid-cols-4 border-t border-gray-100 divide-x divide-gray-100">
+              <div class="p-3 sm:p-5">
+                <div class="text-xl sm:text-3xl font-semibold text-gray-900">{{ p.stats.total_papers | number }}</div>
+                <div class="text-[10px] sm:text-[11px] uppercase tracking-wide text-gray-500 mt-1">Publications</div>
               </div>
-              <div class="p-5">
-                <div class="text-3xl font-semibold text-gray-900">{{ p.stats.total_citations | number }}</div>
-                <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-1">Times Cited</div>
+              <div class="p-3 sm:p-5">
+                <div class="text-xl sm:text-3xl font-semibold text-gray-900">{{ p.stats.total_citations | number }}</div>
+                <div class="text-[10px] sm:text-[11px] uppercase tracking-wide text-gray-500 mt-1">Times Cited</div>
               </div>
-              <div class="p-5 border-t lg:border-t-0 border-gray-100">
-                <div class="text-3xl font-semibold text-gray-900">{{ hIndex() }}</div>
-                <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-1">H-Index</div>
+              <div class="p-3 sm:p-5">
+                <div class="text-xl sm:text-3xl font-semibold text-gray-900">{{ hIndex() }}</div>
+                <div class="text-[10px] sm:text-[11px] uppercase tracking-wide text-gray-500 mt-1">H-Index</div>
               </div>
-              <div class="p-5 border-t lg:border-t-0 border-gray-100">
-                <div class="text-3xl font-semibold text-indigo-600">{{ p.stats.q1_papers | number }}</div>
-                <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-1">Q1 Papers</div>
+              <div class="p-3 sm:p-5">
+                <div class="text-xl sm:text-3xl font-semibold text-indigo-600">{{ p.stats.q1_papers | number }}</div>
+                <div class="text-[10px] sm:text-[11px] uppercase tracking-wide text-gray-500 mt-1">Q1 Papers</div>
               </div>
             </div>
           </div>
