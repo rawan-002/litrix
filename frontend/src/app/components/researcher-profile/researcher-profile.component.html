@@ -10,10 +10,8 @@
     </div>
   } @else if (data(); as d) {
 
-    <!-- Identity + chart as two separate cards (top-aligned so neither stretches) -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6 items-start">
-      <!-- Card: identity + KPIs -->
-      <header class="lg:col-span-2 bg-white rounded-2xl border border-ink-100 overflow-hidden">
+    <!-- Identity card (full width) -->
+    <header class="bg-white rounded-2xl border border-ink-100 overflow-hidden mb-6">
         <div class="h-1.5 bg-accent"></div>
         <div class="p-6 sm:p-8">
           <div class="flex gap-5">
@@ -107,54 +105,10 @@
         </div>
       </header>
 
-      <!-- Card: citations chart (top-aligned, fits its content) -->
-      <section class="lg:col-span-1 bg-white rounded-2xl border border-ink-100 p-5">
-        <h3 class="text-xs font-semibold text-ink-700 mb-3">Citations over time</h3>
-        <app-citations-chart
-          [series]="data()?.citations_by_year ?? []"
-          [height]="200" />
-      </section>
-    </div>
-
-    <!-- Card: co-authors -->
-    @if (d.coauthors?.length) {
-      <section class="bg-white rounded-2xl border border-ink-100 p-5 sm:p-6 mb-6">
-        <h2 class="text-sm font-semibold text-ink-900 mb-4">
-          Co-authors <span class="text-ink-400 font-normal">({{ d.coauthors.length }})</span>
-        </h2>
-        <div class="flex flex-wrap gap-2">
-          @for (c of visibleCoauthors(); track c.name) {
-            @if (c.is_albaha && c.litrix_id) {
-              <a [routerLink]="['/profile', c.litrix_id]"
-                 class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm
-                        bg-accent-light text-accent ring-1 ring-accent/40
-                        hover:ring-accent hover:bg-accent/10 transition">
-                {{ c.name }}
-                <span class="text-[10px] opacity-70">· {{ c.shared_papers }}</span>
-              </a>
-            } @else {
-              <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm
-                           bg-ink-100 text-ink-600">
-                {{ c.name }}
-                <span class="text-[10px] opacity-60">· {{ c.shared_papers }}</span>
-              </span>
-            }
-          }
-        </div>
-        @if (d.coauthors.length > visibleCoauthors().length) {
-          <div class="mt-4">
-            <button (click)="showMoreCoauthors()"
-                    class="text-xs text-accent hover:text-accent-hover font-medium
-                           px-4 py-1.5 rounded-full hover:bg-accent-light transition">
-              Load More ({{ d.coauthors.length - visibleCoauthors().length }} more)
-            </button>
-          </div>
-        }
-      </section>
-    }
-
-    <!-- Publications -->
-    <section class="space-y-4">
+    <!-- Publications (left) + right rail (chart + co-authors), Clarivate-style -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+      <!-- Publications -->
+      <section class="lg:col-span-2 space-y-4">
         <div class="flex items-center justify-between gap-3 flex-wrap">
           <h2 class="text-lg font-semibold text-ink-900">
             Publications <span class="text-ink-400 font-normal">({{ d.papers.length }})</span>
@@ -284,6 +238,53 @@
           </div>
         }
       </section>
+
+      <!-- Right rail: citations chart + co-authors, stacked -->
+      <aside class="lg:col-span-1 space-y-6">
+        <section class="bg-white rounded-2xl border border-ink-100 p-5">
+          <h3 class="text-xs font-semibold text-ink-700 mb-3">Citations over time</h3>
+          <app-citations-chart
+            [series]="data()?.citations_by_year ?? []"
+            [height]="180" />
+        </section>
+
+        @if (d.coauthors?.length) {
+          <section class="bg-white rounded-2xl border border-ink-100 p-5">
+            <h2 class="text-sm font-semibold text-ink-900 mb-4">
+              Co-authors <span class="text-ink-400 font-normal">({{ d.coauthors.length }})</span>
+            </h2>
+            <div class="flex flex-wrap gap-2">
+              @for (c of visibleCoauthors(); track c.name) {
+                @if (c.is_albaha && c.litrix_id) {
+                  <a [routerLink]="['/profile', c.litrix_id]"
+                     class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm
+                            bg-accent-light text-accent ring-1 ring-accent/40
+                            hover:ring-accent hover:bg-accent/10 transition">
+                    {{ c.name }}
+                    <span class="text-[10px] opacity-70">· {{ c.shared_papers }}</span>
+                  </a>
+                } @else {
+                  <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm
+                               bg-ink-100 text-ink-600">
+                    {{ c.name }}
+                    <span class="text-[10px] opacity-60">· {{ c.shared_papers }}</span>
+                  </span>
+                }
+              }
+            </div>
+            @if (d.coauthors.length > visibleCoauthors().length) {
+              <div class="mt-4">
+                <button (click)="showMoreCoauthors()"
+                        class="text-xs text-accent hover:text-accent-hover font-medium
+                               px-4 py-1.5 rounded-full hover:bg-accent-light transition">
+                  Load More ({{ d.coauthors.length - visibleCoauthors().length }} more)
+                </button>
+              </div>
+            }
+          </section>
+        }
+      </aside>
+    </div>
   }
 
   <!-- Shared paper detail modal — fetches full data on demand -->
