@@ -87,7 +87,7 @@ These exist because name-based matching once cross-contaminated 602 papers betwe
 ## Key reference docs
 
 - `OPERATIONS_LOG.md` — full architectural history with code snippets and trade-off analyses (Arabic/English). Read this before touching the data pipeline.
-- `Litrix Database Schema.pdf` — domain schema reference.
+- `DATABASE.md` — developer guide to the schema (table groups, canonical columns, gotchas). `litrix_schema.dbml` — the live ER diagram for dbdiagram.io (regenerate after schema changes). `Litrix Database Schema.pdf` — older domain schema reference.
 - `Scopus_Migration_2026-06/` + `data/scopus*/` — ongoing Scopus data-migration working set (source Excel exports, apply logs).
 
 ## Communication

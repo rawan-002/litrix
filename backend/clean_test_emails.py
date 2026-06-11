@@ -53,7 +53,7 @@ def main():
                 try:
                     cur.execute("""
                         SELECT "UserID", "Email", "FullName_Ar",
-                               "Password", "EmailVerified", "AccountStatus"
+                               "PasswordHash", "EmailVerified", "AccountStatus"
                         FROM "Users"
                         WHERE LOWER("Email") = LOWER(%s)
                         LIMIT 1
@@ -96,7 +96,7 @@ def main():
                     cur.execute("""
                         UPDATE "Users"
                         SET "Email"          = %s,
-                            "Password"       = NULL,
+                            "PasswordHash"   = NULL,
                             "EmailVerified"  = FALSE,
                             "AccountStatus"  = 'Pending'
                         WHERE "UserID" = %s

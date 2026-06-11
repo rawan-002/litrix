@@ -1,0 +1,468 @@
+// Litrix - Database Schema (DBML for dbdiagram.io)
+// Auto-generated from the live Neon PostgreSQL schema. Domain tables only.
+
+Table "AuditLog" {
+  "LogID" int [pk]
+  "TenantID" int
+  "UserID" int
+  "Action" varchar(128) [not null]
+  "TargetType" varchar(64)
+  "TargetID" int
+  "Metadata" jsonb
+  "IpAddress" varchar(64)
+  "UserAgent" text
+  "CreatedAt" timestamptz
+}
+
+Table "AuthorReviewQueue" {
+  "ReviewID" int [pk]
+  "PaperID" int [not null]
+  "ScrapedName" varchar(255) [not null]
+  "ScrapedAffiliation" varchar(255)
+  "SuggestedUserID" int
+  "SuggestedConfidence" numeric [not null]
+  "SuggestedCriteria" varchar(50) [not null]
+  "Status" varchar(20) [not null]
+  "ReviewedByUserID" int
+  "ReviewedAt" timestamptz
+  "ReviewerNotes" text
+  "CreatedAt" timestamptz [not null]
+}
+
+Table "Authors" {
+  "UserID" int
+  "PaperID" int [not null]
+  "AuthorOrder" int
+  "IsCorrespondingAuthor" boolean
+  "MappingConfidence" float
+  "MappingCriteria" varchar(255)
+  "AuthorLinkID" int [pk]
+  "AuthorNameRaw" text
+  "Is_Verified" boolean
+}
+
+Table "Citations" {
+  "PaperID" int [pk]
+  "CitationsCount" int
+  "CitesPerYear" float
+  "LastUpdate" timestamptz
+}
+
+Table "CitationsHistory" {
+  "HistoryID" int [pk]
+  "PaperID" int
+  "Count" int
+  "CaptureDate" date
+}
+
+Table "College" {
+  "CollegeID" int [pk]
+  "CollegeName" varchar(255) [not null]
+  "DeanID" int
+}
+
+Table "Department" {
+  "DepartmentID" int [pk]
+  "DepartmentName" varchar(255) [not null]
+  "CollegeID" int
+  "HeadID" int
+  "TenantID" int
+}
+
+Table "EmailVerification" {
+  "TokenID" int [pk]
+  "Email" varchar(255) [not null]
+  "Token" varchar(128) [not null]
+  "TenantID" int
+  "Purpose" varchar(32) [not null]
+  "ExpiresAt" timestamptz [not null]
+  "UsedAt" timestamptz
+  "CreatedAt" timestamptz
+}
+
+Table "ExternalAuthors" {
+  "ExtAuthorID" int [pk]
+  "FullName" varchar(255)
+  "Affiliation" varchar(255)
+  "PaperID" int
+}
+
+Table "ISSN_Mapping" {
+  "ISSN" text [pk]
+  "RankingID" int
+}
+
+Table "Invitation" {
+  "InvitationID" int [pk]
+  "TenantID" int
+  "Token" varchar(80) [not null]
+  "InvitedEmail" varchar(255) [not null]
+  "IntendedRoleID" int
+  "IntendedUserType" varchar(50) [not null]
+  "IntendedDepartmentID" int
+  "InvitedByUserID" int
+  "ExpiresAt" timestamptz [not null]
+  "UsedAt" timestamptz
+  "UsedByUserID" int
+  "RevokedAt" timestamptz
+  "CreatedAt" timestamptz
+}
+
+Table "JournalRankings" {
+  "RankingID" int [pk]
+  "JournalID" int
+  "RankingYear" int
+  "Source" varchar(50)
+  "Quartile" varchar(5)
+  "ImpactFactor" float
+  "Issn" varchar(20)
+  "Category" text
+  "NormalizedName" text
+}
+
+Table "Journals" {
+  "JournalID" int [pk]
+  "JournalName" varchar(500) [not null]
+  "ISSN_Print" varchar(20)
+  "ISSN_Online" varchar(20)
+  "Publisher" varchar(255)
+  "VenueType" varchar(20)
+  "NormalizedName" text
+}
+
+Table "Keywords" {
+  "KeywordID" int [pk]
+  "KeywordLabel" varchar(100)
+}
+
+Table "Notification" {
+  "NotificationID" int [pk]
+  "TenantID" int
+  "UserID" int
+  "Type" varchar(64) [not null]
+  "Title" varchar(255) [not null]
+  "Message" text
+  "Metadata" jsonb
+  "IsRead" boolean
+  "CreatedAt" timestamptz
+  "ReadAt" timestamptz
+}
+
+Table "PaperKeywords" {
+  "PaperID" int [not null]
+  "KeywordID" int [not null]
+  indexes {
+    ("PaperID", "KeywordID") [pk]
+  }
+}
+
+Table "Permission" {
+  "PermissionID" int [pk]
+  "Code" varchar(128) [not null]
+  "Description" text
+  "Category" varchar(64)
+}
+
+Table "RefreshToken" {
+  "TokenID" int [pk]
+  "UserID" int
+  "TokenHash" varchar(255) [not null]
+  "ExpiresAt" timestamptz [not null]
+  "RevokedAt" timestamptz
+  "IpAddress" varchar(64)
+  "UserAgent" text
+  "CreatedAt" timestamptz
+}
+
+Table "RegistrationRequest" {
+  "RequestID" int [pk]
+  "TenantID" int
+  "Email" varchar(255) [not null]
+  "FullName_Ar" varchar(255)
+  "FullName_En" varchar(255)
+  "Scholar_ID" varchar(64)
+  "Orcid_ID" varchar(64)
+  "Scopus_ID" varchar(64)
+  "DepartmentID" int
+  "AcademicRank" varchar(64)
+  "Status" varchar(32)
+  "ReviewedByUserID" int
+  "ReviewedAt" timestamptz
+  "RejectionReason" text
+  "PasswordHash" varchar(255)
+  "CreatedAt" timestamptz
+}
+
+Table "ReportCampaign" {
+  "CampaignID" int [pk]
+  "TenantID" int [not null]
+  "Title" varchar(200) [not null]
+  "Description" text
+  "TargetYears" "int4[]" [not null]
+  "OpensAt" timestamptz [not null]
+  "ClosesAt" timestamptz [not null]
+  "Status" varchar(20) [not null]
+  "ScopeType" varchar(20) [not null]
+  "ScopeFilter" jsonb
+  "CreatedByUserID" int
+  "CreatedAt" timestamptz [not null]
+  "ClosedAt" timestamptz
+  "ArchivedAt" timestamptz
+}
+
+Table "ReportPaperDecision" {
+  "DecisionID" int [pk]
+  "SubmissionID" int [not null]
+  "PaperID" int
+  "Decision" varchar(20) [not null]
+  "Note" text
+  "DecidedAt" timestamptz [not null]
+  "MissingTitle" text
+  "MissingDOI" text
+  "MissingYear" int
+  "MissingResolvedAt" timestamptz
+  "MissingResolvedToPaperID" int
+}
+
+Table "ReportSubmission" {
+  "SubmissionID" int [pk]
+  "CampaignID" int [not null]
+  "UserID" int [not null]
+  "Status" varchar(20) [not null]
+  "StartedAt" timestamptz
+  "SubmittedAt" timestamptz
+  "ReopenedAt" timestamptz
+  "ReopenedByUserID" int
+  "IsLate" boolean [not null]
+  "AdminReviewedAt" timestamptz
+}
+
+Table "ResearchPaper" {
+  "PaperID" int [pk]
+  "JournalID" int
+  "Title" text [not null]
+  "Title_En" text
+  "Abstract" text
+  "Abstract_En" text
+  "Language" varchar(10)
+  "DOI" varchar(100)
+  "PubYear" int
+  "Volume" varchar(50)
+  "Issue" varchar(50)
+  "Pages" varchar(100)
+  "IsVerified" boolean
+  "ScrapedAt" timestamptz
+  "Source" varchar(100)
+  "RawData_Log" jsonb
+  "SearchVector_En" tsvector
+  "SearchVector_Ar" tsvector
+  "NormalizedTitle" text
+  "Indexing" varchar(50)
+  "CitationsByYear" jsonb
+  "TenantID" int
+  "AffiliationVerified" boolean
+  "VerificationSource" varchar(20)
+  "VerifiedAt" timestamp
+  "VerificationDetails" jsonb
+}
+
+Table "Researcher" {
+  "UserID" int [pk]
+  "Specialization" varchar(255)
+  "AcademicRank" varchar(100)
+  "GoogleScholar_URL" text
+  "Scopus_ID" varchar(100)
+  "ResearchGate_URL" text
+  "ORCID_ID" varchar(100)
+  "H_Index" int
+  "IsSurveyCompleted" boolean
+  "OpenAlex_AuthorID" varchar(50)
+  "LastSyncedAt" timestamptz
+  "CitationsByYear" jsonb
+  "ResearchInterests" jsonb
+  "ResearchInterestsUpdatedAt" timestamptz
+}
+
+Table "Role" {
+  "RoleID" int [pk]
+  "TenantID" int
+  "Name" varchar(64) [not null]
+  "Description" text
+  "IsSystem" boolean
+  "CreatedAt" timestamptz
+}
+
+Table "RolePermission" {
+  "RoleID" int [not null]
+  "PermissionID" int [not null]
+  indexes {
+    ("RoleID", "PermissionID") [pk]
+  }
+}
+
+Table "ScheduledNotification" {
+  "ScheduleID" int [pk]
+  "TenantID" int [not null]
+  "Title" varchar(200) [not null]
+  "Body" text [not null]
+  "NotificationType" varchar(50) [not null]
+  "TargetAudience" jsonb [not null]
+  "SendAt" timestamptz [not null]
+  "Status" varchar(20) [not null]
+  "SentAt" timestamptz
+  "RecipientCount" int
+  "ErrorMessage" text
+  "RelatedCampaignID" int
+  "CreatedByUserID" int
+  "CreatedAt" timestamptz [not null]
+}
+
+Table "Scimago_Staging" {
+  "Rank" text
+  "Sourceid" text
+  "Title" text
+  "Type" text
+  "Issn" text
+  "Publisher" text
+  "Open Access" text
+  "Open Access Diamond" text
+  "SJR" text
+  "SJR Best Quartile" text
+  "H index" text
+  "Total Docs" text
+  "Total Docs 3years" text
+  "Total Refs" text
+  "Total Citations" text
+  "Citable Docs" text
+  "Cites per Doc" text
+  "Ref per Doc" text
+  "FemalePercent" text
+  "Overton" text
+  "Country" text
+  "Region" text
+  "Publisher1" text
+  "Coverage" text
+  "Categories" text
+  "Areas" text
+}
+
+Table "SyncJob" {
+  "JobID" int [pk]
+  "TenantID" int
+  "UserID" int
+  "TriggeredBy" int
+  "Source" varchar(32) [not null]
+  "Status" varchar(32) [not null]
+  "StartedAt" timestamptz
+  "FinishedAt" timestamptz
+  "PapersAdded" int
+  "ErrorMessage" text
+  "Metadata" jsonb
+  "CreatedAt" timestamptz
+}
+
+Table "Tenant" {
+  "TenantID" int [pk]
+  "Name" varchar(255) [not null]
+  "Slug" varchar(64) [not null]
+  "Subdomain" varchar(64)
+  "CustomDomain" varchar(255)
+  "LogoUrl" text
+  "PrimaryColor" varchar(16)
+  "SecondaryColor" varchar(16)
+  "Status" varchar(32)
+  "SubscriptionTier" varchar(32)
+  "Settings" jsonb
+  "Timezone" varchar(64)
+  "CreatedAt" timestamptz
+  "UpdatedAt" timestamptz
+}
+
+Table "Users" {
+  "UserID" int [pk]
+  "FirstName" varchar(100) [not null]
+  "MiddleName" varchar(100)
+  "LastName" varchar(100) [not null]
+  "FullName_Ar" varchar(255)
+  "Email" varchar(255)
+  "UserType" varchar(50) [not null]
+  "AccountStatus" varchar(50)
+  "CreatedAt" timestamptz
+  "Litrix_ID" varchar(20) [not null]
+  "Scholar_ID" varchar(50)
+  "ORCID" varchar(19)
+  "TenantID" int
+  "RoleID" int
+  "EmailVerified" boolean
+  "PasswordHash" varchar(255)
+  "IsActive" boolean
+  "LastLoginAt" timestamptz
+  "Orcid_ID" varchar(64)
+  "Scopus_ID" varchar(64)
+}
+
+Table "Works_In" {
+  "UserID" int [not null]
+  "DepartmentID" int [not null]
+  "Role_Position" varchar(100)
+  "StartDate" date [not null]
+  "EndDate" date
+  "IsCurrentPosition" boolean
+  indexes {
+    ("UserID", "DepartmentID", "StartDate") [pk]
+  }
+}
+
+// ---- Relationships ----
+Ref: "AuditLog"."TenantID" > "Tenant"."TenantID"
+Ref: "AuditLog"."UserID" > "Users"."UserID"
+Ref: "AuthorReviewQueue"."PaperID" > "ResearchPaper"."PaperID"
+Ref: "AuthorReviewQueue"."ReviewedByUserID" > "Users"."UserID"
+Ref: "AuthorReviewQueue"."SuggestedUserID" > "Users"."UserID"
+Ref: "Authors"."PaperID" > "ResearchPaper"."PaperID"
+Ref: "Authors"."UserID" > "Users"."UserID"
+Ref: "Citations"."PaperID" > "ResearchPaper"."PaperID"
+Ref: "CitationsHistory"."PaperID" > "ResearchPaper"."PaperID"
+Ref: "College"."DeanID" > "Users"."UserID"
+Ref: "Department"."CollegeID" > "College"."CollegeID"
+Ref: "Department"."HeadID" > "Users"."UserID"
+Ref: "Department"."TenantID" > "Tenant"."TenantID"
+Ref: "EmailVerification"."TenantID" > "Tenant"."TenantID"
+Ref: "ExternalAuthors"."PaperID" > "ResearchPaper"."PaperID"
+Ref: "ISSN_Mapping"."RankingID" > "JournalRankings"."RankingID"
+Ref: "Invitation"."IntendedDepartmentID" > "Department"."DepartmentID"
+Ref: "Invitation"."IntendedRoleID" > "Role"."RoleID"
+Ref: "Invitation"."InvitedByUserID" > "Users"."UserID"
+Ref: "Invitation"."TenantID" > "Tenant"."TenantID"
+Ref: "Invitation"."UsedByUserID" > "Users"."UserID"
+Ref: "JournalRankings"."JournalID" > "Journals"."JournalID"
+Ref: "Notification"."TenantID" > "Tenant"."TenantID"
+Ref: "Notification"."UserID" > "Users"."UserID"
+Ref: "PaperKeywords"."KeywordID" > "Keywords"."KeywordID"
+Ref: "PaperKeywords"."PaperID" > "ResearchPaper"."PaperID"
+Ref: "RefreshToken"."UserID" > "Users"."UserID"
+Ref: "RegistrationRequest"."DepartmentID" > "Department"."DepartmentID"
+Ref: "RegistrationRequest"."ReviewedByUserID" > "Users"."UserID"
+Ref: "RegistrationRequest"."TenantID" > "Tenant"."TenantID"
+Ref: "ReportCampaign"."CreatedByUserID" > "Users"."UserID"
+Ref: "ReportPaperDecision"."MissingResolvedToPaperID" > "ResearchPaper"."PaperID"
+Ref: "ReportPaperDecision"."PaperID" > "ResearchPaper"."PaperID"
+Ref: "ReportPaperDecision"."SubmissionID" > "ReportSubmission"."SubmissionID"
+Ref: "ReportSubmission"."CampaignID" > "ReportCampaign"."CampaignID"
+Ref: "ReportSubmission"."ReopenedByUserID" > "Users"."UserID"
+Ref: "ReportSubmission"."UserID" > "Users"."UserID"
+Ref: "ResearchPaper"."JournalID" > "Journals"."JournalID"
+Ref: "ResearchPaper"."TenantID" > "Tenant"."TenantID"
+Ref: "Researcher"."UserID" > "Users"."UserID"
+Ref: "Role"."TenantID" > "Tenant"."TenantID"
+Ref: "RolePermission"."PermissionID" > "Permission"."PermissionID"
+Ref: "RolePermission"."RoleID" > "Role"."RoleID"
+Ref: "ScheduledNotification"."CreatedByUserID" > "Users"."UserID"
+Ref: "ScheduledNotification"."RelatedCampaignID" > "ReportCampaign"."CampaignID"
+Ref: "SyncJob"."TenantID" > "Tenant"."TenantID"
+Ref: "SyncJob"."TriggeredBy" > "Users"."UserID"
+Ref: "SyncJob"."UserID" > "Users"."UserID"
+Ref: "Users"."RoleID" > "Role"."RoleID"
+Ref: "Users"."TenantID" > "Tenant"."TenantID"
+Ref: "Works_In"."DepartmentID" > "Department"."DepartmentID"
+Ref: "Works_In"."UserID" > "Researcher"."UserID"

@@ -316,8 +316,6 @@ def reset_one(target, apply, unassign_hod, unregister, no_audit=False):
                     [new_email, uid],
                 )
                 _try_savepoint(
-                    'UPDATE "Users" SET "Password" = NULL WHERE "UserID" = %s', [uid])
-                _try_savepoint(
                     'UPDATE "Users" SET "PasswordHash" = NULL WHERE "UserID" = %s', [uid])
                 _try_savepoint(
                     'DELETE FROM "RegistrationRequest" WHERE "UserID" = %s', [uid])
