@@ -1,15 +1,6 @@
-/**
- * Settings page — centralized data-update hub for all roles.
- *
- * Why a single page for all roles?
- *   Every user (Admin, Dean, HoD, Researcher) needs the same primitives:
- *   change name (Arabic), change password. Researchers additionally need
- *   academic IDs for sync. Splitting per-role would duplicate logic and
- *   harm consistency.
- *
- * The Academic IDs block is shown for everyone — non-researchers can
- * simply leave it blank. We can later gate it on permission if needed.
- */
+// One settings page for every role — name, password, and academic IDs are the
+// same primitives for everyone, so splitting per-role would just duplicate
+// logic. Non-researchers can leave the Academic IDs block blank.
 import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -33,8 +24,7 @@ export class SettingsComponent {
   readonly success = signal<string | null>(null);
   readonly error = signal<string | null>(null);
 
-  // First-run hint flag — hides the helper subtitle once profile data
-  // exists. Seeded from existing AuthUser fields.
+  // Hides the first-run helper subtitle once any profile data exists.
   readonly everSaved = signal<boolean>(this.hasAnyProfileData());
 
   readonly profileForm = this.fb.nonNullable.group({
@@ -53,9 +43,8 @@ export class SettingsComponent {
   readonly passwordSuccess = signal<string | null>(null);
   readonly passwordError = signal<string | null>(null);
 
-  // Researchers benefit from the Academic IDs block. We still expose it
-  // to others so they can claim a Scholar/ORCID profile if they're
-  // dual-roled, but the section can be hidden by role if desired later.
+  // Shown to everyone for now so dual-roled users can still claim a
+  // Scholar/ORCID profile; can be gated by role later if needed.
   readonly showAcademicIds = true;
 
   private hasAnyProfileData(): boolean {

@@ -1,19 +1,8 @@
-/**
- * Overview Dashboard — Apple-style landing page.
- * Year toggle filters all KPI cards. Export button opens a modal with
- * fine-grained options (years + sheets) before triggering the download.
- *
- * Department filter:
- *   • selectedDeptId === null → show every department (institution-wide).
- *   • selectedDeptId === <id> → focus the entire page on that one dept.
- *
- * The filter is applied client-side from the existing OverviewPayload —
- * no extra backend round-trip — so switching feels instantaneous.
- *
- * Charts: four inline-SVG charts laid out in a 2x2 grid sit between the
- * KPI cards and the legacy data tables. They derive their series from
- * `data.departments[*].by_year` so no new endpoint is required.
- */
+// Admin/Dean landing page. Year and department filters apply client-side
+// from the OverviewPayload we already have (no extra round-trip), so
+// switching feels instant. The department filter: null = institution-wide,
+// an id = focus the whole page on that one dept. The 2x2 chart grid derives
+// its series from data.departments[*].by_year, so no new endpoint.
 import {
   Component, OnInit, inject, signal, computed, HostListener, ElementRef,
 } from '@angular/core';
@@ -30,12 +19,6 @@ import { PaperDetailModalComponent } from
   '../paper-detail-modal/paper-detail-modal.component';
 import { CitationsChartComponent } from
   '../citations-chart/citations-chart.component';
-
-/**
- * Year filter is now multi-select. An empty Set means "all years"
- * (institution-wide aggregate, what the backend returns when no year
- * param is sent). Otherwise the Set holds the chosen years.
- */
 
 interface DonutSlice {
   label: string;
@@ -57,10 +40,8 @@ export class OverviewDashboardComponent implements OnInit {
   /** Used to hide HoD-specific sections from the dashboard. */
   protected readonly auth = inject(AuthService);
 
-  /** True when the user has view_dept_researchers but NOT
-   *  view_all_researchers - i.e. a HoD. Used to hide the
-   *  multi-department panels that don't apply to a HoD view.
-   */
+  /** A HoD (dept-scoped, no view_all_researchers): hide the
+   *  multi-department panels that don't apply to their view. */
   readonly isHoD = computed(() =>
     !this.auth.hasPermission('view_all_researchers')
   );
@@ -81,15 +62,15 @@ export class OverviewDashboardComponent implements OnInit {
   }
 
   readonly data    = signal<OverviewPayload | null>(null);
-  /** True only for the FIRST load (no data yet) → full-screen skeleton. */
+  /** First load only — shows the full-screen skeleton. */
   readonly loading = signal<boolean>(true);
-  /** True while re-fetching after a filter change — the existing data stays
-   *  on screen so the dashboard never blanks; we only show a subtle spinner. */
+  /** Re-fetch after a filter change. We keep the old data on screen and
+   *  show a subtle spinner instead of blanking the dashboard. */
   readonly refreshing = signal<boolean>(false);
   readonly error   = signal<string | null>(null);
 
-  /** Monotonic request id so an out-of-order (slower) response from an
-   *  earlier filter state can't overwrite the latest one. */
+  /** Guards against a slow response from an earlier filter state
+   *  overwriting a newer one. */
   private reqSeq = 0;
 
   /** Currently selected years. Empty Set = "All Years" (no filter). */
@@ -98,24 +79,12 @@ export class OverviewDashboardComponent implements OnInit {
   /** Whether the year-picker popover is open. */
   readonly yearMenuOpen = signal<boolean>(false);
 
-  /**
-   * Affiliation filter. false = all papers (default, institution-wide
-   * numbers untouched). true = Al-Baha only — drops papers the verifier
-   * confirmed were authored under a non-Al-Baha affiliation
-   * (AffiliationVerified = FALSE). Re-queries the backend on toggle so
-   * every paper-derived KPI/chart reflects the choice.
-   */
+  /** false = all papers (default). true = Al-Baha only, dropping papers the
+   *  verifier confirmed as non-Al-Baha (AffiliationVerified = FALSE).
+   *  Re-queries the backend on toggle so every KPI/chart reflects it. */
   readonly albahaOnly = signal<boolean>(false);
 
-  /**
-   * Hover state for each interactive chart. We keep them separate (not
-   * one shared signal) so multiple charts can be in flight visually
-   * without the SVGs fighting over a single tooltip render slot.
-   *
-   * Each entry stores: index/key, screen-space anchor, and the lines
-   * the tooltip should render. The chart cell renders the tooltip
-   * inside its own SVG so positioning is self-contained.
-   */
+  // Separate hover signal per chart so they don't fight over one tooltip slot.
   readonly hoveredPub      = signal<{ year: number; x: number; y: number; value: number } | null>(null);
   readonly hoveredQuartile = signal<string | null>(null);
   readonly hoveredDept     = signal<number | null>(null);
@@ -150,9 +119,8 @@ export class OverviewDashboardComponent implements OnInit {
       };
     }
     if (this.selectedDeptId() == null) return d.totals;
-    // For a single department, sum across its by_year and use its
-    // researcher counts. Avg h-index isn't departmental, so fall back
-    // to the institution-wide value.
+    // h-index isn't tracked per department, so fall back to the
+    // institution-wide value for the single-dept case.
     const dept = this.visibleDepartments()[0];
     if (!dept) return d.totals;
     const papers = (dept.by_year || []).reduce(
@@ -189,10 +157,8 @@ export class OverviewDashboardComponent implements OnInit {
     return list.filter(p => p.department_id === id);
   });
 
-  // --------------------------------------------------------------------
-  // Charts: SVG geometry computed from filtered data. Inline SVG keeps
-  // the bundle lean and matches the rest of the app's chart pattern.
-  // --------------------------------------------------------------------
+  // Chart geometry below is computed from the filtered data as inline SVG,
+  // matching the rest of the app's charts.
 
   private bucketByYear(): { year: number; papers: number; citations: number }[] {
     const buckets = new Map<number, { papers: number; citations: number }>();
@@ -217,12 +183,8 @@ export class OverviewDashboardComponent implements OnInit {
     return this.buildBars(series.map(s => ({ label: s.year, value: s.papers })));
   });
 
-  /**
-   * Citations-by-year series for the shared <app-citations-chart>.
-   * The chart geometry + hover now live in that one component so the
-   * trend looks identical here, on the researcher dashboard, and on the
-   * profile page.
-   */
+  /** Series for the shared <app-citations-chart> — that component owns the
+   *  geometry + hover so the trend looks identical across pages. */
   readonly citationSeries = computed(() =>
     this.bucketByYear().map(s => ({ year: s.year, citations: s.citations })),
   );
@@ -309,10 +271,7 @@ export class OverviewDashboardComponent implements OnInit {
     };
   }
 
-  /**
-   * Years the dashboard exposes — recent window only (2020 → current).
-   * Mirrors backend YEAR_FLOOR so both ends agree on the same window.
-   */
+  // Recent-window floor (2020 → current). Mirrors the backend YEAR_FLOOR.
   private static readonly YEAR_FLOOR = 2020;
 
   readonly availableYears: number[] = (() => {
@@ -331,14 +290,9 @@ export class OverviewDashboardComponent implements OnInit {
 
   readonly showExportModal = signal<boolean>(false);
 
-  /**
-   * Per-year toggle map for the export modal. Built from `availableYears`
-   * so the export window automatically tracks the dashboard's window
-   * (and stays in sync if YEAR_FLOOR changes).
-   *
-   * Default: every year selected. Admin can untick any to narrow the
-   * Excel scope without touching the dashboard's main filter.
-   */
+  /** Per-year toggle map for the export modal, built from availableYears so
+   *  it tracks the dashboard's window. Defaults to all-selected; the admin
+   *  can untick years to narrow the Excel scope without touching the main filter. */
   exportYears: Record<number, boolean> = {};
 
   exportSheets = {
@@ -359,9 +313,7 @@ export class OverviewDashboardComponent implements OnInit {
   }
 
   ngOnInit() {
-    // Pre-tick every available year for the export modal. Done in
-    // ngOnInit (not at field-init time) so it runs after Angular has
-    // fully constructed the instance.
+    // Pre-tick every year for the export modal.
     this.selectAllExportYears();
 
     this.loadOverview();
@@ -369,9 +321,8 @@ export class OverviewDashboardComponent implements OnInit {
   }
 
   loadOverview() {
-    // First load → full skeleton. Subsequent filter changes → keep the
-    // current data visible and just flag a background refresh, so toggling
-    // years / Al-Baha feels instant instead of blanking the page.
+    // First load gets the skeleton; later filter changes keep the current
+    // data on screen and just flag a background refresh.
     if (this.data()) this.refreshing.set(true);
     else this.loading.set(true);
 
@@ -397,8 +348,7 @@ export class OverviewDashboardComponent implements OnInit {
   toggleYearMenu()  { this.yearMenuOpen.update(v => !v); }
   closeYearMenu()   { this.yearMenuOpen.set(false); }
 
-  /** Toggle a single year in/out of the selection. Closes the popover
-   *  afterwards — picking a year shouldn't leave the menu hanging open. */
+  /** Toggle a year in/out of the selection, then close the popover. */
   toggleYear(y: number) {
     this.selectedYears.update(s => {
       const next = new Set(s);
@@ -426,8 +376,6 @@ export class OverviewDashboardComponent implements OnInit {
   isYearSelected(y: number): boolean {
     return this.selectedYears().has(y);
   }
-
-  // -- Chart interaction helpers -----------------------------------
 
   setHoveredPub(b: { label: string | number; x: number; y: number; value: number } | null) {
     if (!b) { this.hoveredPub.set(null); return; }
@@ -470,8 +418,7 @@ export class OverviewDashboardComponent implements OnInit {
     );
   }
 
-  // Paper detail modal — store just the paper_id; the modal component
-  // fetches the full details on demand.
+  // Store just the paper_id; the modal fetches full details on demand.
   readonly selectedPaperId = signal<number | null>(null);
 
   openPaper(p: { paper_id: number }) { this.selectedPaperId.set(p.paper_id); }
@@ -510,8 +457,7 @@ export class OverviewDashboardComponent implements OnInit {
     return n.toLocaleString('en-US');
   }
 
-  /** Sum across by_year breakdown — used for the "Total" row in the
-   *  per-department mini-table. Avoids storing the total separately. */
+  /** Total-row helper for the per-department mini-table. */
   deptTotalPapers(dept: any): number {
     return (dept.by_year || []).reduce(
       (acc: number, y: any) => acc + (y.papers || 0), 0,
@@ -546,12 +492,9 @@ export class OverviewDashboardComponent implements OnInit {
       return;
     }
 
-    // Why HttpClient instead of window.location.href?
-    //   A direct navigation skips Angular's JwtInterceptor, so the
-    //   Authorization header is never attached and the backend (rightly)
-    //   rejects with 401. We fetch the file as a blob through the
-    //   normal HTTP pipeline, then trigger a save via a temporary
-    //   anchor — same end result, with auth intact.
+    // HttpClient (not window.location.href): a direct navigation skips the
+    // JwtInterceptor, so the request goes out without the auth header and the
+    // backend 401s. Fetch as a blob through the normal pipeline, then save it.
     this.exporting.set(true);
     let params = new HttpParams()
       .set('years', years)
@@ -585,12 +528,10 @@ export class OverviewDashboardComponent implements OnInit {
   /** Pull the filename out of a Content-Disposition header, if present. */
   private parseFilename(cd: string | null): string | null {
     if (!cd) return null;
-    // Matches: filename="foo.xlsx" or filename=foo.xlsx
     const m = /filename\*?=(?:UTF-8'')?"?([^"]+?)"?(?:;|$)/i.exec(cd);
     return m ? decodeURIComponent(m[1]) : null;
   }
 
-  /** Trigger a browser download of the given blob. */
   private saveBlob(blob: Blob, filename: string) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -599,8 +540,8 @@ export class OverviewDashboardComponent implements OnInit {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    // Release the blob URL on the next tick — some browsers cancel the
-    // download if we revoke synchronously.
+    // Revoke on the next tick — revoking synchronously cancels the
+    // download in some browsers.
     setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 }

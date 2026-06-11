@@ -1,17 +1,7 @@
-/**
- * My Report Detail — the verification surface.
- *
- * Layout:
- *   [Campaign header]                     ← title, closes in X days, status
- *   [Auto-populated paper cards]          ← Confirm / Not mine toggles
- *   [Missing papers section]              ← add form + list of entries
- *   [Submit button (sticky bottom)]       ← locks the submission
- *
- * Editability:
- *   The `submission.is_editable` flag from the backend is the single
- *   source of truth — when it's false, every interactive control is
- *   disabled. The frontend never tries to second-guess that.
- */
+// The verification surface: paper cards with Confirm / Not-mine toggles, a
+// missing-papers section, and a submit that locks the report. The backend's
+// submission.is_editable flag is the source of truth for whether anything is
+// editable — we never second-guess it on the client.
 import { Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -71,7 +61,7 @@ export class MyReportDetailComponent {
   readonly busySubmit   = signal(false);
   readonly error        = signal<string | null>(null);
 
-  // Missing-paper inline form state
+  // Inline form for adding a missing paper.
   readonly showMissingForm = signal(false);
   readonly missingDraft    = signal({ title: '', year: 0, doi: '' });
 
@@ -103,8 +93,8 @@ export class MyReportDetailComponent {
         this.papers.set(r.papers || []);
         this.missing.set(r.missing || []);
         this.loading.set(false);
-        // Default the missing-form year to the first target year so the
-        // researcher doesn't have to pick from a blank state.
+        // Pre-fill the form year with the first target year so the researcher
+        // isn't starting from a blank field.
         if (r.campaign?.target_years?.[0]) {
           this.missingDraft.update(d => ({
             ...d, year: r.campaign.target_years[0],
@@ -129,9 +119,8 @@ export class MyReportDetailComponent {
     }).subscribe({
       next: r => {
         this.busyPaperId.set(null);
-        // Optimistic local update — patch the card in place rather than
-        // re-fetching the whole page. The decision_id from the response
-        // is enough to mark the card as decided.
+        // Patch the card in place instead of re-fetching — the response's
+        // decision_id is enough to mark it decided.
         this.papers.update(list => list.map(p =>
           p.paper_id === paper.paper_id
             ? {
@@ -183,7 +172,7 @@ export class MyReportDetailComponent {
       doi:   m.doi.trim() || undefined,
     }).subscribe({
       next: r => {
-        // Prepend optimistically; full reload happens on next visit
+        // Prepend optimistically; a full reload happens on the next visit.
         this.missing.update(list => [{
           decision_id: r.decision_id,
           title:       m.title.trim(),
@@ -195,7 +184,7 @@ export class MyReportDetailComponent {
           resolved_to_paper_id: null,
         }, ...list]);
         this.missingDraft.update(d => ({
-          ...d, title: '', doi: '',  // keep year for fast repeats
+          ...d, title: '', doi: '',  // keep the year so repeat adds are quick
         }));
         this.showMissingForm.set(false);
         this.error.set(null);

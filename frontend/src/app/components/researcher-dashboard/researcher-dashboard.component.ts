@@ -1,21 +1,6 @@
-/**
- * Researcher Dashboard — analytics overview for the logged-in researcher.
- *
- * Why a separate component from ResearcherProfileComponent?
- *   • Profile = full archive (identity + every paper + filters/sort).
- *   • Dashboard = at-a-glance insights (KPIs + charts, no paper list).
- *   This separation keeps the home page fast and focused, and keeps the
- *   profile page authoritative when someone wants the full picture.
- *
- * Data: reuses the existing getResearcherProfile endpoint (one round-trip).
- *       All chart data is derived client-side from `papers` and
- *       `citations_by_year`. No backend changes required.
- *
- * Why inline SVG charts instead of Chart.js?
- *   Bundle stays lean, full styling control, matches the minimalist
- *   aesthetic of the rest of the app. Easy to swap to Chart.js later
- *   if we need tooltips/legends/animations.
- */
+// At-a-glance dashboard for the logged-in researcher: KPIs + charts, no
+// paper list (the profile page is the authoritative full archive). Reuses the
+// getResearcherProfile endpoint and derives every chart client-side.
 import { Component, OnInit, Input, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { LitrixApiService } from '../../services/litrix-api.service';
@@ -27,7 +12,7 @@ interface DonutSlice {
   value: number;
   color: string;
   pct: number;
-  // pre-computed stroke-dasharray offsets for the SVG arc trick
+  // pre-computed stroke-dasharray offsets for the SVG donut arcs
   dashOffset: number;
   dashLength: number;
 }
@@ -48,20 +33,11 @@ export class ResearcherDashboardComponent implements OnInit {
   readonly loading = signal<boolean>(true);
   readonly error   = signal<string | null>(null);
 
-  /**
-   * Hover state for the bar charts. Single year-key serves both the
-   * Citations and Publications charts since the user can only hover
-   * one bar at a time across the page.
-   */
   readonly hoveredCitYear = signal<number | null>(null);
   readonly hoveredPubYear = signal<number | null>(null);
   readonly hoveredQuartile = signal<string | null>(null);
 
-  /**
-   * Chart window floor — matches the admin dashboard CHART_YEAR_FLOOR.
-   * Years before this are clipped from both bar charts so the X-axis
-   * stays compact and the recent-growth signal stays readable.
-   */
+  // Clip both bar charts before this year, matching the admin dashboard.
   private readonly CHART_YEAR_FLOOR = 2019;
 
   ngOnInit() {
@@ -93,15 +69,8 @@ export class ResearcherDashboardComponent implements OnInit {
     return n.toLocaleString('en-US');
   }
 
-  // --------------------------------------------------------------------------
-  // KPIs
-  // --------------------------------------------------------------------------
-
-  /**
-   * h-index: largest h such that the researcher has h papers each
-   * cited >= h times. Computed client-side from the papers list since
-   * the backend's profile endpoint doesn't surface it (yet).
-   */
+  // Largest h with h papers each cited >= h times. Computed here because the
+  // profile endpoint doesn't surface it.
   readonly hIndex = computed(() => {
     const papers = this.data()?.papers ?? [];
     const cites = papers
@@ -115,12 +84,8 @@ export class ResearcherDashboardComponent implements OnInit {
     return h;
   });
 
-  // --------------------------------------------------------------------------
-  // Citations-per-year chart geometry (bar chart).
-  // --------------------------------------------------------------------------
+  // Citations-per-year bar chart.
   readonly citationsChart = computed(() => {
-    // Clip to CHART_YEAR_FLOOR for parity with the admin trend chart.
-    // (Backend now clips too, but double-clipping is harmless.)
     const cby = (this.data()?.citations_by_year ?? [])
       .filter(c => c.year >= this.CHART_YEAR_FLOOR);
     if (!cby.length) return null;
@@ -151,14 +116,11 @@ export class ResearcherDashboardComponent implements OnInit {
     };
   });
 
-  // --------------------------------------------------------------------------
-  // Publications-per-year chart geometry (bar chart).
-  // --------------------------------------------------------------------------
+  // Publications-per-year bar chart.
   readonly publicationsChart = computed(() => {
     const papers = this.data()?.papers ?? [];
     if (!papers.length) return null;
-    // Bucket by pub_year, ignoring papers without a year AND papers
-    // older than CHART_YEAR_FLOOR (matches admin chart window).
+    // Skip papers with no year or older than CHART_YEAR_FLOOR.
     const buckets = new Map<number, number>();
     for (const p of papers) {
       if (p.pub_year == null) continue;
@@ -196,13 +158,9 @@ export class ResearcherDashboardComponent implements OnInit {
     };
   });
 
-  // --------------------------------------------------------------------------
-  // Quartile distribution donut.
-  // SVG donut technique: a single circle per slice, all sharing the same
-  // circumference, each with stroke-dasharray = (sliceLength, totalLen)
-  // and stroke-dashoffset = cumulative offset. Cleaner than computing
-  // arc paths by hand.
-  // --------------------------------------------------------------------------
+  // Quartile distribution donut. One circle per slice, all sharing the same
+  // circumference, with stroke-dasharray + dashoffset doing the arc work —
+  // cleaner than computing arc paths by hand.
   readonly quartileChart = computed(() => {
     const papers = this.data()?.papers ?? [];
     if (!papers.length) return null;

@@ -7,11 +7,8 @@ import { environment } from '../../../environments/environment';
 
 export interface AuthUser {
   user_id: number;
-  /**
-   * Public, stable identifier of the form Lit-NNNNNN — used in URLs,
-   * sharing, and Author-disambiguation references. Decoupled from
-   * user_id so URLs stay stable across DB migrations / re-imports.
-   */
+  // Public Lit-NNNNNN id used in URLs, sharing and disambiguation.
+  // Kept separate from user_id so URLs survive DB migrations/re-imports.
   litrix_id: string;
   email: string;
   full_name: string;
@@ -60,8 +57,8 @@ export class AuthService {
     return this.http.post<LoginResponse>(`${this.API}/login/`, { email, password }).pipe(
       tap(res => {
         this.persistSession(res);
-        // Reset one-per-session UI flags so a fresh login re-triggers them
-        // (e.g. the supervisor's welcome fireworks on the dashboard).
+        // Clear once-per-session flags so a fresh login re-fires them
+        // (e.g. the welcome fireworks on the dashboard).
         try { sessionStorage.removeItem('litrix_welcome_v1'); } catch { /* ignore */ }
       }),
     );
@@ -133,9 +130,8 @@ export class AuthService {
       });
     }
     this.clearSession();
-    // Send signed-out users to the public landing page, not to the
-    // bare /login form. They'll still see "Sign in" in the top nav
-    // if they want to go straight to login.
+    // Land on /welcome rather than a bare /login form — "Sign in" is
+    // still right there in the nav for anyone who wants it.
     this.router.navigate(['/welcome']);
   }
 

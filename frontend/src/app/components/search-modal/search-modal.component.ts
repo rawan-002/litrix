@@ -1,15 +1,6 @@
-/**
- * Spotlight-style global search modal.
- *
- * UX architecture:
- *   • Triggered from a "search button" in the layout sidebar (or Cmd/Ctrl+K).
- *   • Centered overlay with the actual input — gives the result cards
- *     enough breathing room without crowding the narrow sidebar.
- *   • Debounced query (250ms) so typing doesn't hammer the backend.
- *   • Two result sections: Profiles (name match) and Papers (title match).
- *   • The permission gate lives on the BACKEND — this component is dumb
- *     and just renders whatever the API returned.
- */
+// Spotlight-style global search modal (opened from the sidebar or Cmd/Ctrl+K).
+// Debounced query, two result sections (profiles + papers). The permission
+// gate lives on the backend; this component just renders what the API returns.
 import {
   Component, EventEmitter, Output, OnInit, OnDestroy,
   inject, signal, ViewChild, ElementRef, AfterViewInit,

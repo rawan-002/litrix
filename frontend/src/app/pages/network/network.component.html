@@ -1,8 +1,6 @@
 <div class="network">
 
-  <!-- ============================================================ -->
-  <!-- HEADER                                                       -->
-  <!-- ============================================================ -->
+  <!-- Header -->
   <header class="network__header">
     <div>
       <h1 class="network__title">Research Network</h1>
@@ -27,9 +25,7 @@
     }
   </header>
 
-  <!-- ============================================================ -->
-  <!-- MODE TOGGLE                                                  -->
-  <!-- ============================================================ -->
+  <!-- Mode toggle -->
   <div class="mode-toggle">
     <button type="button"
             class="mode-toggle__btn"
@@ -59,12 +55,10 @@
     </p>
   </div>
 
-  <!-- ============================================================ -->
-  <!-- BODY: graph (left) + insights/filters (right)                -->
-  <!-- ============================================================ -->
+  <!-- Body: graph on the left, insights + filters on the right -->
   <div class="network__body">
 
-    <!-- ===== GRAPH ===== -->
+    <!-- Graph -->
     <section class="graph-card">
       <div class="graph-card__legend">
         <span class="legend-dot legend-dot--self"></span>You
@@ -94,7 +88,7 @@
         <svg #svgRoot class="graph-card__svg"></svg>
       }
 
-      <!-- Selected-node detail strip (shows shared interests) -->
+      <!-- Detail strip for the selected node (shared interests) -->
       @if (selectedNode(); as n) {
         <div class="selected-node">
           <div class="selected-node__head">
@@ -134,10 +128,10 @@
     </section>
 
 
-    <!-- ===== SIDE RAIL ===== -->
+    <!-- Side rail -->
     <aside class="rail">
 
-      <!-- INSIGHTS -->
+      <!-- Insights -->
       @if (data(); as d) {
         <div class="rail__card">
           <h2 class="rail__title">Insights</h2>
@@ -157,7 +151,7 @@
             </div>
           </div>
 
-          <!-- TOP INTERESTS — the researcher's thematic fingerprint -->
+          <!-- Top interests — the researcher's thematic fingerprint -->
           @if (d.insights.top_interests?.length) {
             <div class="insight-row">
               <span class="insight-row__icon">◎</span>
@@ -227,7 +221,7 @@
           }
         </div>
 
-        <!-- HIDDEN GEMS — high-overlap, zero-coauthor researchers -->
+        <!-- Hidden gems — high topic overlap, never co-authored -->
         @if (d.insights.hidden_gems?.length) {
           <div class="rail__card">
             <h2 class="rail__title">
@@ -252,7 +246,7 @@
         }
       }
 
-      <!-- FILTERS -->
+      <!-- Filters -->
       <div class="rail__card">
         <h2 class="rail__title">Filters</h2>
 

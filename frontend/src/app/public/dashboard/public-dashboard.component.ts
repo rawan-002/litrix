@@ -1,17 +1,6 @@
-/**
- * Public Dashboard — single-page overview of the college's research output.
- *
- * Design intent: Apple-style minimal. White background, generous spacing,
- * one accent color (indigo), big numbers, subtle shadows. No login chrome,
- * no admin actions — strictly read-only.
- *
- * Sections:
- *   1. Hero stats — 4 KPI cards
- *   2. Departments — 4 cards with per-dept stats
- *   3. Yearly trend chart
- *   4. Researcher list (filterable by department, sortable)
- *   5. Top papers list (latest + most cited)
- */
+// Read-only, single-page overview of the college's research output:
+// hero KPIs, department cards, a yearly trend chart, and a filterable
+// researcher list. No login chrome, no admin actions.
 import {
   Component, OnInit, signal, computed, inject, ViewChild,
   ElementRef, AfterViewInit,
@@ -33,7 +22,7 @@ Chart.register(...registerables);
   imports: [CommonModule, RouterLink, FormsModule],
   template: `
     <div class="min-h-screen bg-white">
-      <!-- ===== Header ===== -->
+      <!-- Header -->
       <header class="border-b border-gray-100 bg-gradient-to-b from-gray-50/50 to-white">
         <div class="max-w-7xl mx-auto px-6 py-12 flex items-start justify-between gap-4">
           <div>
@@ -45,7 +34,7 @@ Chart.register(...registerables);
               <span class="ml-2 text-gray-400">· {{ activeYearLabel() }}</span>
             </p>
 
-            <!-- Controls strip: Year filter + Export button -->
+            <!-- Year filter + export -->
             <div class="mt-4 flex flex-wrap items-center gap-3">
               <div class="inline-flex items-center gap-1 p-1 rounded-xl bg-gray-100">
                 <button *ngFor="let opt of yearOptions"
@@ -69,7 +58,7 @@ Chart.register(...registerables);
             </div>
           </div>
 
-          <!-- Litrix Logo (top-right corner, alone) -->
+          <!-- Logo, top-right -->
           <img src="litrix-logo.png"
                alt="Litrix"
                class="h-14 md:h-16 w-auto select-none shrink-0"
@@ -77,7 +66,7 @@ Chart.register(...registerables);
         </div>
       </header>
 
-      <!-- ===== Hero KPIs ===== -->
+      <!-- Hero KPIs -->
       <section class="max-w-7xl mx-auto px-6 py-14">
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
           <div *ngFor="let kpi of kpiCards()"
@@ -93,7 +82,7 @@ Chart.register(...registerables);
         </div>
       </section>
 
-      <!-- ===== Departments ===== -->
+      <!-- Departments -->
       <section class="max-w-7xl mx-auto px-6 py-12">
         <h2 class="text-2xl font-semibold text-gray-900 mb-8">Departments</h2>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -125,8 +114,7 @@ Chart.register(...registerables);
         </div>
       </section>
 
-      <!-- ===== KPI Performance Metrics =====
-           HIDDEN (not deleted) — toggle by removing [hidden]="true" below. -->
+      <!-- Performance metrics — hidden for now; flip [hidden]="true" to show. -->
       <section [hidden]="true" class="max-w-7xl mx-auto px-6 py-12">
         <div class="mb-8">
           <h2 class="text-2xl font-semibold text-gray-900">Performance Metrics</h2>
@@ -136,7 +124,7 @@ Chart.register(...registerables);
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-          <!-- KPI-I-13: % Faculty Published -->
+          <!-- % faculty published -->
           <div *ngIf="kpis() as k" class="rounded-2xl border border-gray-100 p-6 md:p-8">
             <div class="flex items-center justify-between">
               <p class="text-sm font-medium text-gray-500 uppercase tracking-wider">
@@ -157,7 +145,7 @@ Chart.register(...registerables);
             </p>
           </div>
 
-          <!-- KPI-I-14: Avg Publications/Faculty -->
+          <!-- Avg publications per faculty -->
           <div *ngIf="kpis() as k" class="rounded-2xl border border-gray-100 p-6 md:p-8">
             <div class="flex items-center justify-between">
               <p class="text-sm font-medium text-gray-500 uppercase tracking-wider">
@@ -169,7 +157,7 @@ Chart.register(...registerables);
               {{ k.kpi_14_avg_publications_per_faculty.value }}
             </p>
             <div class="mt-4 h-2 rounded-full bg-gray-100 overflow-hidden">
-              <!-- soft visual scale, capped at 5 pubs/faculty = full bar -->
+              <!-- 5 pubs/faculty fills the bar -->
               <div class="h-full bg-teal-500 transition-all duration-700"
                    [style.width.%]="kpiBarWidth(k.kpi_14_avg_publications_per_faculty.value, 5)"></div>
             </div>
@@ -179,7 +167,7 @@ Chart.register(...registerables);
             </p>
           </div>
 
-          <!-- KPI-I-15: Avg Citations/Publication (LIFETIME — NCAAA standard) -->
+          <!-- Avg citations per publication — lifetime (NCAAA standard) -->
           <div *ngIf="kpis() as k" class="rounded-2xl border border-gray-100 p-6 md:p-8">
             <div class="flex items-center justify-between">
               <p class="text-sm font-medium text-gray-500 uppercase tracking-wider">
@@ -194,7 +182,7 @@ Chart.register(...registerables);
               {{ k.kpi_15_avg_citations_per_publication.value }}
             </p>
             <div class="mt-4 h-2 rounded-full bg-gray-100 overflow-hidden">
-              <!-- soft visual scale, capped at 50 cites/pub = full bar -->
+              <!-- 50 cites/pub fills the bar -->
               <div class="h-full bg-amber-500 transition-all duration-700"
                    [style.width.%]="kpiBarWidth(k.kpi_15_avg_citations_per_publication.value, 50)"></div>
             </div>
@@ -205,7 +193,7 @@ Chart.register(...registerables);
           </div>
         </div>
 
-        <!-- Loading shimmer (stops if the fetch failed) -->
+        <!-- Loading shimmer (stops on fetch failure) -->
         <div *ngIf="!kpis() && !loadFailed()" class="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div *ngFor="let i of [1,2,3]" class="rounded-2xl border border-gray-100 p-8 animate-pulse">
             <div class="h-4 bg-gray-100 rounded w-2/3 mb-4"></div>
@@ -219,7 +207,7 @@ Chart.register(...registerables);
         </div>
       </section>
 
-      <!-- ===== Trend Chart (compact, left-aligned) ===== -->
+      <!-- Trend chart -->
       <section class="max-w-7xl mx-auto px-6 py-12">
         <h2 class="text-2xl font-semibold text-gray-900 mb-6">Publications by Year</h2>
         <div class="rounded-2xl border border-gray-100 p-6 max-w-md">
@@ -227,7 +215,7 @@ Chart.register(...registerables);
         </div>
       </section>
 
-      <!-- ===== Researchers ===== -->
+      <!-- Researchers -->
       <section class="max-w-7xl mx-auto px-6 py-12">
         <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4">
           <h2 class="text-2xl font-semibold text-gray-900">Researchers</h2>
@@ -299,14 +287,14 @@ Chart.register(...registerables);
         </p>
       </section>
 
-      <!-- ===== Footer ===== -->
+      <!-- Footer -->
       <footer class="border-t border-gray-100 mt-16">
         <div class="max-w-7xl mx-auto px-6 py-8 text-center text-sm text-gray-400">
           Litrix Research Analytics · College of Computing & IT · Al-Baha University
         </div>
       </footer>
 
-      <!-- ===== Export Modal ===== -->
+      <!-- Export modal -->
       <div *ngIf="exportModalOpen()"
            class="fixed inset-0 z-50 flex items-center justify-center px-4 py-8"
            (click)="closeExportModal()">
@@ -387,9 +375,8 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
   readonly trendData = signal<TrendPoint[]>([]);
   readonly selectedDepartmentId = signal<number | null>(null);
 
-  // ---- Global year filter ------------------------------------------
-  // Drives Overview, Departments, Researchers, KPIs.
-  // Mirrors backend's DASHBOARD_YEARS in public_views.py.
+  // Year filter driving Overview/Departments/Researchers/KPIs.
+  // Mirrors DASHBOARD_YEARS in public_views.py.
   readonly globalYear = signal<number | 'all'>('all');
   readonly yearOptions: { label: string; value: number | 'all' }[] = [
     { label: 'All',  value: 'all' },
@@ -401,11 +388,10 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
     return y === 'all' ? '2025 – 2026 Biennium' : `${y} Snapshot`;
   });
 
-  // KPI section state — uses globalYear when set to a specific year,
-  // defaults to 2026 when 'all' (the KPIs need a specific anchor year).
+  // KPIs follow globalYear, but need a concrete anchor — they fall back
+  // to 2026 when the filter is 'all'.
   readonly kpis = signal<KpisResponse | null>(null);
-  /** Set when a data fetch fails, so the KPI shimmer stops and we show a
-   *  short "couldn't load" note instead of pulsing forever. */
+  // Stops the KPI shimmer and shows a "couldn't load" note on fetch failure.
   readonly loadFailed = signal<boolean>(false);
   readonly availableYears: number[] = [2026, 2025];
 
@@ -415,7 +401,7 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
   readonly exportSheets = signal<string[]>(
     ['overview', 'summary', 'departments', 'researchers', 'journals', 'conferences'],
   );
-  // Mirrors the admin export's sheet menu — same labels, same order.
+  // Same labels and order as the admin export's sheet menu.
   readonly exportSheetOptions = [
     {
       id: 'overview',
@@ -477,21 +463,18 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
   // --- lifecycle ------------------------------------------------------
   ngOnInit(): void {
     this.refreshScopedData();
-    // Trend chart always shows both years for context — it's a comparison.
+    // The trend chart always shows both years — it's a comparison.
     this.api.trends().subscribe({
       next: (d) => { this.trendData.set(d.results); this.renderTrendChart(); },
       error: () => this.loadFailed.set(true),
     });
   }
 
-  /**
-   * Reloads Overview / Departments / Researchers / KPIs against the
-   * current globalYear. Called on init AND whenever the user clicks
-   * a year pill in the header.
-   */
+  // Reloads Overview/Departments/Researchers/KPIs for the current
+  // globalYear — on init and on every year-pill click.
   private refreshScopedData(): void {
     const y = this.globalYear();
-    // Optimistic clear so loading state shows
+    // Clear first so the loading state shows.
     this.overview.set(null);
     this.departments.set([]);
     this.researchers.set([]);
@@ -515,8 +498,8 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
 
   // ---- Export modal handlers ---------------------------------------
   openExportModal(): void {
-    // Always reset to "all years, all sheets" on each open — safer default
-    // than remembering the previous picks (which can confuse users).
+    // Reset to all years/all sheets on open — remembering prior picks
+    // tends to confuse more than it helps.
     this.exportYears.set([...this.availableYears]);
     this.exportSheets.set(
       this.exportSheetOptions.map((o) => o.id),
@@ -549,7 +532,7 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
   downloadExport(): void {
     if (!this.exportIsValid()) return;
     const url = this.api.exportExcelUrl(this.exportYears(), this.exportSheets());
-    // Programmatic <a> click — works in all browsers, doesn't navigate away.
+    // Programmatic <a> click so the download fires without navigating away.
     const a = document.createElement('a');
     a.href = url;
     a.target = '_blank';
@@ -560,11 +543,8 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
     this.closeExportModal();
   }
 
-  /**
-   * KPIs are inherently per-year. When globalYear is 'all', we anchor
-   * KPI calculations to the most recent year (2026) so the supervisor
-   * sees the freshest snapshot.
-   */
+  // KPIs are per-year, so when the filter is 'all' we anchor to the most
+  // recent year (2026) for the freshest snapshot.
   private loadKpis(): void {
     const g = this.globalYear();
     const anchorYear = g === 'all' ? 2026 : g;
@@ -574,18 +554,16 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
     });
   }
 
-  /**
-   * Maps a KPI value to a 0-100 % width for the progress bar.
-   * Soft cap at `max` so a few outlier values don't dwarf everything.
-   */
+  // KPI value -> 0-100% bar width, capped at `max` so outliers don't
+  // squash everything else.
   kpiBarWidth(value: number, max: number): number {
     if (!value || value <= 0) return 0;
     return Math.min(100, (value / max) * 100);
   }
 
   ngAfterViewInit(): void {
-    // The chart is built after both: trendData arrives AND canvas exists.
-    // ngOnInit handles the first, this hook ensures canvas readiness.
+    // The chart needs both the data (from ngOnInit) and a ready canvas;
+    // this hook covers the canvas side.
     this.renderTrendChart();
   }
 
@@ -596,7 +574,7 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
 
   filterByDepartment(id: number): void {
     this.selectedDepartmentId.set(id);
-    // Smooth scroll down to researcher list
+    // Scroll down to the researcher list.
     setTimeout(() => {
       window.scrollBy({ top: 600, behavior: 'smooth' });
     }, 50);
@@ -618,10 +596,10 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
           {
             label: 'Publications',
             data: data.map((d) => d.papers),
-            // Gradient-like solid via two indigo shades on alternating bars.
+            // Two indigo shades alternating across the bars.
             backgroundColor: ['rgba(99, 102, 241, 0.85)', 'rgba(129, 140, 248, 0.85)'],
             borderRadius: 8,
-            // Wider, shorter bars look more "Apple" for a two-bar comparison.
+            // Wide bars read better for a two-bar comparison.
             barThickness: 64,
           },
         ],
@@ -629,7 +607,7 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
       options: {
         responsive: true,
         maintainAspectRatio: true,
-        aspectRatio: 1.2, // near-square for the compact card
+        aspectRatio: 1.2, // near-square to fit the compact card
         plugins: {
           legend: { display: false },
           tooltip: {

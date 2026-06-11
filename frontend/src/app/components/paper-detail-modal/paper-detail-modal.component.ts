@@ -1,12 +1,5 @@
-/**
- * Paper Detail Modal — full paper info as in Google Scholar:
- *   • Title, raw authors, abstract, year, publisher
- *   • Total citations, citations-over-time chart
- *   • Journal/Conference info, DOI, link
- *
- * Used by both overview-dashboard (Top Papers + Yearly Breakdown) and
- * researcher-profile (per-researcher papers list). Reusable.
- */
+// Full paper detail in a modal (title, authors, abstract, citations chart,
+// venue, DOI). Shared by the overview dashboard and the researcher profile.
 import { Component, Input, Output, EventEmitter, inject, signal, computed, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { LitrixApiService } from '../../services/litrix-api.service';
@@ -27,7 +20,7 @@ export class PaperDetailModalComponent implements OnChanges {
   readonly loading = signal<boolean>(false);
   readonly error   = signal<string | null>(null);
 
-  // Abstract truncation. Show first N chars; "Show more" reveals all.
+  // Show the first N chars of the abstract; "Show more" reveals the rest.
   readonly ABSTRACT_PREVIEW_CHARS = 220;
   readonly abstractExpanded = signal<boolean>(false);
 
@@ -41,7 +34,7 @@ export class PaperDetailModalComponent implements OnChanges {
     if (this.abstractExpanded() || a.length <= this.ABSTRACT_PREVIEW_CHARS) {
       return a;
     }
-    // Truncate at word boundary if possible
+    // Cut at a word boundary when there's a reasonable one.
     const truncated = a.slice(0, this.ABSTRACT_PREVIEW_CHARS);
     const lastSpace = truncated.lastIndexOf(' ');
     return (lastSpace > 50 ? truncated.slice(0, lastSpace) : truncated) + '…';
@@ -51,7 +44,7 @@ export class PaperDetailModalComponent implements OnChanges {
     this.abstractExpanded.update(v => !v);
   }
 
-  // Mini bar chart for citations-over-time
+  // Mini citations-by-year bar chart geometry.
   readonly chart = computed(() => {
     const cby = this.data()?.citations_by_year;
     if (!cby || typeof cby !== 'object') return null;

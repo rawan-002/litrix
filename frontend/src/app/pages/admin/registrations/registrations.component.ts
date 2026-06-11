@@ -13,8 +13,7 @@ interface PendingRequest {
   Orcid_ID: string | null;
   Scopus_ID: string | null;
   DepartmentID: number | null;
-  // Resolved server-side via LEFT JOIN so we don't have to
-  // chase department names from a separate /departments lookup.
+  // Resolved server-side via LEFT JOIN, so no separate /departments lookup.
   departmentname: string | null;
   AcademicRank: string | null;
   Status: string;
@@ -64,9 +63,8 @@ export class RegistrationsComponent {
       next: res => {
         this.requests.update(r => r.filter(x => x.RequestID !== id));
         this.processing.set(null);
-        // Surface the auto-sync that the backend just queued so admins
-        // know the publication scrape is already running — they don't
-        // need to go fire it manually from the Sync page.
+        // Tell the admin the backend already queued the publication scrape, so
+        // they don't go fire it by hand from the Sync page.
         if (res.sync_kicked) {
           alert(
             `Approved. Initial ${res.sync_source} sync queued — ` +

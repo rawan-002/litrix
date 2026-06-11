@@ -1,12 +1,6 @@
-/**
- * Litrix AI — chatbot surface.
- *
- * This is the UI shell only. There is NO backend wired yet: sending a
- * message echoes a placeholder assistant reply so the layout, scrolling,
- * and input behaviour can be designed now. The real answer pipeline
- * (RAG over the research corpus) gets plugged into `send()` later — swap
- * the canned reply for an HTTP call and keep the rest of the component.
- */
+// Chatbot UI shell only — no backend yet. send() returns a canned reply so we
+// can design the layout, scrolling, and input now; later swap that for the RAG
+// HTTP call and the rest of the component stays as-is.
 import {
   Component, signal, computed, ElementRef, viewChild, effect,
 } from '@angular/core';

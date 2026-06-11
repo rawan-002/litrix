@@ -12,10 +12,8 @@
       <ul class="space-y-0.5">
         @for (item of navItems(); track item.route) {
           <li>
-            <!-- Hover lights up to the system blue (#0071e3) so the
-                 active interactive surface stands out on the otherwise
-                 monochrome sidebar. The active route stays inked-in
-                 (bg-ink-100) for stronger persistent identity. -->
+            <!-- Hover goes accent blue against the monochrome sidebar;
+                 the active route stays inked-in (bg-ink-100). -->
             <a [routerLink]="item.route"
                routerLinkActive="bg-ink-100 text-ink-900"
                [routerLinkActiveOptions]="{ exact: item.route === '/' }"

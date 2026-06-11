@@ -1,13 +1,5 @@
-/**
- * Litrix API Service — single point of contact with the Django backend.
- *
- * Why a service (not direct HttpClient calls)?
- *   1. One place to change the base URL when going to production.
- *   2. One place to add an auth interceptor later.
- *   3. Components stay clean — they just inject this and call .getX().
- *
- * Place in: src/app/services/litrix-api.service.ts
- */
+// Single point of contact with the Django backend — keeps the base URL
+// and HTTP wiring in one place so components just inject and call.
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
@@ -53,11 +45,8 @@ export class LitrixApiService {
     );
   }
 
-  /**
-   * Fetch a researcher profile by either their Litrix-ID (Lit-NNNNNN)
-   * or numeric UserID. The backend resolves Litrix-ID → UserID at the
-   * boundary; we accept both so legacy callers don't break overnight.
-   */
+  // Accepts either a Litrix-ID (Lit-NNNNNN) or a numeric UserID — the
+  // backend resolves it, and accepting both keeps legacy callers working.
   getResearcherProfile(id: string | number): Observable<ResearcherProfilePayload> {
     return this.http.get<ResearcherProfilePayload>(
       `${this.baseUrl}/researchers/${id}/profile/`
@@ -77,16 +66,9 @@ export class LitrixApiService {
     );
   }
 
-  /**
-   * Universal search across profiles + papers.
-   *
-   * Backend applies the permission gate:
-   *   - Researcher           → only papers with at least one system author
-   *   - Admin / Dean / HoD   → all papers (including external authors)
-   *
-   * Profiles are always returned for matched name/email/litrix_id, with
-   * UserType filtered to "Researcher" for restricted users.
-   */
+  // Universal search across profiles + papers. The backend gates paper
+  // visibility by role (researchers only see papers they're on; admins see
+  // all) and filters profiles to Researcher type for restricted users.
   search(q: string): Observable<{
     profiles: SearchProfileResult[];
     papers:   SearchPaperResult[];
@@ -117,10 +99,7 @@ export class LitrixApiService {
     );
   }
 
-  /**
-   * GET /api/departments/<id>/researchers/
-   * Returns researchers in this department with their full stats.
-   */
+  // Researchers in one department, with their full stats.
   getDepartmentResearchers(
     departmentId: number, albahaOnly = false,
   ): Observable<any> {
@@ -149,14 +128,8 @@ export class LitrixApiService {
     );
   }
 
-  /**
-   * Fetch the dashboard overview.
-   *
-   * `years` semantics:
-   *   • undefined / empty array → no filter (backend uses FOCUS_YEARS)
-   *   • single number           → filter to that year
-   *   • array of numbers        → filter to those years (CSV on the wire)
-   */
+  // Dashboard overview. `years` can be undefined (backend FOCUS_YEARS),
+  // a single year, or several — multiple years go on the wire as CSV.
   getOverview(
     years?: number | number[],
     albahaOnly = false,
@@ -168,8 +141,8 @@ export class LitrixApiService {
         params = params.set('year', list.join(','));
       }
     }
-    // Al-Baha-only: exclude papers confirmed authored under a non-Al-Baha
-    // affiliation. Omitted (default) keeps the institution-wide numbers.
+    // Al-Baha-only excludes papers confirmed under a non-Al-Baha
+    // affiliation; the default keeps the institution-wide numbers.
     if (albahaOnly) {
       params = params.set('affiliation', 'albaha');
     }
@@ -186,11 +159,9 @@ export class LitrixApiService {
     );
   }
 
-  // ============================================================
-  // Reporting Campaigns — admin endpoints
-  // ============================================================
-  // The Campaign + Submission shapes are loose `any` for now; once
-  // the UI stabilises we'll lift them into ../models/litrix.models.
+  // --- Reporting campaigns (admin) ---
+  // Campaign/Submission shapes are loose `any` for now; we'll move them
+  // into ../models/litrix.models once the UI settles.
   listCampaigns(status?: string): Observable<{ campaigns: any[] }> {
     let params: HttpParams | undefined;
     if (status) params = new HttpParams().set('status', status);
@@ -249,11 +220,8 @@ export class LitrixApiService {
     );
   }
 
-  /**
-   * Admin view of a single researcher's submission — papers + missing
-   * entries, with each paper's decision status. Same shape as the
-   * researcher's `getMySubmission()` so the modal can render either.
-   */
+  // Admin view of one researcher's submission. Same shape as the
+  // researcher's getMySubmission() so the modal can render either.
   getCampaignSubmissionDetail(campaignId: number, submissionId: number)
     : Observable<{
         submission: any; researcher: any; campaign: any;
@@ -265,11 +233,8 @@ export class LitrixApiService {
     );
   }
 
-  /**
-   * Download a per-campaign xlsx report. Returns the raw Blob so the
-   * caller can trigger a browser download (the streamed response is
-   * NOT a JSON payload — set `responseType: 'blob'`).
-   */
+  // Per-campaign xlsx report. Returns a raw Blob (responseType 'blob')
+  // since the response is a stream, not JSON, so the caller can download it.
   exportCampaign(id: number): Observable<Blob> {
     return this.http.get(
       `${this.baseUrl}/campaigns/${id}/export/`,
@@ -277,9 +242,7 @@ export class LitrixApiService {
     );
   }
 
-  // ============================================================
-  // My Reports — researcher endpoints
-  // ============================================================
+  // --- My Reports (researcher) ---
   getMyReports(): Observable<{
     submissions: any[]; pending_count: number;
   }> {

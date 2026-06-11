@@ -1,11 +1,5 @@
-/**
- * TypeScript models — mirror the Django REST API payloads exactly.
- *
- * Every field name here matches a column in our Postgres views, so the
- * compiler will catch any drift between backend and frontend.
- *
- * Place in: src/app/models/litrix.models.ts
- */
+// These mirror the DRF payloads field-for-field (each name maps to a
+// Postgres view column) so the compiler catches backend/frontend drift.
 
 export interface ResearcherStats {
   user_id: number;

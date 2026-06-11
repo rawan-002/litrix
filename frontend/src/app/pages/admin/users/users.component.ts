@@ -23,17 +23,14 @@ interface User {
   CreatedAt: string;
   RoleID: number | null;
   role_name: string | null;
-  // Pulled in via the LATERAL Works_In join so admins can see
-  // a user's department at a glance — relevant when promoting
-  // a Researcher to HoD of that exact department.
+  // From the LATERAL Works_In join — lets admins see a user's department at a
+  // glance, which matters when promoting a Researcher to HoD of it.
   departmentname: string | null;
 }
 
-/**
- * Editable form model. Mirrors the whitelist on the backend
- * (update_user view). We never let the form bind to UserID,
- * Litrix_ID, PasswordHash, Scholar_ID — those need a different path.
- */
+// Editable fields, mirroring the backend whitelist in update_user. UserID,
+// Litrix_ID, PasswordHash, and Scholar_ID are deliberately not here — they go
+// through different paths.
 interface EditForm {
   email:          string;
   full_name_ar:   string;
@@ -70,17 +67,15 @@ export class UsersComponent {
   readonly search = signal('');
   readonly editingId = signal<number | null>(null);
 
-  /** UserID currently being deleted (drives row spinner / disable). */
+  // Row currently being deleted — drives its spinner / disabled state.
   readonly deletingId = signal<number | null>(null);
 
-  /** Pending delete target for the confirm modal. null = modal closed. */
+  // Delete-confirm target; null means the modal is closed.
   readonly pendingDelete = signal<User | null>(null);
 
-  /** User being edited via the modal. null = modal closed. */
+  // Edit-modal state; null means closed.
   readonly editingUser = signal<User | null>(null);
-  /** Mutable form state — bound to the modal inputs. */
   readonly editForm   = signal<EditForm | null>(null);
-  /** Toggles the "Saving…" state on the modal's Save button. */
   readonly savingEdit = signal(false);
 
   readonly filtered = computed(() => {
@@ -135,10 +130,7 @@ export class UsersComponent {
     });
   }
 
-  // ----------------------------------------------------------------
-  // Delete flow — two-step: open confirmation modal, then commit.
-  // ----------------------------------------------------------------
-
+  // Delete is two-step: open the confirm modal, then commit.
   askDelete(user: User) { this.pendingDelete.set(user); }
   cancelDelete()        { this.pendingDelete.set(null); }
 
@@ -150,11 +142,11 @@ export class UsersComponent {
       `${this.API}/users/${u.UserID}/`,
     ).subscribe({
       next: (res) => {
-        // Optimistic local removal so the UI feels snappy.
+        // Drop the row locally so it feels instant.
         this.users.update(list => list.filter(x => x.UserID !== u.UserID));
         this.deletingId.set(null);
         this.pendingDelete.set(null);
-        // Let the admin know when it was un-registered (papers kept) vs deleted.
+        // Tell the admin when the user was un-registered (papers kept) vs deleted.
         if (res?.unregistered) {
           alert(res.message);
         }
@@ -166,12 +158,8 @@ export class UsersComponent {
     });
   }
 
-  // ----------------------------------------------------------------
-  // Edit flow — open modal with a clone of the user, save via PATCH.
-  // We do NOT mutate the table row in place. Only on a successful
-  // PATCH do we reload, so a failed save doesn't leave the UI lying.
-  // ----------------------------------------------------------------
-
+  // Edit opens the modal on a clone and saves via PATCH; the row only reloads
+  // on success, so a failed save never leaves the table showing wrong data.
   askEdit(user: User) {
     this.editingUser.set(user);
     this.editForm.set({
@@ -197,8 +185,7 @@ export class UsersComponent {
     const f = this.editForm();
     if (!u || !f) return;
 
-    // Only send changed fields — keeps the audit log clean and lets the
-    // backend skip rows that aren't actually being mutated.
+    // Send only changed fields so the audit log stays clean.
     const payload: any = {};
     if (f.email          !== (u.Email          || ''))  payload.email          = f.email.trim();
     if (f.full_name_ar   !== (u.FullName_Ar    || ''))  payload.full_name_ar   = f.full_name_ar.trim();
@@ -229,10 +216,8 @@ export class UsersComponent {
     });
   }
 
-  /**
-   * Tiny helper to set one field on the form signal — keeps the
-   * template's (ngModelChange) one-liners readable.
-   */
+  // Set one field on the form signal — keeps the template's (ngModelChange)
+  // one-liners tidy.
   patchForm<K extends keyof EditForm>(key: K, value: EditForm[K]) {
     const f = this.editForm();
     if (!f) return;

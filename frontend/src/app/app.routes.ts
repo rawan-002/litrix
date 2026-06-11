@@ -31,18 +31,17 @@ import { WelcomeComponent } from './pages/welcome/welcome.component';
 import { NetworkComponent } from './pages/network/network.component';
 
 export const routes: Routes = [
-  // Public landing page - shown to anyone not signed in.
-  // guestGuard bounces already-authenticated users straight to /.
+  // Landing page for signed-out visitors. guestGuard bounces
+  // already-authenticated users straight to /.
   { path: 'welcome',          component: WelcomeComponent,        canActivate: [guestGuard] },
 
   { path: 'login',            component: LoginComponent,          canActivate: [guestGuard] },
   { path: 'register',         component: RegisterComponent,       canActivate: [guestGuard] },
   { path: 'forgot-password',  component: ForgotPasswordComponent, canActivate: [guestGuard] },
 
-  // ---- PUBLIC SUPERVISOR DASHBOARD ---------------------------------------
-  // No login required. Lazy-loaded standalone components, NO LayoutComponent
-  // (so the public pages don't render the authenticated app shell/sidebar).
-  // Backend endpoints live under /api/public/* and are AllowAny.
+  // Public dashboard — no login. Lazy standalone components deliberately
+  // outside LayoutComponent so they skip the authenticated shell/sidebar.
+  // Backed by the AllowAny /api/public/* endpoints.
   {
     path: 'public/dashboard',
     loadComponent: () =>
@@ -62,10 +61,9 @@ export const routes: Routes = [
     canActivate: [authGuard],
     children: [
       { path: '',                component: DashboardRouterComponent },
-      // New canonical profile URL — uses Lit-NNNNNN public identifier.
+      // Canonical profile URL, keyed on the public Lit-NNNNNN id.
       { path: 'profile/:litrixId', component: ResearcherProfileComponent },
-      // Legacy URL kept temporarily so existing links don't 404.
-      // The component handles both :litrixId and :id route params.
+      // Legacy alias so old links don't 404 — the component reads either param.
       { path: 'researcher/:id',    component: ResearcherProfileComponent },
       {
         path: 'admin/registrations',
@@ -98,15 +96,13 @@ export const routes: Routes = [
         canActivate: [permissionGuard('manage_roles')],
       },
       {
-        // Admin campaigns dashboard — visible to anyone who can
-        // manage campaigns OR view their reports.
+        // Visible to anyone who can manage campaigns or view reports.
         path: 'admin/campaigns',
         component: CampaignsComponent,
         canActivate: [permissionGuard('manage_campaigns', 'view_campaign_reports')],
       },
-      // My Reports — permanent entry for every authenticated user.
-      // The page renders a friendly empty state when there are no
-      // active campaigns, so no extra guard needed beyond authGuard.
+      // Open to every authenticated user; the page shows an empty state
+      // when there are no active campaigns, so authGuard alone is enough.
       { path: 'my-reports',         component: MyReportsComponent },
       { path: 'my-reports/:id',     component: MyReportDetailComponent },
       {
@@ -116,12 +112,12 @@ export const routes: Routes = [
           'view_all_researchers', 'view_dept_researchers', 'manage_departments',
         )],
       },
-      // Research Network - collaboration graph, accessible to all
-      // authenticated users (each one centred on themselves by default).
+      // Collaboration graph, open to all authenticated users — centred
+      // on whoever's viewing by default.
       { path: 'network', component: NetworkComponent },
 
-      // Litrix AI — chatbot surface (lazy: keeps the bundle lean until
-      // visited; RAG backend wiring lands later).
+      // Chatbot surface. Lazy-loaded to keep the bundle lean; the RAG
+      // backend lands later.
       {
         path: 'ai',
         loadComponent: () =>
@@ -129,11 +125,9 @@ export const routes: Routes = [
             .then(m => m.LitrixAiComponent),
       },
       {
-        // Dynamic redirect to the user's own /profile/Lit-NNNNNN URL.
-        // Why a function: Angular needs to read the current AuthUser at
-        // navigation time, and `redirectTo` as a function lets us inject
-        // services. Falls back to the dashboard when litrix_id is
-        // unexpectedly missing (defensive — should never happen).
+        // Redirect to the signed-in user's own /profile/Lit-NNNNNN. A
+        // function (not a string) so we can inject AuthService and read
+        // litrix_id at navigation time; falls back to / if it's missing.
         path: 'me',
         redirectTo: () => {
           const auth = inject(AuthService);

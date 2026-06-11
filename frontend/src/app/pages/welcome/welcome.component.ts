@@ -1,18 +1,6 @@
-/**
- * Welcome (Landing) page - shown to unauthenticated visitors.
- *
- * DESIGN
- * ------
- * Apple-style minimalist: large quiet hero, single primary CTA, real
- * stats pulled from the public-stats endpoint, then a feature grid.
- * No carousels, no animations beyond a soft count-up on the stats so
- * the page feels alive without screaming.
- *
- * ROUTING
- * -------
- * Guarded by guestGuard - already-authenticated users get bounced to
- * the dashboard. The "Sign in" button drops them on /login.
- */
+// Landing page for unauthenticated visitors: quiet hero, one CTA, real numbers
+// from the public-stats endpoint, and a feature grid. Behind guestGuard, so
+// signed-in users get bounced to the dashboard.
 import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
@@ -42,7 +30,7 @@ export class WelcomeComponent implements OnInit {
   readonly loading = signal<boolean>(true);
   readonly year    = new Date().getFullYear();
 
-  /** Animated values that count up to the real numbers on mount. */
+  // Values that count up to the real numbers on mount.
   readonly displayedStats = signal<PublicStats>({
     researchers: 0, papers: 0, q1_journals: 0, departments: 0,
     papers_this_year: 0,
@@ -60,17 +48,14 @@ export class WelcomeComponent implements OnInit {
     }
   }
 
-  /**
-   * Tween each stat from 0 to its target over ~800 ms using a single
-   * requestAnimationFrame loop - cheap, smooth, no dependencies.
-   */
+  // Tween each stat from 0 to its target over ~800ms on one rAF loop.
   private animateCountUp(target: PublicStats) {
     const duration = 800;
     const start = performance.now();
 
     const step = (now: number) => {
       const t = Math.min(1, (now - start) / duration);
-      // ease-out cubic so the count slows down near the end
+      // ease-out cubic so it slows near the end
       const k = 1 - Math.pow(1 - t, 3);
       this.displayedStats.set({
         researchers:      Math.round(target.researchers      * k),
@@ -88,12 +73,8 @@ export class WelcomeComponent implements OnInit {
     return n.toLocaleString('en-US');
   }
 
-  /**
-   * Smooth scroll to an in-page section without triggering an
-   * Angular route change. Prevents the browser from doing a full
-   * reload (which is what happens with bare href="#about" inside
-   * an Angular app because the router intercepts the URL update).
-   */
+  // Smooth-scroll to an in-page section. preventDefault stops the router from
+  // intercepting a bare href="#about" and forcing a reload.
   scrollTo(sectionId: string, event: Event): void {
     event.preventDefault();
     const target = document.getElementById(sectionId);

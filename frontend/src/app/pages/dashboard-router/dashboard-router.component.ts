@@ -7,15 +7,10 @@ import { ResearcherDashboardComponent } from
   '../../components/researcher-dashboard/researcher-dashboard.component';
 
 
-/**
- * Routes the home page (`/`) based on permissions:
- *   • Admin / Dean / HoD → OverviewDashboardComponent (institution view)
- *   • Researcher         → ResearcherDashboardComponent (analytics-only)
- *
- * The full publications archive lives under /profile/Lit-NNNNNN — kept
- * deliberately separate from the dashboard so the home page stays an
- * insights surface and the profile stays the authoritative archive.
- */
+// Picks the home dashboard by permission: the institution overview for
+// Admin/Dean/HoD, the analytics-only view for researchers. The full
+// publications archive stays separate under /profile/Lit-NNNNNN so the home
+// page is for insights and the profile is the authoritative archive.
 @Component({
   selector: 'app-dashboard-router',
   standalone: true,

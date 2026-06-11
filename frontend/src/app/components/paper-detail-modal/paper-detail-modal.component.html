@@ -37,9 +37,8 @@
             </button>
           </div>
 
-          <!-- Header authors: prefer the structured affiliations
-               summary if present (with accent for Al-Baha members);
-               fall back to the raw string until backfill runs. -->
+          <!-- Prefer the structured authorships (Al-Baha accented); fall back
+               to the raw string until backfill runs. -->
           @if (p.authorships && p.authorships.length > 0) {
             <div class="text-sm mt-2">
               @for (a of p.authorships; track a.name + $index; let last = $last) {
@@ -57,9 +56,7 @@
         <!-- Body -->
         <div class="px-7 py-5 space-y-5">
 
-          <!-- Abstract — always shown for a consistent layout; truncated
-               by default with "Show more". Falls back to a muted note when
-               the source didn't provide one. -->
+          <!-- Always shown for a consistent layout; truncated with "Show more". -->
           <div>
             <h4 class="text-xs uppercase tracking-wide text-ink-500 font-medium mb-2">
               Abstract
@@ -80,14 +77,9 @@
             }
           </div>
 
-          <!-- All authors with their affiliations.
-               Each authorship is one chip: name + institution(s).
-               Al-Baha-affiliated authors get the accent treatment so
-               the operator can see at a glance whether this paper
-               actually belongs to a Litrix researcher. -->
-          <!-- Authors — always shown for a consistent layout. Prefer the
-               structured affiliations; fall back to the raw string, then to
-               a muted note, so every paper renders the same section. -->
+          <!-- Authors + affiliations. Al-Baha members are accented so you can
+               tell at a glance whether the paper belongs to a Litrix researcher.
+               Falls back to the raw string, then a muted note. -->
           <div>
             <h4 class="text-xs uppercase tracking-wide text-ink-500 font-medium mb-2
                        flex items-center justify-between">
@@ -129,9 +121,8 @@
             <h4 class="text-xs uppercase tracking-wide text-ink-500 font-medium mb-2">
               Publication Information
             </h4>
-            <!-- Always render the same canonical rows regardless of source,
-                 so a sparse Scopus/manual paper has the SAME shape as a rich
-                 Scholar one. Missing values show a muted em dash. -->
+            <!-- Same rows regardless of source, so a sparse Scopus paper has the
+                 same shape as a rich Scholar one. Missing values show an em dash. -->
             <dl class="grid grid-cols-2 gap-y-2 gap-x-4 text-sm">
               <dt class="text-ink-500">Year:</dt>
               <dd class="font-medium"
@@ -240,7 +231,7 @@
                   </g>
                 }
               </svg>
-              <!-- Per-year breakdown text — Apple-style minimal -->
+              <!-- Per-year breakdown -->
               <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-500">
                 @for (b of c.bars; track b.year) {
                   <span class="font-mono">

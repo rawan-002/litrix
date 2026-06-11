@@ -1,11 +1,6 @@
-/**
- * Fireworks — a one-shot celebratory overlay.
- *
- * A full-screen transparent canvas that launches fireworks plus a centred
- * welcome card. Pure canvas (no libraries), auto-dismisses after a few
- * seconds, and is also dismissable by click. Used as a warm easter-egg
- * greeting for a specific user on the dashboard.
- */
+// One-shot celebration overlay: a full-screen canvas of fireworks plus a
+// welcome card. Pure canvas, no libraries. Auto-dismisses (or on click).
+// A small easter-egg greeting on the dashboard.
 import {
   Component, ElementRef, OnDestroy, AfterViewInit, viewChild, signal, input, output,
 } from '@angular/core';

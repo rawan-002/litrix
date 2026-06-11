@@ -1,15 +1,7 @@
-/**
- * Search Page — dedicated /search route.
- *
- * Why a full page (vs the prior modal)?
- *   • More breathing room for the result cards.
- *   • Shareable URL (?q=...) so a search can be linked or bookmarked.
- *   • Browser back/forward behaves naturally.
- *
- * The permission gate stays on the BACKEND (/api/search/) — this page
- * just renders whatever the API returned and labels the scope when the
- * user is restricted to system-authored papers.
- */
+// Full-page /search (replaced the old modal) so results have room and the
+// ?q= URL is shareable. The permission gate lives on the backend — this page
+// just renders what /api/search/ returns and labels the scope when the user
+// is limited to system-authored papers.
 import {
   Component, OnInit, OnDestroy, AfterViewInit,
   inject, signal, ViewChild, ElementRef,
@@ -54,10 +46,8 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private input$ = new Subject<string>();
 
   ngOnInit() {
-    // Wire the debounced pipeline.
-    // Pipeline survives backend errors via catchError inside switchMap —
-    // the outer observable never errors, so the input keeps working on
-    // the next keystroke without a manual re-subscribe dance.
+    // catchError lives inside switchMap so a backend error never kills the
+    // outer stream — the input keeps working on the next keystroke.
     this.input$
       .pipe(
         debounceTime(250),
@@ -95,7 +85,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
         this.hasFullAccess.set(!!res.has_full_access);
       });
 
-    // Hydrate from ?q= so the page is shareable / refresh-safe.
+    // Hydrate from ?q= so refresh and shared links work.
     const initial = this.route.snapshot.queryParamMap.get('q') ?? '';
     if (initial) {
       this.query.set(initial);
@@ -114,8 +104,8 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   onInput(value: string) {
     this.query.set(value);
     this.input$.next(value.trim());
-    // Reflect the query in the URL so refresh / share works. Use
-    // replaceUrl so we don't pollute history on every keystroke.
+    // Mirror the query into the URL, replaceUrl so every keystroke doesn't
+    // pile up in history.
     this.router.navigate([], {
       relativeTo: this.route,
       queryParams: value ? { q: value } : {},

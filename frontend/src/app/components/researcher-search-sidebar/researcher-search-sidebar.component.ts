@@ -147,7 +147,7 @@ export class ResearcherSearchSidebarComponent implements OnInit {
       groups.get(dept)!.push(r);
     }
 
-    // Sort: groups by member count descending; within group by papers desc
+    // Groups sorted by member count, researchers within a group by papers.
     return Array.from(groups.entries())
       .map(([department, researchers]) => ({
         department,
@@ -166,7 +166,7 @@ export class ResearcherSearchSidebarComponent implements OnInit {
       next: payload => {
         const list = payload.results || [];
         this.all.set(list);
-        // Auto-expand all departments by default so user sees everything
+        // Expand every department by default.
         const depts = new Set<string>();
         list.forEach(r => depts.add(r.department_name || 'Unknown'));
         this.expandedDepts.set(depts);
@@ -190,8 +190,7 @@ export class ResearcherSearchSidebarComponent implements OnInit {
   }
 
   select(r: ResearcherListItem) {
-    // Use the public Litrix-ID (Lit-NNNNNN) when available; fall back to
-    // user_id only if the backend hasn't been migrated yet (pre-sprint3).
+    // Prefer the public Litrix-ID; fall back to user_id for un-migrated rows.
     const id = r.litrix_id || r.user_id;
     this.router.navigate(['/profile', id]);
   }

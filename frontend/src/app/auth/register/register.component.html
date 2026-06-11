@@ -78,10 +78,9 @@
           }
         </p>
 
-        <!-- Identity verification banner. Color depends on severity:
-             • high   → red    (already-claimed account or hard mismatch)
-             • medium → amber  (department / rank disagrees with stored)
-             • info   → blue   (informational — match found, dept unset) -->
+        <!-- Identity-check banner. Color by severity: high = red (account
+             already claimed / hard mismatch), medium = amber (dept or rank
+             disagrees), info = blue (match found, nothing to fix). -->
         @if (verification(); as v) {
           @if (v.match_found && v.mismatches.length > 0) {
             <div class="mb-5 rounded-xl border p-4"

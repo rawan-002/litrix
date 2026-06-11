@@ -1,19 +1,8 @@
-/**
- * CitationsChart — the single, shared "Citations over Time" chart.
- *
- * Previously every dashboard hand-rolled its own SVG: the admin overview
- * used an area/line trend, while the researcher dashboard and profile used
- * bars of slightly different heights. This component is the one canonical
- * area/line implementation (matching the admin look) so the chart is
- * visually identical for Admin, Dean, HoD, and Researcher.
- *
- * Drop it inside any card; it renders only the chart body (no title), owns
- * its own hover state, and scales to the host width.
- *
- * Usage:
- *   <app-citations-chart [series]="citationsByYear" [height]="200" />
- * where `series` is `{ year, citations }[]`.
- */
+// The one shared "Citations over Time" chart. Every dashboard used to
+// hand-roll its own SVG, so the trend looked slightly different on each
+// page; this is the single area/line version they all render now.
+// Renders just the chart body (no title), owns its hover state, scales to
+// the host width: <app-citations-chart [series]="citationsByYear" [height]="200" />.
 import { Component, computed, input, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
@@ -106,8 +95,7 @@ export class CitationsChartComponent {
 
   readonly hovered = signal<ChartPoint | null>(null);
 
-  // A stable-enough gradient id so multiple instances on one page don't
-  // collide. (Date/random are avoided; height+length is enough here.)
+  // Unique gradient id so two charts on the same page don't collide.
   readonly gradId = `citGrad_${Math.round(Math.random() * 1e6)}`;
 
   readonly geometry = computed(() => {

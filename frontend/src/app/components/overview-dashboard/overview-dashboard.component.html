@@ -28,8 +28,7 @@
 
       <div class="flex items-center gap-3 flex-wrap">
 
-        <!-- Subtle "updating" spinner — shown only while re-fetching after a
-             filter change, so the data on screen never blanks. -->
+        <!-- Updating spinner — only while re-fetching, so the page never blanks. -->
         @if (refreshing()) {
           <svg class="w-4 h-4 text-ink-300 animate-spin" viewBox="0 0 24 24" fill="none">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
@@ -38,11 +37,8 @@
           </svg>
         }
 
-        <!-- Department filter — All Departments OR a specific one.
-             Hidden for HoDs since they are scoped to a single dept;
-             showing a chooser would be misleading.
-             Uses native (change) + [selected] instead of ngModel to
-             dodge the ngModel/ngValue type-coercion gotcha. -->
+        <!-- Department filter. Hidden for HoDs (single-dept scope). Uses native
+             (change) + [selected] to dodge the ngModel/ngValue coercion gotcha. -->
         @if (!isHoD()) {
           <select (change)="setDepartment($any($event.target).value)"
                   class="px-4 py-2 rounded-full bg-white border border-ink-200
@@ -60,7 +56,7 @@
             }
           </select>
         } @else if (d.departments?.length) {
-          <!-- HoD: show their dept as a non-interactive label -->
+          <!-- HoD: their dept as a static label -->
           <span class="px-4 py-2 rounded-full bg-ink-50 border border-ink-200
                        text-sm font-medium text-ink-700 min-w-[200px]
                        text-center" dir="rtl">
@@ -68,9 +64,8 @@
           </span>
         }
 
-        <!-- Multi-year picker — empty selection = "All Years".
-             Stop click propagation on the popover so clicking inside
-             doesn't immediately trigger the document-level close. -->
+        <!-- Multi-year picker (empty = All Years). stopPropagation on the
+             popover so an inside click doesn't trip the document-level close. -->
         <div class="relative">
           <button (click)="toggleYearMenu(); $event.stopPropagation()"
                   class="px-4 py-2 rounded-full bg-white border border-ink-200
@@ -139,9 +134,8 @@
         </div>
 
 
-        <!-- Affiliation filter — Al-Baha-only excludes papers the verifier
-             confirmed were authored under a non-Al-Baha affiliation. Off by
-             default (institution-wide numbers). Re-queries on toggle. -->
+        <!-- Al-Baha-only excludes papers the verifier confirmed as non-Al-Baha.
+             Off by default; re-queries on toggle. -->
         <button (click)="toggleAffiliation()"
                 [title]="albahaOnly()
                   ? 'Showing Al-Baha-affiliated papers only — click to show all'
@@ -203,16 +197,11 @@
       </div>
     </section>
 
-    <!-- ============================================================
-         Analytics charts — 2x2 grid, all derived from the filtered
-         payload. The 4th cell flips between "Top Departments" (when
-         All is selected) and "Quartile breakdown" otherwise.
-         ============================================================ -->
+    <!-- Analytics charts. The 4th cell flips between Top Departments (on "All")
+         and a single-department summary otherwise. -->
     <section class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-12">
 
-      <!-- Cell 1: Publications per Year — hover-only.
-           Hovering a bar highlights it and surfaces a tooltip; clicks
-           are intentionally disabled per UX request. -->
+      <!-- Publications per Year — hover-only (clicks disabled per UX request). -->
       <div class="bg-white rounded-apple shadow-card p-6">
         <div class="flex items-baseline justify-between mb-4">
           <h2 class="text-sm font-semibold text-ink-700">Publications per Year</h2>
@@ -233,7 +222,6 @@
             }
             @for (b of c.bars; track b.label) {
               <g (mouseenter)="setHoveredPub(b)">
-                <!-- Hovered bar shifts to the accent (Apple blue). -->
                 <rect [attr.x]="b.x" [attr.y]="b.y"
                       [attr.width]="b.w" [attr.height]="b.h"
                       rx="3"
@@ -273,7 +261,7 @@
         }
       </div>
 
-      <!-- Cell 2: Citations over Time — hover-only -->
+      <!-- Citations over Time -->
       <div class="bg-white rounded-apple shadow-card p-6">
         <div class="flex items-baseline justify-between mb-4">
           <h2 class="text-sm font-semibold text-ink-700">Citations over Time</h2>
@@ -282,7 +270,7 @@
         <app-citations-chart [series]="citationSeries()" [height]="200" />
       </div>
 
-      <!-- Cell 3: Quartile / Indexing Donut -->
+      <!-- Quartile & Indexing donut -->
       <div class="bg-white rounded-apple shadow-card p-6">
         <div class="flex items-baseline justify-between mb-4">
           <h2 class="text-sm font-semibold text-ink-700">Quartile & Indexing</h2>
@@ -295,7 +283,6 @@
               <circle r="56" cx="0" cy="0" fill="none"
                       stroke="#f5f5f4" stroke-width="20" />
               @for (s of q.slices; track s.label) {
-                <!-- Hovered slice grows in stroke-width to pop forward. -->
                 <circle r="56" cx="0" cy="0" fill="none"
                         [attr.stroke]="s.color"
                         [attr.stroke-width]="hoveredQuartile() === s.label ? 26 : 20"
@@ -307,7 +294,6 @@
               }
               <g class="rotate-90 pointer-events-none">
                 @if (hoveredQuartile(); as hl) {
-                  <!-- Surface the hovered slice's value in the center. -->
                   @for (s of q.slices; track s.label) {
                     @if (s.label === hl) {
                       <text x="0" y="-3" text-anchor="middle"
@@ -362,7 +348,7 @@
         }
       </div>
 
-      <!-- Cell 4: Top Departments (when All) — or department-specific summary card -->
+      <!-- Top Departments (when All) or a single-department summary -->
       <div class="bg-white rounded-apple shadow-card p-6">
         @if (selectedDeptId() == null) {
           <div class="flex items-baseline justify-between mb-4">
@@ -394,8 +380,6 @@
                            [class.bg-accent]="hoveredDept() === b.id"
                            [style.width.%]="b.pct * 100"></div>
                     </div>
-                    <!-- The label tints to accent on hover for the same -->
-                    <!-- "this is what you're hovering" cue.            -->
                   </div>
                 </li>
               }
@@ -404,7 +388,7 @@
             <div class="text-center py-12 text-sm text-ink-400">No departments</div>
           }
         } @else {
-          <!-- Single-department mode: show focused stats -->
+          <!-- Single-department focus -->
           <div class="flex items-baseline justify-between mb-4">
             <h2 class="text-sm font-semibold text-ink-700">Department Focus</h2>
             <button (click)="setDepartment('all')"
@@ -448,7 +432,7 @@
     </section>
 
 
-    <!-- Department Research Statistics — full width, first -->
+    <!-- Department Research Statistics -->
     @if (!isHoD()) {
       <section class="bg-white rounded-apple shadow-card p-6 mb-8">
       <h2 class="text-lg font-semibold text-ink-700 mb-6">
@@ -501,7 +485,7 @@
     </section>
     }
 
-    <!-- Top Researchers — second, full width -->
+    <!-- Top Researchers -->
     @if (!isHoD()) {
       <section class="bg-white rounded-apple shadow-card p-6 mb-12">
       <h2 class="text-lg font-semibold text-ink-700 mb-4">Top Researchers</h2>

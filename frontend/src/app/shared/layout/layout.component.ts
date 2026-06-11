@@ -13,11 +13,8 @@ interface NavItem {
   icon: string;
   route: string;
   permission?: string;
-  /**
-   * Optional reactive badge count (e.g. pending reports). Signals so the
-   * template can recompute when the count changes without forcing a
-   * full nav rebuild.
-   */
+  // Optional badge count (e.g. pending reports) — a signal getter so the
+  // template re-reads it without rebuilding the whole nav.
   badge?: () => number;
 }
 
@@ -36,15 +33,9 @@ export class LayoutComponent implements OnInit {
 
   readonly userMenuOpen = signal(false);
 
-  /**
-   * Number of campaign submissions the current researcher hasn't
-   * finished yet (status ∈ pending / in_progress / reopened). Powers
-   * the badge next to the "My Reports" sidebar entry.
-   *
-   * Loaded once on layout init — cheap (single endpoint, single int).
-   * For instant updates after a submit, the my-reports page itself
-   * should call `reloadPendingReports()`.
-   */
+  // Unfinished campaign submissions (pending / in_progress / reopened),
+  // shown as the badge on "My Reports". Loaded once on init; the
+  // my-reports page calls reloadPendingReports() after a submit.
   readonly pendingReports = signal(0);
 
   ngOnInit() {
@@ -59,10 +50,7 @@ export class LayoutComponent implements OnInit {
     });
   }
 
-  /**
-   * Cmd+K (mac) / Ctrl+K (win/linux) — keyboard shortcut to the search
-   * page. Standard Spotlight/Slack/Notion convention.
-   */
+  // Cmd/Ctrl+K jumps to search — the familiar Spotlight/Slack shortcut.
   @HostListener('document:keydown', ['$event'])
   handleKeydown(ev: KeyboardEvent) {
     if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 'k') {
@@ -76,9 +64,8 @@ export class LayoutComponent implements OnInit {
       { label: 'Dashboard',     icon: '⌂',  route: '/' },
       { label: 'Search',        icon: '⌕',  route: '/search' },
 
-      // My Reports — permanent entry. The page is an empty state if
-      // there are no active campaigns; the badge surfaces pending work
-      // without the user needing to remember to look.
+      // Always present; the badge surfaces pending work, and the page
+      // itself is an empty state when no campaigns are active.
       {
         label: 'My Reports',
         icon:  '▤',
@@ -87,22 +74,19 @@ export class LayoutComponent implements OnInit {
       },
     ];
 
-    // Departments — the single drill-down surface for institutional
-    // data. Visible to anyone with a "view researchers" perm (Admin,
-    // Dean, HoD) — the page itself scopes data by role.
+    // Shown to anyone with a "view researchers" perm (Admin/Dean/HoD);
+    // the page scopes the data by role itself.
     if (this.auth.hasPermission('view_all_researchers') ||
         this.auth.hasPermission('view_dept_researchers') ||
         this.auth.hasPermission('manage_departments')) {
       items.push({ label: 'Departments', icon: '◫', route: '/departments' });
     }
 
-    // Collaboration graph. Available to every authenticated user; each
-    // one is centred on themselves by default. (Route stays /network to
-    // avoid a refactor — only the user-facing label changed.)
+    // Open to everyone; route stays /network even though the label is
+    // now "Collaboration" (renaming the route wasn't worth the churn).
     items.push({ label: 'Collaboration', icon: '◉', route: '/network' });
 
-    // Litrix AI — chatbot surface (RAG wiring lands later). Visible to
-    // everyone; placed up top so it reads as a first-class feature.
+    // Up top so it reads as a first-class feature (RAG wiring lands later).
     items.push({ label: 'Litrix AI', icon: '✦', route: '/ai' });
 
     if (this.auth.hasPermission('approve_registrations')) {
@@ -118,11 +102,8 @@ export class LayoutComponent implements OnInit {
       items.push({ label: 'Roles & Permissions', icon: '◈', route: '/admin/roles' });
     }
 
-    // Admin-facing reports dashboard. Visible to anyone who can
-    // manage campaigns OR view their reports (HoD-style read access).
-    // Internal route stays `/admin/campaigns` to avoid a refactor —
-    // the user-facing label is the only thing that needs to feel
-    // "official" for academic operations.
+    // For campaign managers and HoD-style read access. Route stays
+    // /admin/campaigns; only the label needed to read as "official".
     if (this.auth.hasPermission('manage_campaigns') ||
         this.auth.hasPermission('view_campaign_reports')) {
       items.push({ label: 'Research Reports', icon: '▦', route: '/admin/campaigns' });

@@ -27,8 +27,7 @@ interface VerificationMismatch {
   your_value: any;
   our_value: any;
   our_label?: string;
-  // Severity drives the banner color: high = red (block-worthy issue),
-  // info = blue (informational), default amber for moderate mismatches.
+  // Drives the banner color: high = red, info = blue, default amber.
   severity?: 'high' | 'info';
   note?: string;
 }
@@ -69,8 +68,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
   readonly inviteToken = signal<string | null>(null);
   readonly invite      = signal<InvitePayload | null>(null);
 
-  // Identity-verification state — populated by the debounced check
-  // against /api/auth/registration-match/ as the form is filled in.
+  // Live result of the debounced /registration-match/ check.
   readonly verification = signal<VerificationResult | null>(null);
   readonly verifying    = signal<boolean>(false);
 
@@ -87,29 +85,19 @@ export class RegisterComponent implements OnInit, OnDestroy {
   // Drives the debounced lookup pipeline.
   private matchPing$ = new Subject<void>();
 
-  /**
-   * Why split first/last name on the form when the backend stores
-   * `FullName_Ar` and `FirstName/LastName` directly?
-   *
-   *   • English side: the User table already has separate FirstName /
-   *     LastName columns; sending them split avoids the lossy
-   *     `full_name.split(' ')[0]` heuristic in approve_registration.
-   *   • Arabic side: the schema currently keeps a single FullName_Ar
-   *     column, so we concatenate first + last on submit. If we ever
-   *     add FirstName_Ar / LastName_Ar columns later, no UI rework is
-   *     needed — the form is already split.
-   */
+  // Splitting the English name maps straight onto the User table's
+  // FirstName/LastName columns and dodges the lossy split-on-space in
+  // approve_registration. Arabic stays one field (FullName_Ar today), but
+  // the split form means no rework if we ever add Arabic name columns.
   readonly profileForm = this.fb.nonNullable.group({
     email:           ['', [Validators.required, Validators.email]],
     password:        ['', [Validators.required, Validators.minLength(8)]],
-    // English name is REQUIRED — it's the canonical form used in
-    // citation lookups, journal records, and admin reporting.
+    // Required — the canonical name for citation lookups and reporting.
     first_name_en:   ['', [Validators.required]],
     middle_name_en:  [''],
     last_name_en:    ['', [Validators.required]],
-    // Arabic name is OPTIONAL and captured as a single triple-name field
-    // (الاسم الثلاثي) that maps to FullName_Ar. Researchers imported via
-    // scrapers may not always have an Arabic name yet.
+    // Optional single triple-name field (الاسم الثلاثي) -> FullName_Ar;
+    // scraper-imported researchers may not have an Arabic name yet.
     full_name_ar:    [''],
     department_id:   [null as number | null],
     academic_rank:   [''],
@@ -117,12 +105,8 @@ export class RegisterComponent implements OnInit, OnDestroy {
     orcid_id:        [''],
   });
 
-  /**
-   * Accept a full Google Scholar profile URL *or* a bare ID and return
-   * the ID. The "Scholar_ID" column is VARCHAR(64), so storing a pasted
-   * URL would overflow it (500). The ID lives in the `user=` query param:
-   *   https://scholar.google.com/citations?user=AbCd1234EfGh&hl=en
-   */
+  // Pull the bare Scholar ID out of a pasted profile URL (it's in the
+  // `user=` param). Scholar_ID is VARCHAR(64), so a full URL would overflow.
   private extractScholarId(raw: string | null | undefined): string {
     const s = (raw || '').trim();
     if (!s) return '';
@@ -130,10 +114,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
     return m ? m[1] : s;
   }
 
-  /**
-   * Accept a full ORCID URL *or* a bare ORCID and return the 16-char
-   * identifier (e.g. https://orcid.org/0000-0002-1825-0097 -> the digits).
-   */
+  // Pull the bare ORCID out of a full orcid.org URL (or pass it through).
   private extractOrcid(raw: string | null | undefined): string {
     const s = (raw || '').trim();
     if (!s) return '';
@@ -155,8 +136,8 @@ export class RegisterComponent implements OnInit, OnDestroy {
   });
 
   readonly registeredEmail = signal<string>('');
-  // Email-delivery state for the verify step: false means the code email
-  // failed to send, so we warn and surface a resend button.
+  // False means the verification email failed to send — we warn and
+  // offer a resend.
   readonly emailSent   = signal<boolean>(true);
   readonly resending   = signal<boolean>(false);
   readonly resendNote  = signal<string | null>(null);
@@ -178,8 +159,8 @@ export class RegisterComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
-    // Pick up an invite token from the URL early so the form can lock
-    // its email/department fields before any user input fires.
+    // Read the invite token up front so we can lock email/department
+    // before the user starts typing.
     const t = this.route.snapshot.queryParamMap.get('invite');
     if (t) {
       this.inviteToken.set(t);
@@ -189,13 +170,13 @@ export class RegisterComponent implements OnInit, OnDestroy {
         next: payload => {
           this.invite.set(payload);
           if (payload.valid) {
-            // Pre-fill + freeze the fields the invitation already pinned.
+            // Pre-fill and lock whatever the invitation already pinned.
             const patch: any = {};
             if (payload.invited_email) patch.email = payload.invited_email;
             if (payload.department_id) patch.department_id = payload.department_id;
             this.profileForm.patchValue(patch);
-            // Email is bound to the invitation; locking it prevents
-            // accidental mismatch errors at submit time.
+            // Email is bound to the invite — lock it so it can't drift and
+            // trigger a mismatch at submit.
             this.profileForm.get('email')?.disable();
             if (payload.department_id) {
               this.profileForm.get('department_id')?.disable();
@@ -206,15 +187,14 @@ export class RegisterComponent implements OnInit, OnDestroy {
       });
     }
 
-    // Wire the debounced verification pipeline. We re-check whenever a
-    // relevant field changes so the warning is always in sync with the
-    // form state. Trip-wire the Subject from the form's valueChanges.
+    // Debounced identity check — re-runs on every relevant field change
+    // so the warning stays in sync with the form.
     this.matchPing$
       .pipe(
         debounceTime(400),
         switchMap(() => {
           const v = this.profileForm.getRawValue();
-          // Need at least one identity key, otherwise nothing to match.
+          // Nothing to match without at least one identity key.
           if (!v.scholar_id && !v.orcid_id && !v.email) {
             return of(null);
           }
@@ -244,7 +224,6 @@ export class RegisterComponent implements OnInit, OnDestroy {
         },
       });
 
-    // Fire on any change to identity-relevant fields.
     this.profileForm.valueChanges.subscribe(() => this.matchPing$.next());
   }
 
@@ -259,8 +238,8 @@ export class RegisterComponent implements OnInit, OnDestroy {
 
     const v = this.profileForm.getRawValue();
     const names = this.buildFullNames();
-    // Normalize pasted profile URLs down to bare IDs before they hit the
-    // VARCHAR(64) columns, and reflect the cleaned value back in the form.
+    // Strip pasted URLs down to bare IDs before they hit the VARCHAR(64)
+    // columns, and reflect the cleaned values back in the form.
     const scholar_id = this.extractScholarId(v.scholar_id);
     const orcid_id   = this.extractOrcid(v.orcid_id);
     this.profileForm.patchValue({ scholar_id, orcid_id }, { emitEvent: false });
@@ -277,16 +256,16 @@ export class RegisterComponent implements OnInit, OnDestroy {
       scholar_id:    scholar_id,
       orcid_id:      orcid_id,
     };
-    // Carry the invite token through if we have one — the backend uses
-    // it to skip the awaiting-email-verification queue entirely.
+    // Pass the invite token through — the backend uses it to skip the
+    // email-verification queue.
     if (this.inviteToken()) {
       payload.invite = this.inviteToken();
     }
     this.auth.register(payload).subscribe({
       next: (res: any) => {
         this.loading.set(false);
-        // Invitation flow returns a created user_id and skips email
-        // verification. Bounce straight to the login page with success.
+        // Invite flow returns a user_id and skips email verification —
+        // jump straight to the done step.
         if (this.inviteToken() && res?.user_id) {
           this.step.set('done');
           return;
@@ -297,9 +276,8 @@ export class RegisterComponent implements OnInit, OnDestroy {
       },
       error: err => {
         this.loading.set(false);
-        // 409 from the identity-verification gate — surface the same
-        // banner the real-time check uses so the user sees exactly
-        // what's wrong and stays on the profile step.
+        // 409 from the identity gate — reuse the live-check banner and
+        // keep the user on the profile step to fix it.
         if (err.status === 409 && err.error?.error === 'identity_verification_failed') {
           this.verification.set(err.error.verification);
           this.error.set(

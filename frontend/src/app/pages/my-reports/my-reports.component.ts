@@ -1,13 +1,6 @@
-/**
- * My Reports — researcher's landing page for verification campaigns.
- *
- * Shows two stacks:
- *   1. Active submissions    — those needing action (badge in sidebar)
- *   2. Past submissions      — submitted / closed (read-only history)
- *
- * Each submission row links to /my-reports/<submission_id> where the
- * researcher actually verifies the paper list.
- */
+// Researcher's landing page for verification campaigns: active submissions
+// that still need action, plus a read-only history of past ones. Each row
+// links into /my-reports/<id> where the paper list is actually verified.
 import { Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';

@@ -1,44 +1,11 @@
-// @ts-nocheck
-//
-// WHY @ts-nocheck:
-//   This component is a D3 force-simulation playground. D3's API is
-//   built on generic method chaining (`selectAll().data().enter()
-//   .append().attr(...)`) whose type inference does not survive
-//   Angular's strict production TS pass — every callback (`d => ...`)
-//   ends up flagged as implicit `any`, every `d3.SimulationNodeDatum`
-//   field gets dropped, etc.
-//
-//   Sprinkling explicit type annotations on every D3 callback is
-//   verbose and fragile (each `attr/style/text` chain needs a fresh
-//   generic). The pragmatic engineering call is to opt this single
-//   file out of strict TS checking — D3 itself is the source of
-//   truth for runtime behaviour, and the rest of the codebase stays
-//   strict.
-//
-//   If you change this file, run `ng serve` locally to catch logic
-//   errors. The Angular template type-checker still validates the
-//   HTML side.
-//
-/**
- * Litrix Research Network — interactive collaboration graph.
- *
- * Modes
- *   • coauthors  : classic co-authorship graph
- *   • interests  : researchers with overlapping research topics
- *   • both       : merged view (solid edges = coauthor, dashed = interest)
- *
- * UX
- *   • Force-directed layout (D3 simulation) centred on the current user
- *   • Click a node  → show detail strip (interests + shared topics)
- *   • Double-click  → recentre the graph on that node
- *   • Hidden Gems   → people you should probably meet (high topic overlap,
- *                     zero co-authored papers)
- *   • Export PNG    → download the current SVG as a PNG image
- *
- * Tech
- *   • d3-force for the physics, raw <svg> for rendering
- *   • Signals for state, computed() for derived geometry
- */
+// @ts-nocheck — D3's chained generics don't survive Angular's strict prod TS
+// pass (every callback lands as implicit `any`). Annotating each chain is
+// fragile, so this one file opts out; run `ng serve` after edits to catch
+// logic errors. The template type-checker still covers the HTML side.
+
+// Research network graph: co-authorship and shared-interest views over a
+// d3-force layout. Click a node for details, double-click to recentre, and
+// Hidden Gems surfaces high-overlap researchers you've never co-authored with.
 import {
   Component, OnInit, OnDestroy, inject, signal,
   ElementRef, ViewChild, AfterViewInit,
@@ -67,9 +34,8 @@ interface NetNode extends d3.SimulationNodeDatum {
   shared_interests?: string[];
   shared_interests_count?: number;
 
-  // Repeat the SimulationNodeDatum fields explicitly. Some Vercel
-  // build configs don't resolve d3's inherited `x/y/fx/fy` cleanly,
-  // so we restate them here to make strict mode happy.
+  // Restate the SimulationNodeDatum fields — some Vercel build configs don't
+  // resolve d3's inherited x/y/fx/fy, which trips strict mode.
   x?:  number;
   y?:  number;
   vx?: number;
@@ -137,7 +103,6 @@ export class NetworkComponent implements OnInit, AfterViewInit, OnDestroy {
 
   @ViewChild('svgRoot', { static: false }) svgRoot?: ElementRef<SVGSVGElement>;
 
-  // ---- State ----
   readonly data    = signal<NetworkPayload | null>(null);
   readonly loading = signal<boolean>(true);
   readonly error   = signal<string | null>(null);
@@ -166,13 +131,12 @@ export class NetworkComponent implements OnInit, AfterViewInit, OnDestroy {
     this.fetch();
   }
 
-  ngAfterViewInit(): void { /* simulation starts on data arrival */ }
+  ngAfterViewInit(): void { /* simulation kicks off once data arrives */ }
 
   ngOnDestroy(): void {
     this.simulation?.stop();
   }
 
-  // -----------------------------------------------------------------
   setMode(m: NetMode): void {
     if (this.mode() === m) return;
     this.mode.set(m);
@@ -207,10 +171,8 @@ export class NetworkComponent implements OnInit, AfterViewInit, OnDestroy {
     });
   }
 
-  /**
-   * Poll a few times until the @ViewChild('svgRoot') reference is set
-   * (Angular's @if needs a change-detection pass after data() flips).
-   */
+  // Poll until @ViewChild('svgRoot') resolves — @if needs a CD pass after
+  // data() flips before the <svg> exists.
   private renderWhenReady(payload: NetworkPayload, attempt: number): void {
     if (this.svgRoot?.nativeElement) {
       this.renderGraph(payload);
@@ -220,9 +182,7 @@ export class NetworkComponent implements OnInit, AfterViewInit, OnDestroy {
     setTimeout(() => this.renderWhenReady(payload, attempt + 1), 50);
   }
 
-  // -----------------------------------------------------------------
-  // Force simulation + SVG rendering
-  // -----------------------------------------------------------------
+  // Force simulation + SVG rendering.
   private renderGraph(payload: NetworkPayload): void {
     if (!this.svgRoot) return;
     const svgEl = this.svgRoot.nativeElement;
@@ -244,7 +204,7 @@ export class NetworkComponent implements OnInit, AfterViewInit, OnDestroy {
       .on('zoom', (ev: any) => g.attr('transform', ev.transform.toString()));
     svg.call(zoomBehaviour as any);
 
-    // ---- Edges (different styling for coauthor vs interest) ----
+    // Edges — coauthor vs interest get different styling.
     const link = g.append('g')
       .attr('class', 'links')
       .selectAll('line')
@@ -255,7 +215,6 @@ export class NetworkComponent implements OnInit, AfterViewInit, OnDestroy {
       .attr('stroke-dasharray', d => d.kind === 'interest' ? '4 4' : '')
       .attr('stroke-width', d => Math.max(0.6, Math.min(4, Math.sqrt(d.weight))));
 
-    // ---- Node colors ----
     const colourFor = (n: NetNode): string => {
       if (n.kind === 'self')     return '#0071e3';
       if (n.kind === 'same')     return '#1d1d1f';
@@ -276,11 +235,10 @@ export class NetworkComponent implements OnInit, AfterViewInit, OnDestroy {
       .enter().append('g')
       .style('cursor', 'pointer')
       .on('click', (_: any, d: NetNode) => {
-        // Single click — show details
         this.selectedNode.set(d);
       })
       .on('dblclick', (_: any, d: NetNode) => {
-        // Double click — recentre on this node
+        // Double-click recentres the graph on this node.
         if (d.kind !== 'external' && d.litrix_id) {
           this.centreLitrixId.set(d.litrix_id);
           this.selectedNode.set(null);
@@ -294,7 +252,7 @@ export class NetworkComponent implements OnInit, AfterViewInit, OnDestroy {
       .attr('stroke', '#fff')
       .attr('stroke-width', 2);
 
-    // Inner ring for interest-mode nodes (so they pop)
+    // Inner ring so interest-mode nodes stand out.
     nodeG.filter(d => d.kind === 'interest')
       .append('circle')
       .attr('r', d => radiusFor(d) - 3)
@@ -304,7 +262,7 @@ export class NetworkComponent implements OnInit, AfterViewInit, OnDestroy {
       .attr('stroke-dasharray', '2 2')
       .style('pointer-events', 'none');
 
-    // Native tooltip — quick glance without click
+    // Native tooltip for a quick glance without clicking.
     nodeG.append('title').text(d => {
       const parts = [d.label, d.dept];
       if (d.kind === 'interest') {
@@ -320,25 +278,10 @@ export class NetworkComponent implements OnInit, AfterViewInit, OnDestroy {
       return parts.filter(Boolean).join('\n');
     });
 
-    // ------------------------------------------------------------
-    // Node labels — show ON EVERY NODE.
-    //
-    // Two-tier visual hierarchy keeps the graph readable even when
-    // many nodes are on screen:
-    //   * self        → 13px bold (the "you are here" anchor)
-    //   * coauthors / interest neighbours → 11px regular
-    //   * external    → 10px muted (kept smaller — usually the
-    //                   majority of nodes, so smaller text reduces
-    //                   visual clutter)
-    //
-    // Truncation: hard-cap at 24 chars with an ellipsis. Beyond that
-    // the layout starts to overlap regardless of font size.
-    //
-    // Halo (paint-order stroke): a thin white outline around the
-    // text so it stays legible when it crosses an edge or another
-    // circle. This is a standard D3 trick — `paint-order: stroke`
-    // draws the stroke BEFORE the fill so the fill sits on top.
-    // ------------------------------------------------------------
+    // Labels on every node, sized by kind (self bold, external muted+smaller
+    // since they're the majority) and truncated so the layout doesn't overlap.
+    // The white paint-order stroke is a halo that keeps text legible where it
+    // crosses an edge or circle.
     const truncate = (s: string, n: number): string =>
       s && s.length > n ? s.slice(0, n - 1).trim() + '…' : (s || '');
 
@@ -365,7 +308,7 @@ export class NetworkComponent implements OnInit, AfterViewInit, OnDestroy {
       .attr('stroke', '#ffffff')
       .attr('stroke-width', 3)
       .attr('stroke-linejoin', 'round')
-      .style('pointer-events', 'none');   // text never blocks click on the circle
+      .style('pointer-events', 'none');   // so text never swallows a click on the circle
 
     this.simulation = d3.forceSimulation<NetNode>(nodes)
       .force('link', d3.forceLink<NetNode, NetEdge>(edges)
@@ -384,10 +327,8 @@ export class NetworkComponent implements OnInit, AfterViewInit, OnDestroy {
         nodeG.attr('transform', d => `translate(${d.x},${d.y})`);
       });
 
-    // Explicit `any` types on the d3 drag callbacks — Angular's
-    // production build runs TS in strict mode, which rejects the
-    // implicit `any` that d3's overload resolution leaves behind.
-    // Casting at the call site keeps the rest of the code typed.
+    // Explicit `any` on the drag callbacks — d3's overloads leave an implicit
+    // `any` that strict prod TS rejects.
     const drag = d3.drag<SVGGElement, NetNode>()
       .on('start', (event: any, d: NetNode) => {
         if (!event.active) this.simulation!.alphaTarget(0.3).restart();
@@ -403,16 +344,13 @@ export class NetworkComponent implements OnInit, AfterViewInit, OnDestroy {
     nodeG.call(drag as any);
   }
 
-  // -----------------------------------------------------------------
-  // Export the current graph as a PNG (right from the browser, no
-  // server round-trip). Uses the standard SVG -> canvas -> PNG dance.
-  // -----------------------------------------------------------------
+  // Export the graph as a PNG client-side, via the usual SVG -> canvas -> PNG.
   exportPNG(): void {
     if (!this.svgRoot?.nativeElement) return;
     const svgEl = this.svgRoot.nativeElement;
 
-    // Serialize, then patch the SVG with explicit dimensions + a white
-    // background so the rendered PNG isn't transparent.
+    // Patch the clone with explicit dimensions + a white background, otherwise
+    // the PNG comes out transparent.
     const serializer = new XMLSerializer();
     const clone = svgEl.cloneNode(true) as SVGSVGElement;
     const W = svgEl.clientWidth || 900;
@@ -458,9 +396,6 @@ export class NetworkComponent implements OnInit, AfterViewInit, OnDestroy {
     img.src = url;
   }
 
-  // -----------------------------------------------------------------
-  // Filter handlers
-  // -----------------------------------------------------------------
   onFilterChange(): void {
     setTimeout(() => this.fetch(), 120);
   }

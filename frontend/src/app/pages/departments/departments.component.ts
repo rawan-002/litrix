@@ -1,16 +1,6 @@
-/**
- * Departments page — institutional drill-down.
- *
- * Layout:
- *   [Sort pills]                           ← order by papers / citations / h-index
- *   [Department cards grid]                ← each shows KPIs
- *      └ [click] → inline researcher list  ← name, papers, citations, h-index
- *
- * Why one-page-with-inline-expand instead of /departments/:id detail?
- *   Academic data is read-heavy and exploratory — admins/deans want
- *   to compare departments at a glance. Inline expansion keeps context
- *   so closing one card and opening another is friction-free.
- */
+// Departments page. Cards expand inline into a researcher list instead of
+// navigating to a detail route — deans compare departments at a glance and
+// inline expand keeps the context while jumping between cards.
 import { Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
@@ -68,20 +58,15 @@ export class DepartmentsComponent {
   readonly sortBy = signal<SortKey>('total_papers');
   readonly search = signal('');
 
-  /** Al-Baha-only affiliation filter — drops papers confirmed authored
-   *  elsewhere. Same semantics as the overview dashboard's toggle. */
+  // Al-Baha-only filter — same toggle as the overview dashboard.
   readonly albahaOnly = signal(false);
 
   readonly expandedId = signal<number | null>(null);
   readonly researchers = signal<ResearcherRow[]>([]);
   readonly resLoading = signal(false);
 
-  /**
-   * Distinct researcher head-count from /api/stats/overview/.
-   * Summing total_researchers across cards double-counts anyone holding
-   * positions in two departments — the overview endpoint counts
-   * DISTINCT UserIDs, so we prefer it once loaded.
-   */
+  // Distinct head-count from the overview endpoint. Summing total_researchers
+  // across cards double-counts anyone in two departments, so prefer this.
   readonly headcount = signal<number | null>(null);
 
   readonly sorted = computed(() => {
@@ -96,12 +81,11 @@ export class DepartmentsComponent {
     return [...list].sort((a, b) => (b[key] ?? 0) - (a[key] ?? 0));
   });
 
-  /** Sum across all departments, for the header strip. */
+  // Header-strip totals across all departments.
   readonly totals = computed(() => {
     const list = this.departments();
-    // The DISTINCT institution head-count only makes sense when several
-    // departments are shown (it de-dupes researchers holding two posts).
-    // A HoD sees a single, already-scoped card, so use its own count.
+    // The de-duped head-count only helps when several departments show; a HoD
+    // sees one already-scoped card, so fall back to its own count there.
     const useOverviewCount = list.length > 1 && this.headcount() != null;
     return {
       depts:       list.length,
@@ -120,19 +104,19 @@ export class DepartmentsComponent {
         const n = r?.totals?.researchers;
         if (typeof n === 'number') this.headcount.set(n);
       },
-      error: () => { /* keep the card-sum fallback */ },
+      error: () => { /* fall back to the card sum */ },
     });
   }
 
   refresh() {
-    // Keep the current cards on screen while re-fetching (e.g. after toggling
-    // the Al-Baha filter) so the page never blanks.
+    // Keep the cards up while re-fetching (e.g. after toggling the filter) so
+    // the page never blanks out.
     if (this.departments().length === 0) this.loading.set(true);
     this.api.listDepartments({
       ordering: '-total_papers', albahaOnly: this.albahaOnly(),
     }).subscribe({
       next: (r: any) => {
-        // Response can be either {results: [...]} (paginated) or [...]
+        // Response is either {results: [...]} when paginated or a bare array.
         const items = r?.results ?? r ?? [];
         this.departments.set(items);
         this.loading.set(false);
@@ -146,7 +130,7 @@ export class DepartmentsComponent {
     });
   }
 
-  /** Flip the Al-Baha-only filter and re-fetch (cards + any open dept). */
+  // Flip the filter and re-fetch the cards plus any open department.
   toggleAffiliation() {
     this.albahaOnly.update(v => !v);
     this.refresh();
@@ -190,14 +174,10 @@ export class DepartmentsComponent {
     }[key];
   }
 
-  /**
-   * Academic ranks come in mixed forms — Arabic (from the scrape) and
-   * English camelCase (from the registration dropdown, e.g.
-   * "AssistantProfessor"). Normalise both to one clean English label so the
-   * Departments table reads consistently. Keys are space-stripped +
-   * lower-cased so "أستاذ مساعد" and "AssistantProfessor" both resolve.
-   * Unknown values fall through unchanged rather than showing a dash.
-   */
+  // Ranks arrive both in Arabic (from the scrape) and English camelCase (from
+  // the registration dropdown). Normalise both to one clean English label;
+  // keys are space-stripped + lower-cased so both forms resolve, and unknown
+  // values pass through unchanged rather than showing a dash.
   private static readonly RANK_EN: Record<string, string> = {
     'أستاذ':         'Professor',
     'أستاذمشارك':    'Associate Professor',

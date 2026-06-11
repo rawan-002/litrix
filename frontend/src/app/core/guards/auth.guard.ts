@@ -10,10 +10,8 @@ export const authGuard: CanActivateFn = (route, state) => {
   if (auth.isAuthenticated()) {
     return true;
   }
-  // Unauthenticated visitors land on /welcome (the public landing page)
-  // so they see what the product is before being prompted to sign in.
-  // returnUrl is preserved so the post-login flow can resume the
-  // originally requested route.
+  // Signed-out visitors get /welcome first; returnUrl is kept so login
+  // can send them back to the route they were after.
   return router.createUrlTree(['/welcome'], {
     queryParams: { returnUrl: state.url },
   });
@@ -26,8 +24,7 @@ export const permissionGuard = (...required: string[]): CanActivateFn => {
     const router = inject(Router);
 
     if (!auth.isAuthenticated()) {
-      // Unauthenticated visitors get the public landing page, not the
-      // bare /login form — consistent with authGuard + jwt interceptor.
+      // Same /welcome redirect as authGuard + the jwt interceptor.
       return router.createUrlTree(['/welcome']);
     }
     if (!auth.hasAnyPermission(...required)) {

@@ -1,13 +1,6 @@
-/**
- * Admin Invitations page.
- *
- * Two responsibilities:
- *   1. Create new role-scoped invitations (HoD / Dean / Researcher).
- *   2. List existing invitations with their lifecycle status.
- *
- * The token + invite link is shown right after creation so the admin
- * can copy it manually if email delivery is still being configured.
- */
+// Admin invitations: create role-scoped invites (HoD/Dean/Researcher) and list
+// existing ones with their status. The link is shown right after creation so
+// the admin can copy it by hand while email delivery is still being set up.
 import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -52,7 +45,7 @@ export class InvitationsComponent {
   readonly loading     = signal<boolean>(true);
   readonly creating    = signal<boolean>(false);
 
-  /** Surfaced AFTER successful creation so admin can copy the link. */
+  // Set after a successful create so the admin can copy the link.
   readonly justCreated = signal<{
     token: string; url: string; expires_at: string;
   } | null>(null);

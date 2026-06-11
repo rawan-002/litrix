@@ -1,12 +1,6 @@
-/**
- * Admin Campaigns — Apple-style management page for reporting cycles.
- *
- * Layout philosophy:
- *   • Single-page list + inline detail panel (no separate detail route)
- *   • "+ New Campaign" opens a modal — the rest of the page stays put
- *   • Cards carry their own action buttons (Open / Close / View)
- *   • Status badges colour-coded: draft=ink, active=accent, closed=mute
- */
+// Admin page for reporting cycles: a single-page list with an inline detail
+// panel (no separate route). Creating a campaign opens a modal so the rest of
+// the page stays put, and each card carries its own Open/Close/View actions.
 import { Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -199,10 +193,7 @@ export class CampaignsComponent {
     });
   }
 
-  /**
-   * Open the read-only modal that lists a researcher's papers and
-   * decisions inside a single submission.
-   */
+  // Open the read-only modal listing one submission's papers and decisions.
   showSubmissionDetail(s: SubmissionRow) {
     const campaignId = this.expandedId();
     if (!campaignId) return;
@@ -225,11 +216,8 @@ export class CampaignsComponent {
     this.showDetailFor.set(null);
   }
 
-  /**
-   * Trigger the xlsx download. We read the response as a Blob, build a
-   * temporary object URL, and click a synthetic <a download> — the
-   * standard browser pattern for save-as-file from XHR.
-   */
+  // Download the xlsx: read it as a Blob, make an object URL, and click a
+  // synthetic <a download> — the usual save-as-file-from-XHR dance.
   exportToExcel(c: Campaign) {
     this.busyId.set(c.campaign_id);
     this.api.exportCampaign(c.campaign_id).subscribe({
@@ -237,8 +225,8 @@ export class CampaignsComponent {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        // Filename is set server-side via Content-Disposition; this is
-        // just a fallback if the browser ignores the header.
+        // Server sets the real filename via Content-Disposition; this is a
+        // fallback for browsers that ignore the header.
         a.download = `campaign_${c.campaign_id}.xlsx`;
         document.body.appendChild(a);
         a.click();
@@ -270,13 +258,9 @@ export class CampaignsComponent {
     return this.draft().target_years.includes(year);
   }
 
-  // -- helpers ----------------------------------------------------------
-  /**
-   * Years offered when creating a campaign. Anchored at 2011 (College
-   * of Computing founding year) and slides forward with the current
-   * year. Reversed so the most recent year sits left — admins almost
-   * always pick recent years first.
-   */
+  // Year options for a new campaign, floored at 2011 (College of Computing
+  // founding year) and running to next year. Most-recent-first since admins
+  // usually pick recent years.
   yearOptions(): number[] {
     const cur = new Date().getFullYear();
     const FLOOR = 2011;
@@ -300,10 +284,8 @@ export class CampaignsComponent {
     return d.toISOString().slice(0, 16);
   }
 
-  /**
-   * Pull the most useful message out of any HttpErrorResponse shape.
-   * Backend returns { error, message? } on validation failures.
-   */
+  // Pull the most useful message out of whatever shape the error arrives in
+  // (the backend returns { error, message? } on validation failures).
   private errMsg(e: any): string {
     return e?.error?.error || e?.error?.detail || e?.message
         || 'Something went wrong';

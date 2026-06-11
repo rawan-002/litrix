@@ -10,7 +10,7 @@
     </div>
   } @else if (data(); as d) {
 
-    <!-- Identity strip — short, no full profile chrome -->
+    <!-- Identity strip (no full profile chrome) -->
     <header class="mb-8">
       <div class="text-xs uppercase tracking-widest text-ink-500 font-medium mb-1">
         {{ d.identity.department_name || 'Researcher' }}
@@ -26,9 +26,7 @@
     <!-- 2x2 grid of dashboard cards -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
-      <!-- =========================================================
-           Cell 1 — KPI sub-grid (2x2 of stat cards)
-           ========================================================= -->
+      <!-- Key metrics -->
       <section class="bg-white rounded-2xl border border-ink-100 p-6">
         <h2 class="text-sm font-semibold text-ink-900 mb-4">Key Metrics</h2>
         <div class="grid grid-cols-2 gap-3">
@@ -67,9 +65,7 @@
         </div>
       </section>
 
-      <!-- =========================================================
-           Cell 2 — Citations per Year
-           ========================================================= -->
+      <!-- Citations over Time -->
       <section class="bg-white rounded-2xl border border-ink-100 p-6">
         <div class="flex items-baseline justify-between mb-4">
           <h2 class="text-sm font-semibold text-ink-900">Citations over Time</h2>
@@ -80,9 +76,7 @@
           [height]="220" />
       </section>
 
-      <!-- =========================================================
-           Cell 3 — Publications per Year
-           ========================================================= -->
+      <!-- Publications per Year -->
       <section class="bg-white rounded-2xl border border-ink-100 p-6">
         <div class="flex items-baseline justify-between mb-4">
           <h2 class="text-sm font-semibold text-ink-900">Publications per Year</h2>
@@ -133,9 +127,7 @@
         }
       </section>
 
-      <!-- =========================================================
-           Cell 4 — Quartile Distribution (donut)
-           ========================================================= -->
+      <!-- Quartile distribution donut -->
       <section class="bg-white rounded-2xl border border-ink-100 p-6">
         <div class="flex items-baseline justify-between mb-4">
           <h2 class="text-sm font-semibold text-ink-900">Quartile Distribution</h2>

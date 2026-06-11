@@ -1,10 +1,6 @@
-/**
- * Public Researcher Profile — drill-down view.
- *
- * Reached from the dashboard's researcher list. Apple-style minimal.
- * Shows: bio header, KPI cards, citations chart (2019+), papers list.
- * Click any paper title to open a detail modal.
- */
+// Researcher drill-down reached from the dashboard list: bio header, KPI
+// cards, a citations chart (2019+), and a papers list. Click a title for
+// the detail modal.
 import {
   Component, OnInit, signal, inject, ViewChild,
   ElementRef, AfterViewInit,
@@ -18,8 +14,8 @@ import {
 
 Chart.register(...registerables);
 
-// Where the citations chart begins. Older years are typically near-zero
-// for these researchers and clutter the visual; 2019 is the practical floor.
+// Citations chart floor — pre-2019 years are near-zero here and just
+// clutter the line.
 const CHART_MIN_YEAR = 2019;
 
 @Component({
@@ -28,7 +24,7 @@ const CHART_MIN_YEAR = 2019;
   imports: [CommonModule, RouterLink],
   template: `
     <div class="min-h-screen bg-white">
-      <!-- ===== Back link ===== -->
+      <!-- Back link -->
       <div class="max-w-5xl mx-auto px-6 pt-8">
         <a routerLink="/public/dashboard"
            class="inline-flex items-center text-sm text-gray-500 hover:text-indigo-600 transition-colors">
@@ -37,9 +33,9 @@ const CHART_MIN_YEAR = 2019;
       </div>
 
       <ng-container *ngIf="profile() as p">
-        <!-- ===== Bio Header ===== -->
+        <!-- Bio header -->
         <header class="max-w-5xl mx-auto px-6 py-12 border-b border-gray-100 relative">
-          <!-- Litrix Logo (top-right corner) -->
+          <!-- Logo, top-right -->
           <img src="litrix-logo.png"
                alt="Litrix"
                class="absolute top-12 right-6 h-12 md:h-14 w-auto select-none"
@@ -84,7 +80,7 @@ const CHART_MIN_YEAR = 2019;
           </div>
         </header>
 
-        <!-- ===== KPI Cards ===== -->
+        <!-- KPI cards -->
         <section class="max-w-5xl mx-auto px-6 py-12">
           <div class="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
             <div class="rounded-2xl bg-gray-50 p-6">
@@ -108,7 +104,7 @@ const CHART_MIN_YEAR = 2019;
           </div>
         </section>
 
-        <!-- ===== Citations Chart (compact, 2019+) ===== -->
+        <!-- Citations chart (2019+) -->
         <section *ngIf="hasChartData()" class="max-w-5xl mx-auto px-6 py-4">
           <h2 class="text-xl font-semibold text-gray-900 mb-4">
             Citations by Year
@@ -119,7 +115,7 @@ const CHART_MIN_YEAR = 2019;
           </div>
         </section>
 
-        <!-- ===== Papers List ===== -->
+        <!-- Papers list -->
         <section class="max-w-5xl mx-auto px-6 py-12">
           <h2 class="text-2xl font-semibold text-gray-900 mb-6">
             Publications
@@ -176,24 +172,21 @@ const CHART_MIN_YEAR = 2019;
         </a>
       </div>
 
-      <!-- ===== Footer ===== -->
+      <!-- Footer -->
       <footer class="border-t border-gray-100 mt-16">
         <div class="max-w-7xl mx-auto px-6 py-8 text-center text-sm text-gray-400">
           Litrix Research Analytics · College of Computing & IT · Al-Baha University
         </div>
       </footer>
 
-      <!-- ===== Paper Detail Modal ===== -->
+      <!-- Paper detail modal -->
       <div *ngIf="selectedPaper() as detail"
            class="fixed inset-0 z-50 flex items-center justify-center px-4 py-8"
            (click)="closePaperDetail()">
-        <!-- Backdrop -->
         <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm"></div>
 
-        <!-- Dialog -->
         <div class="relative bg-white rounded-3xl shadow-2xl max-w-3xl w-full max-h-[85vh] overflow-y-auto"
              (click)="$event.stopPropagation()">
-          <!-- Close button -->
           <button (click)="closePaperDetail()"
                   class="absolute top-4 right-4 w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors"
                   aria-label="Close">
@@ -244,13 +237,13 @@ const CHART_MIN_YEAR = 2019;
               </div>
             </div>
 
-            <!-- Abstract — only when it's actual prose, not a Scopus URL placeholder -->
+            <!-- Real prose only — skip the Scopus-URL placeholder -->
             <div *ngIf="hasRealAbstract(detail)" class="mt-8">
               <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Abstract</h3>
               <p class="text-gray-700 leading-relaxed">{{ detail.abstract }}</p>
             </div>
 
-            <!-- Fallback: Scopus URL only (conference papers without abstracts) -->
+            <!-- Conference papers with no abstract — link out to Scopus -->
             <div *ngIf="!hasRealAbstract(detail) && abstractIsUrl(detail.abstract)" class="mt-8">
               <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Abstract</h3>
               <p class="text-gray-500 text-sm italic mb-2">
@@ -358,8 +351,8 @@ export class PublicProfileComponent implements OnInit, AfterViewInit {
     this.api.paperDetail(paper.paper_id).subscribe({
       next: (detail) => this.selectedPaper.set(detail),
       error: () => {
-        // Fallback to whatever we already have in the list — better than
-        // showing an error for a non-critical action.
+        // Fall back to the list data we already have rather than erroring
+        // on a non-critical click.
         this.selectedPaper.set({
           paper_id: paper.paper_id,
           title: paper.title,
@@ -382,12 +375,9 @@ export class PublicProfileComponent implements OnInit, AfterViewInit {
     this.selectedPaper.set(null);
   }
 
-  /**
-   * Returns true only when the abstract field contains real prose.
-   * Scopus stuffs a URL into the Abstract column for some conference papers
-   * that don't have a published abstract — we shouldn't render that as
-   * "abstract text". Heuristics: must be >= 80 chars AND not start with http.
-   */
+  // True only when the abstract is real prose. Scopus sometimes drops a
+  // bare URL into the abstract column for conference papers, so we treat
+  // anything under 80 chars or URL-shaped as "no abstract".
   hasRealAbstract(detail: PaperDetailResponse): boolean {
     const a = detail.abstract;
     if (!a) return false;
@@ -400,7 +390,7 @@ export class PublicProfileComponent implements OnInit, AfterViewInit {
   abstractIsUrl(a: string | null): boolean {
     if (!a) return false;
     const t = a.trim();
-    // Pure URL = starts with http(s):// and no whitespace inside
+    // A bare URL: http(s):// with no internal whitespace.
     return /^https?:\/\/\S+$/i.test(t);
   }
 
@@ -417,7 +407,6 @@ export class PublicProfileComponent implements OnInit, AfterViewInit {
   private renderCitationsChart(): void {
     const p = this.profile();
     if (!p || !this.citationsCanvas) return;
-    // Filter from 2019 — the practical floor for these researchers.
     const data = p.citations_by_year_chart.filter((d) => d.year >= CHART_MIN_YEAR);
     if (data.length === 0) return;
 

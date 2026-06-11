@@ -1,17 +1,6 @@
-/**
- * Researcher Profile Page.
- *
- * Architecture:
- *   - Reads :userId from the route
- *   - Fetches GET /api/researchers/:id/profile/  (one round-trip)
- *   - Renders 4 sections: identity header, KPI cards, citations chart,
- *     papers list (grouped by year)
- *
- * Why no chart library? An inline SVG bar chart is enough for this
- * simple use-case (10–15 years max), keeps bundle small, and matches
- * the minimalist Apple aesthetic. We can swap to Chart.js later if we
- * need tooltips/legends/etc.
- */
+// Researcher profile page: identity header, KPI cards, citations chart, and
+// the full papers list with sort/filter. Reads the route id and fetches the
+// profile in one round-trip.
 import { Component, OnInit, Input, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -53,9 +42,8 @@ export class ResearcherProfileComponent implements OnInit {
   // Quartile filter — multi-select. Empty Set = no filter (show all).
   readonly activeQuartiles = signal<Set<string>>(new Set());
 
-  // Venue tab — split the papers list into Journals vs Conferences (same
-  // rule as the dashboard/export: a venue starting with "conf" is a
-  // conference; everything else — journals, books, unknown — is a journal).
+  // Journals vs Conferences. Same rule as the dashboard/export: a venue
+  // starting with "conf" is a conference, everything else is a journal.
   readonly activeVenue = signal<'all' | 'journal' | 'conference'>('all');
   readonly venueTabs = [
     { key: 'all'        as const, label: 'All' },
@@ -83,10 +71,9 @@ export class ResearcherProfileComponent implements OnInit {
     this.visibleCount.set(this.LOAD_BATCH);
   }
 
-  // Affiliation filter: 'albaha' shows ONLY papers CONFIRMED Al-Baha
-  // (affiliation_verified === true). Papers confirmed foreign OR still
-  // unverified (e.g. no DOI to check) are hidden — so nothing unconfirmed
-  // is ever presented as Al-Baha output. 'all' shows the full archive.
+  // 'albaha' keeps only papers confirmed Al-Baha (affiliation_verified === true);
+  // confirmed-foreign and still-unverified papers are both hidden, so nothing
+  // unconfirmed is ever shown as Al-Baha output. 'all' is the full archive.
   readonly affiliationFilter = signal<'albaha' | 'all'>('albaha');
 
   setAffiliation(v: 'albaha' | 'all') {
@@ -99,11 +86,7 @@ export class ResearcherProfileComponent implements OnInit {
     (this.data()?.papers ?? []).filter(p => p.affiliation_verified !== true).length
   );
 
-  /**
-   * Chart window floor — matches the admin dashboard CHART_YEAR_FLOOR.
-   * Anything before this is clipped from the citations chart for visual
-   * parity across the app.
-   */
+  // Clip the citations chart before this year, matching the admin dashboard.
   private readonly CHART_YEAR_FLOOR = 2019;
 
   setSort(field: 'year' | 'citations') {
@@ -126,17 +109,14 @@ export class ResearcherProfileComponent implements OnInit {
     this.visibleCount.set(this.LOAD_BATCH);
   }
 
-  // Filter papers by selected quartiles, then sort by chosen field+direction.
+  // Apply the affiliation/venue/quartile filters, then sort.
   readonly sortedPapers = computed(() => {
     let all = [...(this.data()?.papers ?? [])];
 
-    // Affiliation filter — "Al Baha only" keeps ONLY confirmed-Al-Baha
-    // papers; confirmed-foreign AND unverified (e.g. no-DOI) are hidden.
     if (this.affiliationFilter() === 'albaha') {
       all = all.filter(p => p.affiliation_verified === true);
     }
 
-    // Venue tab filter (Journals vs Conferences)
     const venue = this.activeVenue();
     if (venue === 'journal') {
       all = all.filter(p => !this.isConference(p));
@@ -144,7 +124,7 @@ export class ResearcherProfileComponent implements OnInit {
       all = all.filter(p => this.isConference(p));
     }
 
-    // Quartile filter — empty Set means "show all" (no filter)
+    // Empty Set = no quartile filter.
     const quartiles = this.activeQuartiles();
     if (quartiles.size > 0) {
       all = all.filter(p => p.quartile && quartiles.has(p.quartile));
@@ -189,14 +169,12 @@ export class ResearcherProfileComponent implements OnInit {
       .sort((a, b) => a.year.localeCompare(b.year));
   }
 
-  // Chart geometry: convert citations_by_year into bar coordinates.
-  // Clipped to CHART_YEAR_FLOOR for parity with the admin dashboard.
+  // Bar-chart geometry from citations_by_year, clipped to CHART_YEAR_FLOOR.
   readonly chart = computed(() => {
     const cby = (this.data()?.citations_by_year ?? [])
       .filter(c => c.year >= this.CHART_YEAR_FLOOR);
     if (!cby.length) return null;
     const max = Math.max(...cby.map(c => c.citations), 1);
-    // Compact chart — about 1/3 the visual weight of the previous size
     const W = 500, H = 110, padding = { top: 8, right: 8, bottom: 22, left: 30 };
     const innerW = W - padding.left - padding.right;
     const innerH = H - padding.top - padding.bottom;
@@ -223,12 +201,8 @@ export class ResearcherProfileComponent implements OnInit {
     };
   });
 
-  /**
-   * Public Litrix-ID (Lit-NNNNNN) of the researcher to display.
-   * Falls back to the :litrixId route param when not set explicitly.
-   * The backend resolves Lit-NNNNNN → UserID at the boundary, so this
-   * is the only identifier the UI ever has to think about.
-   */
+  /** Litrix-ID to display when this is hosted inside another page; otherwise
+   *  falls back to the :litrixId route param. */
   @Input() overrideLitrixId?: string | null;
 
   ngOnInit() {
@@ -252,9 +226,8 @@ export class ResearcherProfileComponent implements OnInit {
     this.error.set(null);
     this.api.getResearcherProfile(id).subscribe({
       next: payload => {
-        // Normalize: backend sometimes returns CitationsByYear as a JSON
-        // string (when going through certain views) rather than an
-        // object. Parse defensively so the keyvalue pipe never crashes.
+        // Some views return CitationsByYear as a JSON string rather than an
+        // object — parse it defensively so the keyvalue pipe never crashes.
         if (payload?.papers) {
           payload.papers = payload.papers.map(p => {
             let cby: any = p.citations_by_year;
@@ -268,11 +241,9 @@ export class ResearcherProfileComponent implements OnInit {
         this.data.set(payload);
         this.loading.set(false);
 
-        // URL canonicalization. The backend's case/padding-insensitive
-        // lookup means the user might land here via /profile/LIT-0001
-        // or /profile/lit-1, but the truth in the DB is Lit-000001.
-        // Replace the URL silently so the address bar matches the
-        // displayed identifier — no history pollution, no flash.
+        // The backend lookup is case/padding-insensitive, so the user may
+        // arrive via /profile/LIT-0001 or /profile/lit-1. Silently rewrite
+        // the URL to the canonical Lit-000001 (replaceUrl, no history entry).
         this.canonicalizeUrl(payload?.identity?.litrix_id);
       },
       error: err => {

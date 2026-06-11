@@ -1,10 +1,6 @@
-/**
- * Public API Service — wraps the /api/public/* endpoints.
- *
- * These endpoints require no authentication; they're served unauthenticated
- * by analytics/public_views.py in the Django backend. This service is the
- * single point that any public-dashboard component talks to.
- */
+// Wraps the no-auth /api/public/* endpoints (analytics/public_views.py).
+// The single channel every public-dashboard component talks through —
+// kept separate from the authenticated LitrixApiService on purpose.
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
@@ -76,11 +72,11 @@ export interface TrendPoint {
   citations: number;
 }
 
-// One KPI's payload shape — three of these come back per /kpis/ call.
+// One KPI's payload — three come back per /kpis/ call.
 export interface KpiValue {
   value: number;
   label: string;
-  // Each KPI carries extra context numbers (depending on which one it is)
+  // Extra context numbers, which ones present depends on the KPI.
   published_count?: number;
   total_publications?: number;
   total_faculty?: number;
@@ -179,10 +175,8 @@ export class PublicApiService {
     );
   }
 
-  /**
-   * Builds the export URL with optional filters.
-   * Empty arrays send no filter so the backend's default kicks in.
-   */
+  // Builds the export URL. Empty arrays send no filter so the backend
+  // default takes over.
   exportExcelUrl(years?: number[], sheets?: string[]): string {
     const qs = new URLSearchParams();
     if (years && years.length)   qs.set('years', years.join(','));

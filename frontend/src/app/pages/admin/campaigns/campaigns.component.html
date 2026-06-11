@@ -1,5 +1,5 @@
 <div class="max-w-6xl mx-auto">
-  <!-- ============== Header ============== -->
+  <!-- Header -->
   <div class="flex items-center justify-between mb-8">
     <div>
       <h1 class="text-2xl font-semibold text-ink-900 tracking-tight">Research Reports</h1>
@@ -14,7 +14,7 @@
     </button>
   </div>
 
-  <!-- ============== Filter pills ============== -->
+  <!-- Filter pills -->
   <div class="flex gap-2 mb-6">
     @for (f of ['all', 'draft', 'active', 'closed']; track f) {
       <button (click)="statusFilter.set($any(f))"
@@ -30,7 +30,7 @@
     }
   </div>
 
-  <!-- ============== Errors ============== -->
+  <!-- Errors -->
   @if (error()) {
     <div class="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200
                 text-sm text-red-700">
@@ -38,7 +38,7 @@
     </div>
   }
 
-  <!-- ============== List ============== -->
+  <!-- List -->
   @if (loading()) {
     <div class="text-center text-ink-400 py-12 text-sm">Loading...</div>
   } @else if (filtered().length === 0) {
@@ -101,10 +101,8 @@
                     Close
                   </button>
                 }
-                <!-- Export available for any campaign that has data
-                     (drafts have none, but the endpoint still works
-                     and returns an empty workbook — we hide the button
-                     instead to avoid empty downloads). -->
+                <!-- Hide Export when there's no data — the endpoint works on
+                     drafts but would just download an empty workbook. -->
                 @if (c.status !== 'draft' && c.submissions_total > 0) {
                   <button (click)="exportToExcel(c)"
                           [disabled]="busyId() === c.campaign_id"
@@ -216,7 +214,7 @@
 </div>
 
 
-<!-- ============== Create Modal ============== -->
+<!-- Create modal -->
 @if (showCreate()) {
   <div class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center px-4"
        (click)="showCreate.set(false)">
@@ -331,7 +329,7 @@
 }
 
 
-<!-- ============== Submission Detail Modal ============== -->
+<!-- Submission detail modal -->
 @if (showDetailFor(); as d) {
   <div class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center px-4 py-8"
        (click)="closeDetail()">

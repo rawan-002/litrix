@@ -14,8 +14,8 @@ interface Researcher {
   Orcid_ID: string | null;
   LastSyncedAt: string | null;
   papers: number;
-  // Backend-computed: this researcher was synced within SYNC_COOLDOWN_DAYS,
-  // so the regular Sync button is disabled and only Force is offered.
+  // Backend flag: synced within SYNC_COOLDOWN_DAYS, so we disable the regular
+  // Sync button and only offer Force.
   is_in_cooldown: boolean;
   cooldown_until: string | null;
 }
@@ -54,18 +54,18 @@ export class SyncComponent implements OnDestroy {
   readonly triggering = signal<number | null>(null);
   readonly cooldownDays = signal<number>(7);
 
-  // ---- Citation refresh (numbers-only — never adds/edits papers) ----
+  // Citation refresh — numbers only, never adds or edits papers.
   readonly citScope = signal<'missing' | 'all'>('missing');
   readonly citBudget = signal(0);
   readonly citTriggering = signal(false);
-  /** A citations job already queued/running → button disabled. */
+  // True while a citations job is queued/running, which disables the button.
   readonly citRunning = computed(() =>
     this.jobs().some(j =>
       j.Source === 'citations' &&
       (j.Status === 'queued' || j.Status === 'running')),
   );
 
-  // ---- Incremental scrape (NEW papers only — never re-downloads) ----
+  // Incremental scrape — new papers only, never re-downloads existing ones.
   readonly newBudget = signal(100);
   readonly newTriggering = signal(false);
   readonly newRunning = computed(() =>
@@ -116,16 +116,9 @@ export class SyncComponent implements OnDestroy {
     });
   }
 
-  /**
-   * Trigger a sync. The backend enforces a 7-day cooldown for already-
-   * synced researchers; we surface that explicitly here:
-   *
-   *   • force=false (default) → backend may return 409 if in cooldown.
-   *     We catch it and surface a confirm() to the user before retrying.
-   *   • force=true → bypasses the gate (admin override). Used both for
-   *     direct retries and from the dedicated "Force" buttons in the
-   *     table, which already pre-confirm with the operator.
-   */
+  // Trigger a sync. The backend enforces a cooldown: without force it may
+  // return 409, which we catch and re-offer via confirm(); force=true is the
+  // admin override used by the table's pre-confirmed Force buttons.
   trigger(userId: number, source: 'scholar' | 'orcid', force = false) {
     this.triggering.set(userId);
     this.http.post(`${this.API}/trigger/`, {
@@ -134,14 +127,14 @@ export class SyncComponent implements OnDestroy {
       next: () => {
         this.triggering.set(null);
         this.loadJobs();
-        // Refresh the row state so the new LastSyncedAt reflects the run.
+        // Reload the row so LastSyncedAt reflects this run.
         setTimeout(() => this.load(), 1500);
       },
       error: err => {
         this.triggering.set(null);
         if (err.status === 409 && err.error?.error === 'in_cooldown' && !force) {
-          // Defensive — the table already disables the Sync button when
-          // in cooldown, but a stale row could still hit this path.
+          // The table already disables Sync during cooldown, but a stale row
+          // could still land here.
           const ok = confirm(
             `${err.error.message}\n\nProceed with a forced re-sync?`,
           );
@@ -161,12 +154,9 @@ export class SyncComponent implements OnDestroy {
     if (ok) this.trigger(userId, source, true);
   }
 
-  /**
-   * Trigger the institution-wide citation refresh.
-   * Citation NUMBERS only: the backend script updates CitationsByYear +
-   * the displayed total on existing papers — it never inserts papers,
-   * never edits paper metadata, never touches researcher links.
-   */
+  // Institution-wide citation refresh. Numbers only — the backend updates
+  // CitationsByYear and the displayed totals on existing papers; it never
+  // inserts papers, edits metadata, or touches researcher links.
   triggerCitations() {
     const budget = this.citBudget() || 0;
     if (budget > 0) {
@@ -193,13 +183,10 @@ export class SyncComponent implements OnDestroy {
     });
   }
 
-  /**
-   * Trigger the incremental NEW-papers scrape across all researchers.
-   * Per researcher: fetch Scholar newest-first and stop at the first paper
-   * older than their latest stored PubYear — existing papers are never
-   * re-downloaded or modified. Costs ~1 SerpAPI credit per researcher
-   * (more only when they actually have new papers).
-   */
+  // Incremental new-papers scrape across all researchers. Per researcher it
+  // fetches Scholar newest-first and stops at the first paper older than their
+  // latest stored PubYear, so existing papers aren't touched. Roughly 1 SerpAPI
+  // credit each, more only when they actually have new papers.
   triggerNewPapers() {
     const budget = this.newBudget() || 100;
     const ok = confirm(
@@ -231,11 +218,8 @@ export class SyncComponent implements OnDestroy {
     return Math.ceil(ms / (1000 * 60 * 60 * 24));
   }
 
-  /**
-   * Pick the best human-readable label for a sync job's researcher.
-   * Falls back through the name chain so we don't surface "User #N"
-   * unless we genuinely know nothing else about the user.
-   */
+  // Best human-readable label for a job's researcher, falling back through the
+  // name chain so "User #N" only shows when we know nothing else.
   jobLabel(j: SyncJob): string {
     if (j.FullName_Ar) return j.FullName_Ar;
     const en = [j.FirstName, j.LastName].filter(Boolean).join(' ').trim();
@@ -247,10 +231,7 @@ export class SyncComponent implements OnDestroy {
     return `User #${j.UserID}`;
   }
 
-  /**
-   * Direction hint for the label: Arabic names render right-to-left,
-   * everything else left-to-right. Avoids the awkward mixed-bidi look.
-   */
+  // Arabic names render RTL, everything else LTR — avoids the mixed-bidi mess.
   jobLabelDir(j: SyncJob): 'rtl' | 'ltr' {
     return j.FullName_Ar ? 'rtl' : 'ltr';
   }

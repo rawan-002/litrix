@@ -28,8 +28,8 @@ export const jwtInterceptor: HttpInterceptorFn = (req, next) => {
         return auth.refreshToken().pipe(
           switchMap(res => {
             if (!res.access) {
-              // Token completely dead — send to the public landing
-              // page so users don't get dropped onto a bare login form.
+              // Refresh failed for good — send to /welcome instead of
+              // dropping the user onto a bare login form.
               router.navigate(['/welcome']);
               return throwError(() => err);
             }
