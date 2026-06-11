@@ -68,39 +68,24 @@
             </div>
           </div>
 
-          <!-- KPIs + the single Al-Baha scope toggle that drives them -->
-          <div class="mt-8 flex items-end justify-between gap-4 flex-wrap">
-            <div class="flex flex-wrap gap-x-10 gap-y-4">
-              <div>
-                <div class="text-2xl sm:text-3xl font-bold text-ink-900">{{ fmt(kpiPublications()) }}</div>
-                <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-0.5">Publications</div>
-              </div>
-              <div>
-                <div class="text-2xl sm:text-3xl font-bold text-ink-900">{{ fmt(kpiCitations()) }}</div>
-                <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-0.5">Times Cited</div>
-              </div>
-              <div>
-                <div class="text-2xl sm:text-3xl font-bold text-ink-900">{{ hIndex() }}</div>
-                <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-0.5">H-Index</div>
-              </div>
-              <div>
-                <div class="text-2xl sm:text-3xl font-bold text-accent">{{ fmt(kpiQ1()) }}</div>
-                <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-0.5">Q1 Papers</div>
-              </div>
+          <!-- KPIs (follow the global Al-Baha toggle in the top bar) -->
+          <div class="mt-8 flex flex-wrap gap-x-10 gap-y-4">
+            <div>
+              <div class="text-2xl sm:text-3xl font-bold text-ink-900">{{ fmt(kpiPublications()) }}</div>
+              <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-0.5">Publications</div>
             </div>
-
-            <button (click)="toggleAffiliation()"
-                    [class.bg-accent]="affiliationFilter() === 'albaha'"
-                    [class.text-white]="affiliationFilter() === 'albaha'"
-                    [class.bg-ink-100]="affiliationFilter() !== 'albaha'"
-                    [class.text-ink-600]="affiliationFilter() !== 'albaha'"
-                    class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full
-                           text-xs font-medium transition-colors shrink-0">
-              <span class="w-1.5 h-1.5 rounded-full"
-                    [class.bg-white]="affiliationFilter() === 'albaha'"
-                    [class.bg-ink-400]="affiliationFilter() !== 'albaha'"></span>
-              Al-Baha only
-            </button>
+            <div>
+              <div class="text-2xl sm:text-3xl font-bold text-ink-900">{{ fmt(kpiCitations()) }}</div>
+              <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-0.5">Times Cited</div>
+            </div>
+            <div>
+              <div class="text-2xl sm:text-3xl font-bold text-ink-900">{{ hIndex() }}</div>
+              <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-0.5">H-Index</div>
+            </div>
+            <div>
+              <div class="text-2xl sm:text-3xl font-bold text-accent">{{ fmt(kpiQ1()) }}</div>
+              <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-0.5">Q1 Papers</div>
+            </div>
           </div>
         </div>
       </header>

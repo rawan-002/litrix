@@ -134,36 +134,7 @@
         </div>
 
 
-        <!-- Al-Baha-only excludes papers the verifier confirmed as non-Al-Baha.
-             Off by default; re-queries on toggle. -->
-        <button (click)="toggleAffiliation()"
-                [title]="albahaOnly()
-                  ? 'Showing Al-Baha-affiliated papers only — click to show all'
-                  : 'Showing all papers — click to show Al-Baha-affiliated only'"
-                class="px-4 py-2 rounded-full text-sm font-medium outline-none
-                       cursor-pointer flex items-center gap-2 border transition-colors"
-                [class.bg-ink-700]="albahaOnly()"
-                [class.text-white]="albahaOnly()"
-                [class.border-ink-700]="albahaOnly()"
-                [class.bg-white]="!albahaOnly()"
-                [class.text-ink-700]="!albahaOnly()"
-                [class.border-ink-200]="!albahaOnly()"
-                [class.hover:border-ink-300]="!albahaOnly()">
-          <span class="w-4 h-4 rounded border flex items-center justify-center"
-                [class.bg-white]="albahaOnly()"
-                [class.border-white]="albahaOnly()"
-                [class.border-ink-300]="!albahaOnly()">
-            @if (albahaOnly()) {
-              <svg class="w-3 h-3 text-ink-700" fill="none" stroke="currentColor"
-                   viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round"
-                      stroke-width="3" d="M5 13l4 4L19 7" />
-              </svg>
-            }
-          </span>
-          <span>Al-Baha only</span>
-        </button>
-
+        <!-- Al-Baha filter now lives as one global toggle in the top bar. -->
         <button (click)="openExportModal()"
                 class="bg-ink-700 hover:bg-ink-900 text-white text-sm font-medium px-5 py-2.5 rounded-full transition-colors flex items-center gap-2 shadow-card">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

@@ -102,6 +102,23 @@
         <app-icon name="menu"></app-icon>
       </button>
       <div class="flex items-center gap-3 ml-auto">
+        <!-- Platform-wide Al-Baha output filter. Drives every dashboard. -->
+        <button (click)="affiliation.toggle()"
+                [title]="affiliation.albahaOnly()
+                  ? 'Showing Al-Baha output only — click for all research'
+                  : 'Showing all research — click for Al-Baha only'"
+                [class.bg-accent]="affiliation.albahaOnly()"
+                [class.text-white]="affiliation.albahaOnly()"
+                [class.bg-ink-100]="!affiliation.albahaOnly()"
+                [class.text-ink-600]="!affiliation.albahaOnly()"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full
+                       text-xs font-medium transition-colors">
+          <span class="w-1.5 h-1.5 rounded-full"
+                [class.bg-white]="affiliation.albahaOnly()"
+                [class.bg-ink-400]="!affiliation.albahaOnly()"></span>
+          Al-Baha only
+        </button>
+
         <a routerLink="/notifications"
            class="relative w-9 h-9 rounded-full hover:bg-ink-100 flex items-center justify-center transition">
           <app-icon name="bell" class="text-ink-500"></app-icon>

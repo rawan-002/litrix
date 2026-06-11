@@ -4,13 +4,15 @@
 // an id = focus the whole page on that one dept. The 2x2 chart grid derives
 // its series from data.departments[*].by_year, so no new endpoint.
 import {
-  Component, OnInit, inject, signal, computed, HostListener, ElementRef,
+  Component, OnInit, inject, signal, computed, effect, untracked,
+  HostListener, ElementRef,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { LitrixApiService } from '../../services/litrix-api.service';
 import { AuthService } from '../../core/services/auth.service';
+import { AffiliationService } from '../../core/services/affiliation.service';
 import {
   OverviewPayload, YearlyBreakdownPayload, PaperDetail,
 } from '../../models/litrix.models';
@@ -39,6 +41,17 @@ export class OverviewDashboardComponent implements OnInit {
   private readonly api = inject(LitrixApiService);
   /** Used to hide HoD-specific sections from the dashboard. */
   protected readonly auth = inject(AuthService);
+  private readonly affiliation = inject(AffiliationService);
+
+  constructor() {
+    // Re-pull the overview whenever the platform-wide Al-Baha switch flips.
+    // untracked() keeps the effect from also depending on the year/dept
+    // signals read inside loadOverview — those drive their own reloads.
+    effect(() => {
+      this.affiliation.albahaOnly();
+      untracked(() => this.loadOverview());
+    });
+  }
 
   /** A HoD (dept-scoped, no view_all_researchers): hide the
    *  multi-department panels that don't apply to their view. */
@@ -79,10 +92,10 @@ export class OverviewDashboardComponent implements OnInit {
   /** Whether the year-picker popover is open. */
   readonly yearMenuOpen = signal<boolean>(false);
 
-  /** false = all papers (default). true = Al-Baha only, dropping papers the
-   *  verifier confirmed as non-Al-Baha (AffiliationVerified = FALSE).
-   *  Re-queries the backend on toggle so every KPI/chart reflects it. */
-  readonly albahaOnly = signal<boolean>(false);
+  /** Aliases the platform-wide switch (driven by the header toggle), so the
+   *  existing this.albahaOnly() reads keep working and the constructor effect
+   *  re-queries every KPI/chart when it flips. */
+  readonly albahaOnly = this.affiliation.albahaOnly;
 
   // Separate hover signal per chart so they don't fight over one tooltip slot.
   readonly hoveredPub      = signal<{ year: number; x: number; y: number; value: number } | null>(null);
@@ -316,7 +329,7 @@ export class OverviewDashboardComponent implements OnInit {
     // Pre-tick every year for the export modal.
     this.selectAllExportYears();
 
-    this.loadOverview();
+    // loadOverview() is kicked off by the affiliation effect in the constructor.
     this.loadYear(this.selectedYear());
   }
 
@@ -364,12 +377,6 @@ export class OverviewDashboardComponent implements OnInit {
   clearYears() {
     this.selectedYears.set(new Set());
     this.closeYearMenu();
-    this.loadOverview();
-  }
-
-  /** Flip the Al-Baha-only affiliation filter and re-query. */
-  toggleAffiliation() {
-    this.albahaOnly.update(v => !v);
     this.loadOverview();
   }
 

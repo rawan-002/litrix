@@ -46,31 +46,7 @@
       }
     </div>
     <div class="flex items-center gap-2">
-      <!-- Al-Baha-only filter, same as the dashboard -->
-      <button (click)="toggleAffiliation()"
-              [title]="albahaOnly()
-                ? 'Showing Al-Baha-affiliated papers only — click to show all'
-                : 'Showing all papers — click to show Al-Baha-affiliated only'"
-              class="px-3 py-1.5 rounded-full text-xs font-medium border transition flex items-center gap-1.5"
-              [class.bg-ink-900]="albahaOnly()"
-              [class.text-white]="albahaOnly()"
-              [class.border-ink-900]="albahaOnly()"
-              [class.bg-white]="!albahaOnly()"
-              [class.text-ink-600]="!albahaOnly()"
-              [class.border-ink-200]="!albahaOnly()">
-        <span class="w-3.5 h-3.5 rounded border flex items-center justify-center"
-              [class.bg-white]="albahaOnly()"
-              [class.border-white]="albahaOnly()"
-              [class.border-ink-300]="!albahaOnly()">
-          @if (albahaOnly()) {
-            <svg class="w-2.5 h-2.5 text-ink-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
-            </svg>
-          }
-        </span>
-        Al-Baha only
-      </button>
-
+      <!-- Al-Baha filter is now the single global toggle in the top bar. -->
       <input type="text"
              placeholder="Search department..."
              [value]="search()"

@@ -1,10 +1,13 @@
 // Departments page. Cards expand inline into a researcher list instead of
 // navigating to a detail route — deans compare departments at a glance and
 // inline expand keeps the context while jumping between cards.
-import { Component, computed, inject, signal } from '@angular/core';
+import {
+  Component, computed, inject, signal, effect, untracked,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { LitrixApiService } from '../../services/litrix-api.service';
+import { AffiliationService } from '../../core/services/affiliation.service';
 
 
 interface DeptCard {
@@ -50,6 +53,7 @@ type SortKey = 'total_papers' | 'total_citations' | 'avg_h_index' | 'total_resea
 })
 export class DepartmentsComponent {
   private api = inject(LitrixApiService);
+  private affiliation = inject(AffiliationService);
 
   readonly departments = signal<DeptCard[]>([]);
   readonly loading     = signal(true);
@@ -58,8 +62,9 @@ export class DepartmentsComponent {
   readonly sortBy = signal<SortKey>('total_papers');
   readonly search = signal('');
 
-  // Al-Baha-only filter — same toggle as the overview dashboard.
-  readonly albahaOnly = signal(false);
+  // Aliases the platform-wide switch (header toggle); the constructor effect
+  // re-fetches the cards when it flips.
+  readonly albahaOnly = this.affiliation.albahaOnly;
 
   readonly expandedId = signal<number | null>(null);
   readonly researchers = signal<ResearcherRow[]>([]);
@@ -98,7 +103,12 @@ export class DepartmentsComponent {
   });
 
   constructor() {
-    this.refresh();
+    // The header's Al-Baha toggle re-fetches the cards (and collapses any open
+    // department, whose numbers change with the filter). Runs once on init too.
+    effect(() => {
+      this.affiliation.albahaOnly();
+      untracked(() => { this.expandedId.set(null); this.refresh(); });
+    });
     this.api.getOverview().subscribe({
       next: (r: any) => {
         const n = r?.totals?.researchers;
@@ -128,17 +138,6 @@ export class DepartmentsComponent {
         this.loading.set(false);
       },
     });
-  }
-
-  // Flip the filter and re-fetch the cards plus any open department.
-  toggleAffiliation() {
-    this.albahaOnly.update(v => !v);
-    this.refresh();
-    const open = this.expandedId();
-    if (open != null) {
-      const d = this.departments().find(x => x.department_id === open);
-      if (d) { this.expandedId.set(null); this.toggleExpand(d); }
-    }
   }
 
   toggleExpand(d: DeptCard) {

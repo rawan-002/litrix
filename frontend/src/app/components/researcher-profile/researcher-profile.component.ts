@@ -5,6 +5,7 @@ import { Component, OnInit, Input, inject, signal, computed } from '@angular/cor
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { LitrixApiService } from '../../services/litrix-api.service';
+import { AffiliationService } from '../../core/services/affiliation.service';
 import {
   ResearcherProfilePayload, ProfilePaper,
 } from '../../models/litrix.models';
@@ -23,6 +24,7 @@ import { CitationsChartComponent } from
 })
 export class ResearcherProfileComponent implements OnInit {
   private readonly api = inject(LitrixApiService);
+  private readonly affiliation = inject(AffiliationService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
@@ -73,23 +75,15 @@ export class ResearcherProfileComponent implements OnInit {
     this.visibleCount.set(this.LOAD_BATCH);
   }
 
-  // One Al-Baha toggle drives BOTH the headline KPIs and the papers list.
-  // 'albaha' keeps only papers confirmed Al-Baha (affiliation_verified === true);
-  // confirmed-foreign and still-unverified papers are both hidden. 'all' is the
-  // full archive (default — show the whole record, let the user narrow).
-  readonly affiliationFilter = signal<'albaha' | 'all'>('all');
+  // Mirrors the platform-wide Al-Baha switch (the header toggle). 'albaha'
+  // keeps only papers confirmed Al-Baha (affiliation_verified === true);
+  // confirmed-foreign and still-unverified papers are both hidden. Drives BOTH
+  // the headline KPIs and the papers list, so they always agree.
+  readonly affiliationFilter = computed<'albaha' | 'all'>(() =>
+    this.affiliation.albahaOnly() ? 'albaha' : 'all'
+  );
 
-  setAffiliation(v: 'albaha' | 'all') {
-    this.affiliationFilter.set(v);
-    this.visibleCount.set(this.LOAD_BATCH);
-  }
-
-  toggleAffiliation() {
-    this.setAffiliation(this.affiliationFilter() === 'albaha' ? 'all' : 'albaha');
-  }
-
-  // The papers the KPIs are computed over — same Al-Baha filter as the list, so
-  // the headline numbers and the list below always agree.
+  // The papers the KPIs are computed over — same Al-Baha filter as the list.
   readonly statsPapers = computed(() => {
     const all = this.data()?.papers ?? [];
     return this.affiliationFilter() === 'albaha'

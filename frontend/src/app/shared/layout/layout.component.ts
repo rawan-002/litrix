@@ -6,6 +6,7 @@ import { RouterOutlet, RouterLink, RouterLinkActive, Router } from '@angular/rou
 import { AuthService } from '../../core/services/auth.service';
 import { NotificationsService } from '../../core/services/notifications.service';
 import { LitrixApiService } from '../../services/litrix-api.service';
+import { AffiliationService } from '../../core/services/affiliation.service';
 import { IconComponent } from '../icon/icon.component';
 
 
@@ -29,6 +30,7 @@ interface NavItem {
 export class LayoutComponent implements OnInit {
   protected auth = inject(AuthService);
   protected notifs = inject(NotificationsService);
+  protected affiliation = inject(AffiliationService);
   private api = inject(LitrixApiService);
   private router = inject(Router);
 
