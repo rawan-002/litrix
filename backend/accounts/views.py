@@ -16,6 +16,15 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 logger = logging.getLogger(__name__)
 
+from .common import audit
+from .role_views import (
+    list_roles, list_permissions, get_role_permissions,
+    set_role_permissions, create_role, delete_role,
+)
+from .notification_views import (
+    list_notifications, mark_notification_read, mark_all_read,
+)
+
 
 # A dedicated subclass (not a @scope decorator) so this view file owns its
 # own rate-limit policy and can't silently fall through to the global anon
@@ -316,21 +325,6 @@ def registration_match(request):
         full_name_ar  = d.get('full_name_ar'),
     )
     return Response(result)
-
-
-def audit(user_id, tenant_id, action, target_type=None, target_id=None, metadata=None, request=None):
-    with connection.cursor() as cur:
-        cur.execute('''
-            INSERT INTO "AuditLog"
-            ("TenantID", "UserID", "Action", "TargetType", "TargetID",
-             "Metadata", "IpAddress", "UserAgent")
-            VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s)
-        ''', [
-            tenant_id, user_id, action, target_type, target_id,
-            json.dumps(metadata or {}),
-            request.META.get('REMOTE_ADDR') if request else None,
-            request.META.get('HTTP_USER_AGENT', '')[:500] if request else None,
-        ])
 
 
 @api_view(['GET'])
@@ -1503,52 +1497,6 @@ def _unregister_user(request, user_id: int, snapshot: dict):
 
 
 @api_view(['GET'])
-def list_notifications(request):
-    only_unread = request.GET.get('unread') == 'true'
-    where = ['"UserID" = %s']
-    params = [request.user.user_id]
-    if only_unread:
-        where.append('"IsRead" = FALSE')
-
-    with connection.cursor() as cur:
-        cur.execute(f'''
-            SELECT "NotificationID", "Type", "Title", "Message",
-                   "Metadata", "IsRead", "CreatedAt", "ReadAt"
-            FROM "Notification"
-            WHERE {" AND ".join(where)}
-            ORDER BY "CreatedAt" DESC LIMIT 100
-        ''', params)
-        cols = [c[0] for c in cur.description]
-        rows = [dict(zip(cols, r)) for r in cur.fetchall()]
-        cur.execute(
-            'SELECT COUNT(*) FROM "Notification" WHERE "UserID" = %s AND "IsRead" = FALSE',
-            [request.user.user_id],
-        )
-        unread_count = cur.fetchone()[0]
-    return Response({'notifications': rows, 'unread_count': unread_count})
-
-
-@api_view(['POST'])
-def mark_notification_read(request, notif_id):
-    with connection.cursor() as cur:
-        cur.execute('''
-            UPDATE "Notification" SET "IsRead" = TRUE, "ReadAt" = NOW()
-            WHERE "NotificationID" = %s AND "UserID" = %s AND "IsRead" = FALSE
-        ''', [notif_id, request.user.user_id])
-    return Response({'message': 'OK'})
-
-
-@api_view(['POST'])
-def mark_all_read(request):
-    with connection.cursor() as cur:
-        cur.execute('''
-            UPDATE "Notification" SET "IsRead" = TRUE, "ReadAt" = NOW()
-            WHERE "UserID" = %s AND "IsRead" = FALSE
-        ''', [request.user.user_id])
-    return Response({'message': 'All marked read'})
-
-
-@api_view(['GET'])
 def list_audit_log(request):
     if not request.user.has_litrix_perm('view_audit_log'):
         return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
@@ -1577,115 +1525,6 @@ def list_audit_log(request):
         cols = [c[0] for c in cur.description]
         rows = [dict(zip(cols, r)) for r in cur.fetchall()]
     return Response({'logs': rows})
-
-
-@api_view(['GET'])
-def list_roles(request):
-    if not request.user.has_litrix_perm('manage_users') and not request.user.has_litrix_perm('manage_roles'):
-        return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
-    with connection.cursor() as cur:
-        cur.execute('''
-            SELECT "RoleID", "Name", "Description", "IsSystem"
-            FROM "Role" WHERE "TenantID" = %s ORDER BY "RoleID"
-        ''', [request.user.tenant_id])
-        cols = [c[0] for c in cur.description]
-        rows = [dict(zip(cols, r)) for r in cur.fetchall()]
-    return Response({'roles': rows})
-
-
-@api_view(['GET'])
-def list_permissions(request):
-    if not request.user.has_litrix_perm('manage_roles'):
-        return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
-    with connection.cursor() as cur:
-        cur.execute('SELECT "PermissionID", "Code", "Description", "Category" FROM "Permission" ORDER BY "Category", "Code"')
-        cols = [c[0] for c in cur.description]
-        rows = [dict(zip(cols, r)) for r in cur.fetchall()]
-    return Response({'permissions': rows})
-
-
-@api_view(['GET'])
-def get_role_permissions(request, role_id):
-    if not request.user.has_litrix_perm('manage_roles'):
-        return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
-    with connection.cursor() as cur:
-        cur.execute('''
-            SELECT p."PermissionID" FROM "RolePermission" rp
-            JOIN "Permission" p ON p."PermissionID" = rp."PermissionID"
-            WHERE rp."RoleID" = %s
-        ''', [role_id])
-        ids = [r[0] for r in cur.fetchall()]
-    return Response({'permission_ids': ids})
-
-
-@api_view(['PUT'])
-def set_role_permissions(request, role_id):
-    if not request.user.has_litrix_perm('manage_roles'):
-        return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
-
-    permission_ids = request.data.get('permission_ids') or []
-    with connection.cursor() as cur:
-        cur.execute('''
-            SELECT 1 FROM "Role" WHERE "RoleID" = %s AND "TenantID" = %s
-        ''', [role_id, request.user.tenant_id])
-        if not cur.fetchone():
-            return Response({'error': 'Role not found'}, status=404)
-
-        cur.execute('DELETE FROM "RolePermission" WHERE "RoleID" = %s', [role_id])
-        for pid in permission_ids:
-            cur.execute(
-                'INSERT INTO "RolePermission" ("RoleID", "PermissionID") VALUES (%s, %s) ON CONFLICT DO NOTHING',
-                [role_id, pid],
-            )
-
-    audit(request.user.user_id, request.user.tenant_id,
-          'role.update_permissions', 'Role', role_id,
-          {'count': len(permission_ids)}, request=request)
-    return Response({'message': 'Updated', 'count': len(permission_ids)})
-
-
-@api_view(['POST'])
-def create_role(request):
-    if not request.user.has_litrix_perm('manage_roles'):
-        return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
-
-    name = (request.data.get('name') or '').strip()
-    description = (request.data.get('description') or '').strip()
-    if not name:
-        return Response({'error': 'Name required'}, status=400)
-
-    try:
-        with connection.cursor() as cur:
-            cur.execute('''
-                INSERT INTO "Role" ("TenantID", "Name", "Description", "IsSystem")
-                VALUES (%s, %s, %s, FALSE) RETURNING "RoleID"
-            ''', [request.user.tenant_id, name, description])
-            role_id = cur.fetchone()[0]
-    except psycopg2.IntegrityError:
-        return Response({'error': 'Role name already exists'}, status=400)
-
-    audit(request.user.user_id, request.user.tenant_id,
-          'role.create', 'Role', role_id, {'name': name}, request=request)
-    return Response({'role_id': role_id, 'name': name}, status=201)
-
-
-@api_view(['DELETE'])
-def delete_role(request, role_id):
-    if not request.user.has_litrix_perm('manage_roles'):
-        return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
-    with connection.cursor() as cur:
-        cur.execute('SELECT "IsSystem" FROM "Role" WHERE "RoleID" = %s AND "TenantID" = %s',
-                    [role_id, request.user.tenant_id])
-        row = cur.fetchone()
-        if not row:
-            return Response({'error': 'Not found'}, status=404)
-        if row[0]:
-            return Response({'error': 'Cannot delete system role'}, status=400)
-        cur.execute('UPDATE "Users" SET "RoleID" = NULL WHERE "RoleID" = %s', [role_id])
-        cur.execute('DELETE FROM "Role" WHERE "RoleID" = %s', [role_id])
-    audit(request.user.user_id, request.user.tenant_id,
-          'role.delete', 'Role', role_id, request=request)
-    return Response({'message': 'Deleted'})
 
 
 @api_view(['POST'])
