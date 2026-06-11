@@ -37,66 +37,70 @@ const CHART_MIN_YEAR = 2019;
         <header class="max-w-5xl mx-auto px-6 mt-6">
           <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
             <div class="h-1.5 bg-indigo-600"></div>
-            <div class="p-6 sm:p-8 flex flex-col sm:flex-row gap-5 relative">
+            <div class="p-6 sm:p-8 flex flex-col lg:flex-row gap-6 lg:items-center relative">
               <img src="litrix-logo.png" alt="Litrix"
-                   class="absolute top-6 right-6 h-9 md:h-11 w-auto select-none hidden sm:block"
+                   class="absolute top-6 right-6 h-9 md:h-11 w-auto select-none hidden sm:block lg:hidden"
                    draggable="false" />
-              <div class="w-20 h-20 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center
-                          justify-center text-2xl font-bold shrink-0">
-                {{ initials() }}
-              </div>
-              <div class="min-w-0 flex-1 sm:pr-16">
-                <h1 class="text-2xl sm:text-3xl font-semibold text-gray-900 tracking-tight leading-tight">
-                  {{ p.full_name_ar }}
-                </h1>
-                <p *ngIf="p.full_name_en && p.full_name_en !== p.full_name_ar"
-                   class="text-base text-gray-500 mt-0.5">
-                  {{ p.full_name_en }}
-                </p>
-                <p class="text-sm text-gray-600 mt-2">
-                  <span *ngIf="p.academic_rank">{{ p.academic_rank }} · </span>
-                  {{ p.department_name || 'College of Computing & IT' }}
-                  <span class="text-gray-300">·</span> Al-Baha University
-                </p>
+              <!-- Identity (left) -->
+              <div class="flex gap-5 flex-1 min-w-0">
+                <div class="w-20 h-20 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center
+                            justify-center text-2xl font-bold shrink-0">
+                  {{ initials() }}
+                </div>
+                <div class="min-w-0">
+                  <h1 class="text-2xl sm:text-3xl font-semibold text-gray-900 tracking-tight leading-tight">
+                    {{ p.full_name_ar }}
+                  </h1>
+                  <p *ngIf="p.full_name_en && p.full_name_en !== p.full_name_ar"
+                     class="text-base text-gray-500 mt-0.5">
+                    {{ p.full_name_en }}
+                  </p>
+                  <p class="text-sm text-gray-600 mt-2">
+                    <span *ngIf="p.academic_rank">{{ p.academic_rank }} · </span>
+                    {{ p.department_name || 'College of Computing & IT' }}
+                    <span class="text-gray-300">·</span> Al-Baha University
+                  </p>
 
-                <div class="flex flex-wrap items-center gap-2 mt-4">
-                  <span class="text-[11px] px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 font-mono">
-                    {{ p.litrix_id }}
-                  </span>
-                  <span *ngIf="p.specialization"
-                        class="text-[11px] px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">
-                    {{ p.specialization }}
-                  </span>
-                  <a *ngIf="p.orcid_id" [href]="'https://orcid.org/' + p.orcid_id" target="_blank"
-                     class="text-[11px] px-2.5 py-1 rounded-full border border-gray-200 text-gray-700
-                            hover:border-indigo-400 hover:text-indigo-600 transition inline-flex items-center gap-1">
-                    ORCID <span class="opacity-60">↗</span>
-                  </a>
-                  <span *ngIf="p.scopus_id"
-                        class="text-[11px] px-2.5 py-1 rounded-full border border-gray-200 text-gray-700">
-                    Scopus {{ p.scopus_id }}
-                  </span>
+                  <div class="flex flex-wrap items-center gap-2 mt-4">
+                    <span class="text-[11px] px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 font-mono">
+                      {{ p.litrix_id }}
+                    </span>
+                    <span *ngIf="p.specialization"
+                          class="text-[11px] px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">
+                      {{ p.specialization }}
+                    </span>
+                    <a *ngIf="p.orcid_id" [href]="'https://orcid.org/' + p.orcid_id" target="_blank"
+                       class="text-[11px] px-2.5 py-1 rounded-full border border-gray-200 text-gray-700
+                              hover:border-indigo-400 hover:text-indigo-600 transition inline-flex items-center gap-1">
+                      ORCID <span class="opacity-60">↗</span>
+                    </a>
+                    <span *ngIf="p.scopus_id"
+                          class="text-[11px] px-2.5 py-1 rounded-full border border-gray-200 text-gray-700">
+                      Scopus {{ p.scopus_id }}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <!-- Metrics strip -->
-            <div class="grid grid-cols-2 lg:grid-cols-4 border-t border-gray-100 divide-x divide-gray-100">
-              <div class="p-5">
-                <div class="text-3xl font-semibold text-gray-900">{{ p.stats.total_papers | number }}</div>
-                <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-1">Publications</div>
-              </div>
-              <div class="p-5">
-                <div class="text-3xl font-semibold text-gray-900">{{ p.stats.total_citations | number }}</div>
-                <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-1">Times Cited</div>
-              </div>
-              <div class="p-5 border-t lg:border-t-0 border-gray-100">
-                <div class="text-3xl font-semibold text-gray-900">{{ hIndex() }}</div>
-                <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-1">H-Index</div>
-              </div>
-              <div class="p-5 border-t lg:border-t-0 border-gray-100">
-                <div class="text-3xl font-semibold text-indigo-600">{{ p.stats.q1_papers | number }}</div>
-                <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-1">Q1 Papers</div>
+              <!-- Metrics (right, same card) -->
+              <div class="grid grid-cols-2 gap-x-8 gap-y-5 shrink-0 pt-5 border-t border-gray-100
+                          lg:pt-0 lg:border-t-0 lg:border-l lg:pl-8">
+                <div>
+                  <div class="text-2xl font-semibold text-gray-900">{{ p.stats.total_papers | number }}</div>
+                  <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-0.5">Publications</div>
+                </div>
+                <div>
+                  <div class="text-2xl font-semibold text-gray-900">{{ p.stats.total_citations | number }}</div>
+                  <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-0.5">Times Cited</div>
+                </div>
+                <div>
+                  <div class="text-2xl font-semibold text-gray-900">{{ hIndex() }}</div>
+                  <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-0.5">H-Index</div>
+                </div>
+                <div>
+                  <div class="text-2xl font-semibold text-indigo-600">{{ p.stats.q1_papers | number }}</div>
+                  <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-0.5">Q1 Papers</div>
+                </div>
               </div>
             </div>
           </div>
@@ -109,14 +113,6 @@ const CHART_MIN_YEAR = 2019;
             <div class="rounded-2xl border border-gray-100 p-5 lg:sticky lg:top-4">
               <h2 class="text-sm font-semibold text-gray-900 mb-4">Metrics</h2>
               <dl class="space-y-3">
-                <div class="flex items-baseline justify-between">
-                  <dt class="text-xs text-gray-500">Times Cited</dt>
-                  <dd class="text-sm font-semibold text-gray-900">{{ p.stats.total_citations | number }}</dd>
-                </div>
-                <div class="flex items-baseline justify-between">
-                  <dt class="text-xs text-gray-500">H-Index</dt>
-                  <dd class="text-sm font-semibold text-gray-900">{{ hIndex() }}</dd>
-                </div>
                 <div class="flex items-baseline justify-between">
                   <dt class="text-xs text-gray-500">Avg. citations / paper</dt>
                   <dd class="text-sm font-semibold text-gray-900">{{ avgCitations() }}</dd>

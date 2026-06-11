@@ -13,77 +13,81 @@
     <!-- Identity banner (Web of Science-style author record header) -->
     <header class="bg-white rounded-2xl border border-ink-100 overflow-hidden mb-6">
       <div class="h-1.5 bg-accent"></div>
-      <div class="p-6 sm:p-8 flex flex-col sm:flex-row gap-5">
-        <div class="w-20 h-20 rounded-2xl bg-accent/10 text-accent flex items-center
-                    justify-center text-2xl font-bold shrink-0">
-          {{ initials() }}
-        </div>
-        <div class="min-w-0 flex-1">
-          <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 leading-tight">
-            {{ displayName() }}
-          </h1>
-          @if (secondaryName()) {
-            <div class="text-base text-ink-500 mt-0.5">{{ secondaryName() }}</div>
-          }
-          <div class="text-sm text-ink-600 mt-2">
-            {{ d.identity.department_name || 'Researcher' }}
-            <span class="text-ink-300">·</span>
-            Al-Baha University
+      <div class="p-6 sm:p-8 flex flex-col lg:flex-row gap-6 lg:items-center">
+        <!-- Identity (left) -->
+        <div class="flex gap-5 flex-1 min-w-0">
+          <div class="w-20 h-20 rounded-2xl bg-accent/10 text-accent flex items-center
+                      justify-center text-2xl font-bold shrink-0">
+            {{ initials() }}
           </div>
+          <div class="min-w-0">
+            <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 leading-tight">
+              {{ displayName() }}
+            </h1>
+            @if (secondaryName()) {
+              <div class="text-base text-ink-500 mt-0.5">{{ secondaryName() }}</div>
+            }
+            <div class="text-sm text-ink-600 mt-2">
+              {{ d.identity.department_name || 'Researcher' }}
+              <span class="text-ink-300">·</span>
+              Al-Baha University
+            </div>
 
-          <!-- Identifier badges -->
-          <div class="flex flex-wrap items-center gap-2 mt-4">
-            <span class="text-[11px] px-2.5 py-1 rounded-full bg-ink-100 text-ink-600 font-medium">
-              {{ d.identity.litrix_id }}
-            </span>
-            @if (d.identity.orcid) {
-              <a [href]="'https://orcid.org/' + d.identity.orcid" target="_blank"
-                 class="text-[11px] px-2.5 py-1 rounded-full border border-ink-200 text-ink-700
-                        hover:border-accent hover:text-accent transition inline-flex items-center gap-1">
-                ORCID <span class="opacity-60">↗</span>
-              </a>
-            }
-            @if (d.identity.scholar_id) {
-              <a [href]="'https://scholar.google.com/citations?user=' + d.identity.scholar_id"
-                 target="_blank"
-                 class="text-[11px] px-2.5 py-1 rounded-full border border-ink-200 text-ink-700
-                        hover:border-accent hover:text-accent transition inline-flex items-center gap-1">
-                Google Scholar <span class="opacity-60">↗</span>
-              </a>
-            }
-            @if (d.identity.openalex_author_id) {
-              <a [href]="'https://openalex.org/' + d.identity.openalex_author_id" target="_blank"
-                 class="text-[11px] px-2.5 py-1 rounded-full border border-ink-200 text-ink-700
-                        hover:border-accent hover:text-accent transition inline-flex items-center gap-1">
-                OpenAlex <span class="opacity-60">↗</span>
-              </a>
-            }
-            @if (d.identity.last_synced_at) {
-              <span class="text-[11px] text-ink-400">
-                Last synced {{ d.identity.last_synced_at | date:'mediumDate' }}
+            <!-- Identifier badges -->
+            <div class="flex flex-wrap items-center gap-2 mt-4">
+              <span class="text-[11px] px-2.5 py-1 rounded-full bg-ink-100 text-ink-600 font-medium">
+                {{ d.identity.litrix_id }}
               </span>
-            }
+              @if (d.identity.orcid) {
+                <a [href]="'https://orcid.org/' + d.identity.orcid" target="_blank"
+                   class="text-[11px] px-2.5 py-1 rounded-full border border-ink-200 text-ink-700
+                          hover:border-accent hover:text-accent transition inline-flex items-center gap-1">
+                  ORCID <span class="opacity-60">↗</span>
+                </a>
+              }
+              @if (d.identity.scholar_id) {
+                <a [href]="'https://scholar.google.com/citations?user=' + d.identity.scholar_id"
+                   target="_blank"
+                   class="text-[11px] px-2.5 py-1 rounded-full border border-ink-200 text-ink-700
+                          hover:border-accent hover:text-accent transition inline-flex items-center gap-1">
+                  Google Scholar <span class="opacity-60">↗</span>
+                </a>
+              }
+              @if (d.identity.openalex_author_id) {
+                <a [href]="'https://openalex.org/' + d.identity.openalex_author_id" target="_blank"
+                   class="text-[11px] px-2.5 py-1 rounded-full border border-ink-200 text-ink-700
+                          hover:border-accent hover:text-accent transition inline-flex items-center gap-1">
+                  OpenAlex <span class="opacity-60">↗</span>
+                </a>
+              }
+              @if (d.identity.last_synced_at) {
+                <span class="text-[11px] text-ink-400">
+                  Last synced {{ d.identity.last_synced_at | date:'mediumDate' }}
+                </span>
+              }
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Metrics strip -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 border-t border-ink-100 divide-x divide-ink-100">
-        <div class="p-5">
-          <div class="text-3xl font-bold text-ink-900">{{ fmt(d.stats.total_papers) }}</div>
-          <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-1">Publications</div>
-        </div>
-        <div class="p-5">
-          <div class="text-3xl font-bold text-ink-900">{{ fmt(d.stats.total_citations) }}</div>
-          <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-1">Times Cited</div>
-        </div>
-        <div class="p-5 border-t lg:border-t-0 border-ink-100">
-          <div class="text-3xl font-bold text-ink-900">{{ hIndex() }}</div>
-          <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-1">H-Index</div>
-        </div>
-        <div class="p-5 border-t lg:border-t-0 border-ink-100">
-          <div class="text-3xl font-bold text-ink-900">{{ fmt(d.stats.q1_papers) }}</div>
-          <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-1">Q1 Papers</div>
+        <!-- Metrics (right, same card) -->
+        <div class="grid grid-cols-2 gap-x-8 gap-y-5 shrink-0 pt-5 border-t border-ink-100
+                    lg:pt-0 lg:border-t-0 lg:border-l lg:pl-8">
+          <div>
+            <div class="text-2xl font-bold text-ink-900">{{ fmt(d.stats.total_papers) }}</div>
+            <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-0.5">Publications</div>
+          </div>
+          <div>
+            <div class="text-2xl font-bold text-ink-900">{{ fmt(d.stats.total_citations) }}</div>
+            <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-0.5">Times Cited</div>
+          </div>
+          <div>
+            <div class="text-2xl font-bold text-ink-900">{{ hIndex() }}</div>
+            <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-0.5">H-Index</div>
+          </div>
+          <div>
+            <div class="text-2xl font-bold text-accent">{{ fmt(d.stats.q1_papers) }}</div>
+            <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-0.5">Q1 Papers</div>
+          </div>
         </div>
       </div>
     </header>
@@ -94,14 +98,6 @@
         <div class="bg-white rounded-2xl border border-ink-100 p-5 lg:sticky lg:top-4">
           <h2 class="text-sm font-semibold text-ink-900 mb-4">Metrics</h2>
           <dl class="space-y-3">
-            <div class="flex items-baseline justify-between">
-              <dt class="text-xs text-ink-500">Times Cited</dt>
-              <dd class="text-sm font-semibold text-ink-900">{{ fmt(d.stats.total_citations) }}</dd>
-            </div>
-            <div class="flex items-baseline justify-between">
-              <dt class="text-xs text-ink-500">H-Index</dt>
-              <dd class="text-sm font-semibold text-ink-900">{{ hIndex() }}</dd>
-            </div>
             <div class="flex items-baseline justify-between">
               <dt class="text-xs text-ink-500">Avg. citations / paper</dt>
               <dd class="text-sm font-semibold text-ink-900">{{ avgCitations() }}</dd>
