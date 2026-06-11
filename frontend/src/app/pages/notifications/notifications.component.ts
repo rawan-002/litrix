@@ -59,7 +59,7 @@ export class NotificationsComponent {
   iconFor(type: string): string {
     if (type.startsWith('registration')) return '✓';
     if (type.startsWith('sync')) return '↻';
-    if (type.startsWith('paper')) return '◉';
-    return '◇';
+    if (type.startsWith('paper')) return '▤';
+    return '⚑';
   }
 }
