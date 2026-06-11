@@ -122,6 +122,19 @@ def paper_detail(request, paper_id):
                     'at_albaha':    at_albaha,
                 })
 
+        # Guard against mismatched OpenAlex enrichment: a chunk of papers carry
+        # an authorships array that belongs to a *different* work (e.g. Japanese
+        # names on a Pakistani/Saudi paper). The Scholar `authors` string
+        # (row[8]) is the reliable list, so if none of the OpenAlex names share a
+        # token with it, the enrichment is wrong — drop it and let the UI fall
+        # back to the correct raw author list.
+        if authorships_payload and row[8]:
+            oa_blob = ' '.join(a['name'] for a in authorships_payload).lower()
+            raw_tokens = [t for t in _re.split(r'[\s,;.]+', (row[8] or '').lower())
+                          if len(t) >= 3 and t.isascii() and t.isalpha()]
+            if raw_tokens and not any(t in oa_blob for t in raw_tokens):
+                authorships_payload = []
+
         paper = {
             'paper_id':        row[0],
             'title':           row[1],
