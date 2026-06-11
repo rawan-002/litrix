@@ -421,6 +421,45 @@ def researcher_profile(request, litrix_id: str):
         ''', [user_id])
         papers = cur.fetchall()
 
+        # Co-authors: everyone sharing a paper with this researcher. Platform
+        # members (non-null UserID -> on the Al-Baha roster) carry a Litrix_ID
+        # so the card can link to their profile; external names come through
+        # with is_albaha = false. Al-Baha first, then by shared-paper count.
+        cur.execute('''
+            SELECT user_id, litrix_id, name,
+                   COUNT(DISTINCT paper_id) AS shared_papers
+            FROM (
+                SELECT
+                    co."UserID"    AS user_id,
+                    cu."Litrix_ID" AS litrix_id,
+                    COALESCE(
+                        cu."FullName_Ar",
+                        NULLIF(TRIM(CONCAT_WS(' ', cu."FirstName", cu."LastName")), ''),
+                        co."AuthorNameRaw"
+                    )              AS name,
+                    co."PaperID"   AS paper_id
+                FROM "Authors" me
+                JOIN "Authors" co ON co."PaperID" = me."PaperID"
+                                  AND co."UserID" IS DISTINCT FROM me."UserID"
+                LEFT JOIN "Users" cu ON cu."UserID" = co."UserID"
+                WHERE me."UserID" = %s
+                  AND COALESCE(cu."FullName_Ar", co."AuthorNameRaw") IS NOT NULL
+            ) sub
+            GROUP BY user_id, litrix_id, name
+            ORDER BY (user_id IS NOT NULL) DESC, shared_papers DESC, name
+            LIMIT 200
+        ''', [user_id])
+        coauthors = [
+            {
+                'user_id':       r[0],
+                'litrix_id':     r[1],
+                'name':          r[2],
+                'shared_papers': r[3],
+                'is_albaha':     r[0] is not None,
+            }
+            for r in cur.fetchall()
+        ]
+
     # Build the citations-by-year series from the researcher row (if any).
     citations_by_year_chart: list[dict] = []
     raw_cby = bio[11] if bio else None
@@ -473,6 +512,7 @@ def researcher_profile(request, litrix_id: str):
             }
             for p in papers
         ],
+        'coauthors': coauthors,
     })
 
 

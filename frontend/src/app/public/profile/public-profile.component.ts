@@ -33,90 +33,125 @@ const CHART_MIN_YEAR = 2019;
       </div>
 
       <ng-container *ngIf="profile() as p">
-        <!-- Identity banner (Web of Science-style author record) -->
-        <header class="max-w-5xl mx-auto px-6 mt-6">
-          <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+        <!-- Identity + chart as two separate cards -->
+        <div class="max-w-5xl mx-auto px-6 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <!-- Card: identity + KPIs -->
+          <header class="lg:col-span-2 bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
             <div class="h-1.5 bg-indigo-600"></div>
-            <div class="p-6 sm:p-8 flex flex-col lg:flex-row gap-6 lg:items-stretch relative">
+            <div class="p-6 sm:p-8 relative">
               <img src="litrix-logo.png" alt="Litrix"
-                   class="absolute top-6 right-6 h-9 md:h-11 w-auto select-none hidden sm:block lg:hidden"
+                   class="absolute top-6 right-6 h-9 md:h-11 w-auto select-none hidden sm:block"
                    draggable="false" />
-              <!-- Left: identity + the four KPIs grouped together -->
-              <div class="flex-1 min-w-0 flex flex-col">
-                <div class="flex gap-5">
-                  <div class="w-20 h-20 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center
-                              justify-center text-2xl font-bold shrink-0">
-                    {{ initials() }}
-                  </div>
-                  <div class="min-w-0">
-                    <h1 class="text-2xl sm:text-3xl font-semibold text-gray-900 tracking-tight leading-tight">
-                      {{ p.full_name_ar }}
-                    </h1>
-                    <p *ngIf="p.full_name_en && p.full_name_en !== p.full_name_ar"
-                       class="text-base text-gray-500 mt-0.5">
-                      {{ p.full_name_en }}
-                    </p>
-                    <p class="text-sm text-gray-600 mt-2">
-                      <span *ngIf="p.academic_rank">{{ p.academic_rank }} · </span>
-                      {{ p.department_name || 'College of Computing & IT' }}
-                      <span class="text-gray-300">·</span> Al-Baha University
-                    </p>
-
-                    <div class="flex flex-wrap items-center gap-2 mt-4">
-                      <span class="text-[11px] px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 font-mono">
-                        {{ p.litrix_id }}
-                      </span>
-                      <span *ngIf="p.specialization"
-                            class="text-[11px] px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">
-                        {{ p.specialization }}
-                      </span>
-                      <a *ngIf="p.orcid_id" [href]="'https://orcid.org/' + p.orcid_id" target="_blank"
-                         class="text-[11px] px-2.5 py-1 rounded-full border border-gray-200 text-gray-700
-                                hover:border-indigo-400 hover:text-indigo-600 transition inline-flex items-center gap-1">
-                        ORCID <span class="opacity-60">↗</span>
-                      </a>
-                      <span *ngIf="p.scopus_id"
-                            class="text-[11px] px-2.5 py-1 rounded-full border border-gray-200 text-gray-700">
-                        Scopus {{ p.scopus_id }}
-                      </span>
-                    </div>
-                  </div>
+              <div class="flex gap-5">
+                <div class="w-20 h-20 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center
+                            justify-center text-2xl font-bold shrink-0">
+                  {{ initials() }}
                 </div>
+                <div class="min-w-0 sm:pr-20">
+                  <h1 class="text-2xl sm:text-3xl font-semibold text-gray-900 tracking-tight leading-tight">
+                    {{ p.full_name_ar }}
+                  </h1>
+                  <p *ngIf="p.full_name_en && p.full_name_en !== p.full_name_ar"
+                     class="text-base text-gray-500 mt-0.5">
+                    {{ p.full_name_en }}
+                  </p>
+                  <p class="text-sm text-gray-600 mt-2">
+                    <span *ngIf="p.academic_rank">{{ p.academic_rank }} · </span>
+                    {{ p.department_name || 'College of Computing & IT' }}
+                    <span class="text-gray-300">·</span> Al-Baha University
+                  </p>
 
-                <!-- Four KPIs, grouped close together (sit at the bottom on desktop) -->
-                <div class="flex flex-wrap gap-x-10 gap-y-4 mt-6 lg:mt-auto lg:pt-8">
-                  <div>
-                    <div class="text-2xl sm:text-3xl font-semibold text-gray-900">{{ p.stats.total_papers | number }}</div>
-                    <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-0.5">Publications</div>
-                  </div>
-                  <div>
-                    <div class="text-2xl sm:text-3xl font-semibold text-gray-900">{{ p.stats.total_citations | number }}</div>
-                    <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-0.5">Times Cited</div>
-                  </div>
-                  <div>
-                    <div class="text-2xl sm:text-3xl font-semibold text-gray-900">{{ hIndex() }}</div>
-                    <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-0.5">H-Index</div>
-                  </div>
-                  <div>
-                    <div class="text-2xl sm:text-3xl font-semibold text-indigo-600">{{ p.stats.q1_papers | number }}</div>
-                    <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-0.5">Q1 Papers</div>
+                  <div class="flex flex-wrap items-center gap-2 mt-4">
+                    <span class="text-[11px] px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 font-mono">
+                      {{ p.litrix_id }}
+                    </span>
+                    <span *ngIf="p.specialization"
+                          class="text-[11px] px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">
+                      {{ p.specialization }}
+                    </span>
+                    <a *ngIf="p.orcid_id" [href]="'https://orcid.org/' + p.orcid_id" target="_blank"
+                       class="text-[11px] px-2.5 py-1 rounded-full border border-gray-200 text-gray-700
+                              hover:border-indigo-400 hover:text-indigo-600 transition inline-flex items-center gap-1">
+                      ORCID <span class="opacity-60">↗</span>
+                    </a>
+                    <span *ngIf="p.scopus_id"
+                          class="text-[11px] px-2.5 py-1 rounded-full border border-gray-200 text-gray-700">
+                      Scopus {{ p.scopus_id }}
+                    </span>
                   </div>
                 </div>
               </div>
 
-              <!-- Right: citations chart, taller so it fills the card height -->
-              <div class="shrink-0 lg:w-96 pt-5 border-t border-gray-100
-                          lg:pt-0 lg:border-t-0 lg:border-l lg:pl-8 flex flex-col justify-center">
-                <div *ngIf="hasChartData()">
-                  <h3 class="text-xs font-semibold text-gray-700 mb-2">
-                    Citations by year <span class="text-gray-400 font-normal">{{ CHART_MIN_YEAR }}+</span>
-                  </h3>
-                  <canvas #citationsCanvas></canvas>
+              <!-- Four KPIs, grouped together -->
+              <div class="flex flex-wrap gap-x-10 gap-y-4 mt-8">
+                <div>
+                  <div class="text-2xl sm:text-3xl font-semibold text-gray-900">{{ p.stats.total_papers | number }}</div>
+                  <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-0.5">Publications</div>
+                </div>
+                <div>
+                  <div class="text-2xl sm:text-3xl font-semibold text-gray-900">{{ p.stats.total_citations | number }}</div>
+                  <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-0.5">Times Cited</div>
+                </div>
+                <div>
+                  <div class="text-2xl sm:text-3xl font-semibold text-gray-900">{{ hIndex() }}</div>
+                  <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-0.5">H-Index</div>
+                </div>
+                <div>
+                  <div class="text-2xl sm:text-3xl font-semibold text-indigo-600">{{ p.stats.q1_papers | number }}</div>
+                  <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-0.5">Q1 Papers</div>
                 </div>
               </div>
             </div>
-          </div>
-        </header>
+          </header>
+
+          <!-- Card: citations chart -->
+          <section class="lg:col-span-1 bg-white rounded-2xl border border-gray-100 shadow-sm
+                          p-5 flex flex-col justify-center">
+            <div *ngIf="hasChartData(); else noChart">
+              <h3 class="text-xs font-semibold text-gray-700 mb-2">
+                Citations by year <span class="text-gray-400 font-normal">{{ CHART_MIN_YEAR }}+</span>
+              </h3>
+              <canvas #citationsCanvas></canvas>
+            </div>
+            <ng-template #noChart>
+              <p class="text-xs text-gray-400 text-center py-6">No citation data yet</p>
+            </ng-template>
+          </section>
+        </div>
+
+        <!-- Card: co-authors -->
+        <div *ngIf="p.coauthors?.length" class="max-w-5xl mx-auto px-6 mt-6">
+          <section class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 sm:p-6">
+            <h2 class="text-sm font-semibold text-gray-900 mb-4">
+              Co-authors <span class="text-gray-400 font-normal">({{ p.coauthors.length }})</span>
+            </h2>
+            <div class="flex flex-wrap gap-2">
+              <ng-container *ngFor="let c of visibleCoauthors()">
+                <a *ngIf="c.is_albaha && c.litrix_id"
+                   [routerLink]="['/public/researcher', c.litrix_id]"
+                   class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm
+                          bg-indigo-50 text-indigo-700 ring-1 ring-indigo-300
+                          hover:ring-indigo-500 hover:bg-indigo-100 transition">
+                  {{ c.name }}
+                  <span class="text-[10px] opacity-70">· {{ c.shared_papers }}</span>
+                </a>
+                <span *ngIf="!(c.is_albaha && c.litrix_id)"
+                      class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm
+                             bg-gray-100 text-gray-600">
+                  {{ c.name }}
+                  <span class="text-[10px] opacity-60">· {{ c.shared_papers }}</span>
+                </span>
+              </ng-container>
+            </div>
+            <div *ngIf="p.coauthors.length > visibleCoauthors().length" class="mt-4">
+              <button (click)="showMoreCoauthors()"
+                      class="text-xs text-indigo-600 hover:text-indigo-700 font-medium
+                             px-4 py-1.5 rounded-full hover:bg-indigo-50 transition">
+                Load More ({{ p.coauthors.length - visibleCoauthors().length }} more)
+              </button>
+            </div>
+          </section>
+        </div>
 
         <!-- Publications -->
         <section class="max-w-5xl mx-auto px-6 py-8">
@@ -342,6 +377,16 @@ export class PublicProfileComponent implements OnInit, AfterViewInit {
     const parts = name.split(/\s+/).filter(Boolean).slice(0, 2);
     return parts.map(x => x[0] || '').join('').toUpperCase() || '?';
   });
+
+  // Co-authors: show a first batch, reveal the rest on demand.
+  readonly COAUTHOR_BATCH = 6;
+  readonly coauthorsShown = signal<number>(6);
+  readonly visibleCoauthors = computed(() =>
+    (this.profile()?.coauthors ?? []).slice(0, this.coauthorsShown())
+  );
+  showMoreCoauthors() {
+    this.coauthorsShown.update(n => n + this.COAUTHOR_BATCH);
+  }
 
   @ViewChild('citationsCanvas') citationsCanvas!: ElementRef<HTMLCanvasElement>;
   private citationsChart: Chart | null = null;

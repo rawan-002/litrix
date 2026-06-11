@@ -10,12 +10,12 @@
     </div>
   } @else if (data(); as d) {
 
-    <!-- Identity banner (Web of Science-style author record header) -->
-    <header class="bg-white rounded-2xl border border-ink-100 overflow-hidden mb-6">
-      <div class="h-1.5 bg-accent"></div>
-      <div class="p-6 sm:p-8 flex flex-col lg:flex-row gap-6 lg:items-stretch">
-        <!-- Left: identity + the four KPIs grouped together -->
-        <div class="flex-1 min-w-0 flex flex-col">
+    <!-- Identity + chart as two separate cards -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+      <!-- Card: identity + KPIs -->
+      <header class="lg:col-span-2 bg-white rounded-2xl border border-ink-100 overflow-hidden">
+        <div class="h-1.5 bg-accent"></div>
+        <div class="p-6 sm:p-8">
           <div class="flex gap-5">
             <div class="w-20 h-20 rounded-2xl bg-accent/10 text-accent flex items-center
                         justify-center text-2xl font-bold shrink-0">
@@ -70,8 +70,8 @@
             </div>
           </div>
 
-          <!-- Four KPIs, grouped close together (sit at the bottom on desktop) -->
-          <div class="flex flex-wrap gap-x-10 gap-y-4 mt-6 lg:mt-auto lg:pt-8">
+          <!-- Four KPIs, grouped together -->
+          <div class="flex flex-wrap gap-x-10 gap-y-4 mt-8">
             <div>
               <div class="text-2xl sm:text-3xl font-bold text-ink-900">{{ fmt(d.stats.total_papers) }}</div>
               <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-0.5">Publications</div>
@@ -90,17 +90,54 @@
             </div>
           </div>
         </div>
+      </header>
 
-        <!-- Right: citations chart, taller so it fills the card height -->
-        <div class="shrink-0 lg:w-96 pt-5 border-t border-ink-100
-                    lg:pt-0 lg:border-t-0 lg:border-l lg:pl-8 flex flex-col">
-          <h3 class="text-xs font-semibold text-ink-700 mb-2">Citations over time</h3>
-          <app-citations-chart
-            [series]="data()?.citations_by_year ?? []"
-            [height]="230" />
+      <!-- Card: citations chart -->
+      <section class="lg:col-span-1 bg-white rounded-2xl border border-ink-100 p-5
+                      flex flex-col justify-center">
+        <h3 class="text-xs font-semibold text-ink-700 mb-2">Citations over time</h3>
+        <app-citations-chart
+          [series]="data()?.citations_by_year ?? []"
+          [height]="200" />
+      </section>
+    </div>
+
+    <!-- Card: co-authors -->
+    @if (d.coauthors?.length) {
+      <section class="bg-white rounded-2xl border border-ink-100 p-5 sm:p-6 mb-6">
+        <h2 class="text-sm font-semibold text-ink-900 mb-4">
+          Co-authors <span class="text-ink-400 font-normal">({{ d.coauthors.length }})</span>
+        </h2>
+        <div class="flex flex-wrap gap-2">
+          @for (c of visibleCoauthors(); track c.name) {
+            @if (c.is_albaha && c.litrix_id) {
+              <a [routerLink]="['/profile', c.litrix_id]"
+                 class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm
+                        bg-accent-light text-accent ring-1 ring-accent/40
+                        hover:ring-accent hover:bg-accent/10 transition">
+                {{ c.name }}
+                <span class="text-[10px] opacity-70">· {{ c.shared_papers }}</span>
+              </a>
+            } @else {
+              <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm
+                           bg-ink-100 text-ink-600">
+                {{ c.name }}
+                <span class="text-[10px] opacity-60">· {{ c.shared_papers }}</span>
+              </span>
+            }
+          }
         </div>
-      </div>
-    </header>
+        @if (d.coauthors.length > visibleCoauthors().length) {
+          <div class="mt-4">
+            <button (click)="showMoreCoauthors()"
+                    class="text-xs text-accent hover:text-accent-hover font-medium
+                           px-4 py-1.5 rounded-full hover:bg-accent-light transition">
+              Load More ({{ d.coauthors.length - visibleCoauthors().length }} more)
+            </button>
+          </div>
+        }
+      </section>
+    }
 
     <!-- Publications -->
     <section class="space-y-4">

@@ -169,11 +169,21 @@ export interface ProfilePaper {
   affiliation_verified: boolean | null;
 }
 
+export interface CoAuthor {
+  user_id: number | null;
+  /** Present only for platform (Al-Baha) members — drives the profile link. */
+  litrix_id: string | null;
+  name: string;
+  shared_papers: number;
+  is_albaha: boolean;
+}
+
 export interface ResearcherProfilePayload {
   identity: ResearcherIdentity;
   stats: ResearcherStatsAgg;
   citations_by_year: YearCitations[];
   papers: ProfilePaper[];
+  coauthors: CoAuthor[];
 }
 
 /* ----------------------------------------------------------------------

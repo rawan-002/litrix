@@ -3,7 +3,7 @@
 // profile in one round-trip.
 import { Component, OnInit, Input, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { LitrixApiService } from '../../services/litrix-api.service';
 import {
   ResearcherProfilePayload, ProfilePaper,
@@ -16,7 +16,9 @@ import { CitationsChartComponent } from
 @Component({
   selector: 'app-researcher-profile',
   standalone: true,
-  imports: [CommonModule, PaperDetailModalComponent, CitationsChartComponent],
+  imports: [
+    CommonModule, RouterLink, PaperDetailModalComponent, CitationsChartComponent,
+  ],
   templateUrl: './researcher-profile.component.html',
 })
 export class ResearcherProfileComponent implements OnInit {
@@ -130,6 +132,18 @@ export class ResearcherProfileComponent implements OnInit {
     const parts = name.split(/\s+/).filter(Boolean).slice(0, 2);
     return parts.map(p => p[0] || '').join('').toUpperCase() || '?';
   });
+
+  // Co-authors: show a first batch, reveal the rest on demand.
+  readonly COAUTHOR_BATCH = 6;
+  readonly coauthorsShown = signal<number>(6);
+
+  readonly visibleCoauthors = computed(() =>
+    (this.data()?.coauthors ?? []).slice(0, this.coauthorsShown())
+  );
+
+  showMoreCoauthors() {
+    this.coauthorsShown.update(n => n + this.COAUTHOR_BATCH);
+  }
 
   setSort(field: 'year' | 'citations') {
     if (this.sortField() === field) {
@@ -281,6 +295,7 @@ export class ResearcherProfileComponent implements OnInit {
           });
         }
         this.data.set(payload);
+        this.coauthorsShown.set(this.COAUTHOR_BATCH);
         this.loading.set(false);
 
         // The backend lookup is case/padding-insensitive, so the user may

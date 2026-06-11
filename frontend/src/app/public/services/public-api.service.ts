@@ -64,6 +64,15 @@ export interface ResearcherProfile extends ResearcherSummary {
   };
   citations_by_year_chart: { year: number; citations: number }[];
   papers: PaperSummary[];
+  coauthors: CoAuthor[];
+}
+
+export interface CoAuthor {
+  user_id: number | null;
+  litrix_id: string | null;
+  name: string;
+  shared_papers: number;
+  is_albaha: boolean;
 }
 
 export interface TrendPoint {

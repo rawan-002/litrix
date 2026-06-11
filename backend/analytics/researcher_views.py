@@ -368,11 +368,52 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                 'quartile', 'impact_factor', 'affiliation_verified',
             ], r)) for r in cur.fetchall()]
 
+            # Co-authors: everyone who shares a paper with this researcher.
+            # Platform members (a non-null UserID -> they're on the Litrix
+            # roster, i.e. Al-Baha) carry a Litrix_ID so the card can link to
+            # their profile; external names come through with is_albaha = false.
+            # Sorted Al-Baha-first, then by how many papers they share.
+            cur.execute('''
+                SELECT user_id, litrix_id, name,
+                       COUNT(DISTINCT paper_id) AS shared_papers
+                FROM (
+                    SELECT
+                        co."UserID"    AS user_id,
+                        cu."Litrix_ID" AS litrix_id,
+                        COALESCE(
+                            cu."FullName_Ar",
+                            NULLIF(TRIM(CONCAT_WS(' ', cu."FirstName", cu."LastName")), ''),
+                            co."AuthorNameRaw"
+                        )              AS name,
+                        co."PaperID"   AS paper_id
+                    FROM "Authors" me
+                    JOIN "Authors" co ON co."PaperID" = me."PaperID"
+                                      AND co."UserID" IS DISTINCT FROM me."UserID"
+                    LEFT JOIN "Users" cu ON cu."UserID" = co."UserID"
+                    WHERE me."UserID" = %s
+                      AND COALESCE(cu."FullName_Ar", co."AuthorNameRaw") IS NOT NULL
+                ) sub
+                GROUP BY user_id, litrix_id, name
+                ORDER BY (user_id IS NOT NULL) DESC, shared_papers DESC, name
+                LIMIT 200
+            ''', [resolved_user_id])
+            coauthors = [
+                {
+                    'user_id':       r[0],
+                    'litrix_id':     r[1],
+                    'name':          r[2],
+                    'shared_papers': r[3],
+                    'is_albaha':     r[0] is not None,
+                }
+                for r in cur.fetchall()
+            ]
+
         return response.Response({
             'identity':          identity,
             'stats':             stats,
             'citations_by_year': citations_by_year,
             'papers':            papers,
+            'coauthors':         coauthors,
         })
 
     @decorators.action(detail=True, methods=['get'])
