@@ -73,15 +73,37 @@ export class ResearcherProfileComponent implements OnInit {
     this.visibleCount.set(this.LOAD_BATCH);
   }
 
+  // One Al-Baha toggle drives BOTH the headline KPIs and the papers list.
   // 'albaha' keeps only papers confirmed Al-Baha (affiliation_verified === true);
-  // confirmed-foreign and still-unverified papers are both hidden, so nothing
-  // unconfirmed is ever shown as Al-Baha output. 'all' is the full archive.
-  readonly affiliationFilter = signal<'albaha' | 'all'>('albaha');
+  // confirmed-foreign and still-unverified papers are both hidden. 'all' is the
+  // full archive (default — show the whole record, let the user narrow).
+  readonly affiliationFilter = signal<'albaha' | 'all'>('all');
 
   setAffiliation(v: 'albaha' | 'all') {
     this.affiliationFilter.set(v);
     this.visibleCount.set(this.LOAD_BATCH);
   }
+
+  toggleAffiliation() {
+    this.setAffiliation(this.affiliationFilter() === 'albaha' ? 'all' : 'albaha');
+  }
+
+  // The papers the KPIs are computed over — same Al-Baha filter as the list, so
+  // the headline numbers and the list below always agree.
+  readonly statsPapers = computed(() => {
+    const all = this.data()?.papers ?? [];
+    return this.affiliationFilter() === 'albaha'
+      ? all.filter(p => p.affiliation_verified === true)
+      : all;
+  });
+
+  readonly kpiPublications = computed(() => this.statsPapers().length);
+  readonly kpiCitations = computed(() =>
+    this.statsPapers().reduce((s, p) => s + (p.citations ?? 0), 0)
+  );
+  readonly kpiQ1 = computed(() =>
+    this.statsPapers().filter(p => p.quartile === 'Q1').length
+  );
 
   /** Papers hidden by the "Al-Baha only" view (confirmed foreign + unverified). */
   readonly hiddenCount = computed(() =>
@@ -94,7 +116,7 @@ export class ResearcherProfileComponent implements OnInit {
   // Web-of-Science-style derived metrics. The profile is lifetime by design,
   // so these run off the per-paper lifetime citation counts.
   readonly hIndex = computed(() => {
-    const cites = (this.data()?.papers ?? [])
+    const cites = this.statsPapers()
       .map(p => p.citations ?? 0)
       .sort((a, b) => b - a);
     let h = 0;

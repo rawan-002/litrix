@@ -33,8 +33,8 @@ const CHART_MIN_YEAR = 2019;
       </div>
 
       <ng-container *ngIf="profile() as p">
-        <!-- Identity + chart as two separate cards -->
-        <div class="max-w-5xl mx-auto px-6 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Identity + chart as two separate cards (top-aligned) -->
+        <div class="max-w-5xl mx-auto px-6 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           <!-- Card: identity + KPIs -->
           <header class="lg:col-span-2 bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
             <div class="h-1.5 bg-indigo-600"></div>
@@ -104,9 +104,8 @@ const CHART_MIN_YEAR = 2019;
             </div>
           </header>
 
-          <!-- Card: citations chart -->
-          <section class="lg:col-span-1 bg-white rounded-2xl border border-gray-100 shadow-sm
-                          p-5 flex flex-col justify-center">
+          <!-- Card: citations chart (top-aligned, fits its content) -->
+          <section class="lg:col-span-1 bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <div *ngIf="hasChartData(); else noChart">
               <h3 class="text-xs font-semibold text-gray-700 mb-2">
                 Citations by year <span class="text-gray-400 font-normal">{{ CHART_MIN_YEAR }}+</span>
