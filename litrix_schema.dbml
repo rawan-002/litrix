@@ -39,6 +39,14 @@ Table "Authors" {
   "AuthorLinkID" int [pk]
   "AuthorNameRaw" text
   "Is_Verified" boolean
+  indexes {
+    "PaperID" [name: "ix_authors_paper"]
+    // Blocks double-linking the same researcher to the same paper after
+    // disambiguation. PK is the surrogate AuthorLinkID, so this is what
+    // actually enforces (UserID, PaperID) uniqueness. External/unmatched
+    // authors carry UserID = NULL and don't collide (NULLs are distinct).
+    ("UserID", "PaperID") [unique, name: "uq_authors_user_paper"]
+  }
 }
 
 Table "Citations" {
@@ -264,6 +272,19 @@ Table "ResearchPaper" {
   "VerificationSource" varchar(20)
   "VerifiedAt" timestamp
   "VerificationDetails" jsonb
+  indexes {
+    // DOI is the strongest natural key against duplicate papers. Partial so
+    // the many DOI-less papers (NULL) don't collide. ResearchPaper_DOI_key
+    // (a plain UNIQUE(DOI)) duplicates this and is redundant.
+    "DOI" [unique, name: "uq_paper_doi", note: "partial: WHERE DOI IS NOT NULL"]
+    // Title-based fallback dedupe for the DOI-less papers.
+    "NormalizedTitle" [unique, name: "uq_paper_normalized_title", note: "partial: WHERE NormalizedTitle IS NOT NULL"]
+    "Title" [unique, name: "researchpaper_title_unique"]
+    "JournalID" [name: "ix_researchpaper_journal"]
+    "TenantID" [name: "idx_paper_tenant"]
+    "Indexing" [name: "ix_research_paper_indexing"]
+    "AffiliationVerified" [name: "idx_paper_affiliation_verified"]
+  }
 }
 
 Table "Researcher" {

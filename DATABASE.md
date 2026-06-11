@@ -44,6 +44,24 @@ auto-generated from the live schema, so regenerate it after any schema change.
   attribution pipeline). `Researcher` holds the **display** copies
   (`ORCID_ID`, `Scopus_ID`, `OpenAlex_AuthorID`).
 
+## Dedup / natural keys (what stops duplicates)
+
+- **`ResearchPaper."DOI"` — `uq_paper_doi`**, partial unique
+  (`WHERE DOI IS NOT NULL`). The strongest guard against duplicate papers;
+  DOI-less papers (NULL) are allowed to repeat and fall back to title dedup.
+  A plain `UNIQUE(DOI)` (`ResearchPaper_DOI_key`) also exists and is redundant
+  with the partial index. Uniqueness is currently **global**, not per-tenant
+  (single tenant today); revisit `(TenantID, DOI)` only if Litrix goes
+  multi-institution.
+- **`ResearchPaper."NormalizedTitle"` — `uq_paper_normalized_title`**, partial
+  unique. Title-based fallback for the DOI-less papers. (`Title` also has a
+  full `UNIQUE`.)
+- **`Authors (UserID, PaperID)` — `uq_authors_user_paper`**, unique. The PK is
+  the surrogate `AuthorLinkID`, so *this* is what blocks double-linking one
+  researcher to one paper after disambiguation. External/unmatched authors
+  carry `UserID = NULL` and never collide (NULLs are distinct in a btree
+  unique), which is why it isn't written as a partial index.
+
 ## Known debt / gotchas
 
 - **Duplicate identity columns** (`Users` vs `Researcher` ORCID/Scopus; plus a
