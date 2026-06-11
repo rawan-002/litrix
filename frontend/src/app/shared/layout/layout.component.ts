@@ -34,6 +34,10 @@ export class LayoutComponent implements OnInit {
 
   readonly userMenuOpen = signal(false);
 
+  // Mobile drawer state. The sidebar is a static column on lg+ screens and an
+  // off-canvas drawer below that; this only drives the small-screen overlay.
+  readonly sidebarOpen = signal(false);
+
   // Unfinished campaign submissions (pending / in_progress / reopened),
   // shown as the badge on "My Reports". Loaded once on init; the
   // my-reports page calls reloadPendingReports() after a submit.
@@ -128,6 +132,14 @@ export class LayoutComponent implements OnInit {
     const name = this.auth.user()?.full_name || this.auth.user()?.email || '';
     return name.split(' ').slice(0, 2).map(s => s[0] || '').join('').toUpperCase() || '?';
   });
+
+  toggleSidebar() {
+    this.sidebarOpen.update(v => !v);
+  }
+
+  closeSidebar() {
+    this.sidebarOpen.set(false);
+  }
 
   toggleUserMenu() {
     this.userMenuOpen.update(v => !v);

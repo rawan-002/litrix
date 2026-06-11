@@ -1,8 +1,26 @@
 <div class="min-h-screen bg-ink-50 flex">
-  <aside class="w-64 bg-white border-r border-ink-200 flex flex-col fixed h-screen">
-    <div class="px-6 py-6 border-b border-ink-100">
-      <h1 class="text-xl font-semibold text-ink-900 tracking-tight">Litrix</h1>
-      <p class="text-xs text-ink-400 mt-0.5">Research Analytics</p>
+  <!-- Mobile backdrop: tap anywhere off the drawer to close it. -->
+  @if (sidebarOpen()) {
+    <div class="fixed inset-0 bg-black/40 z-40 lg:hidden"
+         (click)="closeSidebar()"></div>
+  }
+
+  <!-- Static column on lg+, off-canvas drawer below that. lg:translate-x-0 is
+       declared after the dynamic class so it always wins on desktop. -->
+  <aside class="w-64 bg-white border-r border-ink-200 flex flex-col
+                fixed inset-y-0 left-0 z-50 h-screen
+                transition-transform duration-200 ease-in-out lg:translate-x-0"
+         [ngClass]="sidebarOpen() ? 'translate-x-0' : '-translate-x-full'">
+    <div class="px-6 py-6 border-b border-ink-100 flex items-start justify-between">
+      <div>
+        <h1 class="text-xl font-semibold text-ink-900 tracking-tight">Litrix</h1>
+        <p class="text-xs text-ink-400 mt-0.5">Research Analytics</p>
+      </div>
+      <button (click)="closeSidebar()"
+              class="lg:hidden -mr-1 p-1 rounded-lg text-ink-400 hover:bg-ink-100"
+              aria-label="Close menu">
+        <app-icon name="x"></app-icon>
+      </button>
     </div>
 
     <nav class="flex-1 px-3 py-4 overflow-y-auto">
@@ -15,6 +33,7 @@
             <!-- Hover goes accent blue against the monochrome sidebar;
                  the active route stays inked-in (bg-ink-100). -->
             <a [routerLink]="item.route"
+               (click)="closeSidebar()"
                routerLinkActive="bg-ink-100 text-ink-900"
                [routerLinkActiveOptions]="{ exact: item.route === '/' }"
                class="flex items-center gap-3 px-3 py-2 rounded-lg
@@ -74,9 +93,15 @@
     </div>
   </aside>
 
-  <main class="flex-1 ml-64 min-h-screen">
-    <header class="bg-white border-b border-ink-200 px-8 py-4 flex items-center justify-end">
-      <div class="flex items-center gap-3">
+  <main class="flex-1 lg:ml-64 min-h-screen min-w-0">
+    <header class="bg-white border-b border-ink-200 px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between gap-3">
+      <!-- Hamburger: opens the drawer on small screens only. -->
+      <button (click)="toggleSidebar()"
+              class="lg:hidden -ml-1 p-2 rounded-lg text-ink-600 hover:bg-ink-100"
+              aria-label="Open menu">
+        <app-icon name="menu"></app-icon>
+      </button>
+      <div class="flex items-center gap-3 ml-auto">
         <a routerLink="/notifications"
            class="relative w-9 h-9 rounded-full hover:bg-ink-100 flex items-center justify-center transition">
           <app-icon name="bell" class="text-ink-500"></app-icon>
@@ -94,7 +119,7 @@
       </div>
     </header>
 
-    <div class="px-8 pt-4 pb-8">
+    <div class="px-4 sm:px-6 lg:px-8 pt-4 pb-8">
       <router-outlet></router-outlet>
     </div>
   </main>
