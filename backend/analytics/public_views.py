@@ -741,10 +741,26 @@ def paper_detail(request, paper_id: int):
                         if clean and clean not in ('and', '...'):
                             _add(clean)
 
-                # OpenAlex / ORCID: "authorships" list
+                # OpenAlex / ORCID: "authorships" list — only when it actually
+                # belongs to this paper. A few works carry enrichment from a
+                # different paper (e.g. Japanese names on a Saudi one); the
+                # Scholar author string is the reliable reference, so skip the
+                # authorships when they share no name token with it.
                 authorships = raw_log.get('authorships')
                 if isinstance(authorships, list):
-                    for ship in authorships:
+                    import re as _re
+                    _scholar = raw_log.get('authors')
+                    _ref = ((_scholar if isinstance(_scholar, str) else '')
+                            + ' ' + ' '.join(seen)).lower()
+                    _oa = ' '.join(
+                        ((s.get('author') or {}).get('display_name')
+                         or s.get('display_name') or '')
+                        for s in authorships if isinstance(s, dict)
+                    ).lower()
+                    _toks = [t for t in _re.split(r'[\s,;.]+', _ref)
+                             if len(t) >= 3 and t.isascii() and t.isalpha()]
+                    _oa_ok = (not _toks) or any(t in _oa for t in _toks)
+                    for ship in (authorships if _oa_ok else []):
                         if not isinstance(ship, dict):
                             continue
                         author = ship.get('author') or {}
