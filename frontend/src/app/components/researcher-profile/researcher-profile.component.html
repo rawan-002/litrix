@@ -13,7 +13,8 @@
     <!-- Identity card (full width) -->
     <header class="bg-white rounded-2xl border border-ink-100 overflow-hidden mb-6">
         <div class="h-1.5 bg-accent"></div>
-        <div class="p-6 sm:p-8">
+        <div class="p-6 sm:p-8 flex flex-col lg:flex-row gap-8 lg:items-center">
+          <div class="flex-1 min-w-0">
           <div class="flex gap-5">
             <div class="w-20 h-20 rounded-2xl bg-accent/10 text-accent flex items-center
                         justify-center text-2xl font-bold shrink-0">
@@ -86,6 +87,15 @@
               <div class="text-2xl sm:text-3xl font-bold text-accent">{{ fmt(kpiQ1()) }}</div>
               <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-0.5">Q1 Papers</div>
             </div>
+          </div>
+          </div>
+
+          <!-- Citations over time — bare chart inside the card, no inner card/padding -->
+          <div class="shrink-0 w-full lg:w-96">
+            <h3 class="text-xs font-semibold text-ink-700 mb-2">Citations over time</h3>
+            <app-citations-chart
+              [series]="data()?.citations_by_year ?? []"
+              [height]="180" />
           </div>
         </div>
       </header>
@@ -224,15 +234,8 @@
         }
       </section>
 
-      <!-- Right rail: citations chart + co-authors, stacked -->
+      <!-- Right rail: co-authors only (chart moved into the identity card) -->
       <aside class="lg:col-span-1 space-y-6">
-        <section class="bg-white rounded-2xl border border-ink-100 p-5">
-          <h3 class="text-xs font-semibold text-ink-700 mb-3">Citations over time</h3>
-          <app-citations-chart
-            [series]="data()?.citations_by_year ?? []"
-            [height]="180" />
-        </section>
-
         @if (d.coauthors?.length) {
           <section class="bg-white rounded-2xl border border-ink-100 p-5">
             <h2 class="text-sm font-semibold text-ink-900 mb-4">
