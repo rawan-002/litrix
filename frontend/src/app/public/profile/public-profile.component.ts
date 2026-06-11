@@ -86,19 +86,7 @@ const CHART_MIN_YEAR = 2019;
                    Nudged down a little on desktop so it sits below the name. -->
               <div class="shrink-0 lg:w-96 lg:mt-3 pt-5 border-t border-gray-100
                           lg:pt-0 lg:border-t-0 lg:border-l lg:pl-8">
-                <div class="flex gap-10">
-                  <div>
-                    <div class="text-2xl font-semibold text-gray-900">{{ avgCitations() }}</div>
-                    <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-0.5">Avg. / paper</div>
-                  </div>
-                  <div>
-                    <div class="text-2xl font-semibold text-gray-900">
-                      {{ p.stats.first_year || '—' }}–{{ p.stats.last_year || '—' }}
-                    </div>
-                    <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-0.5">Active years</div>
-                  </div>
-                </div>
-                <div *ngIf="hasChartData()" class="mt-4">
+                <div *ngIf="hasChartData()">
                   <h3 class="text-xs font-semibold text-gray-700 mb-2">
                     Citations by year <span class="text-gray-400 font-normal">{{ CHART_MIN_YEAR }}+</span>
                   </h3>
