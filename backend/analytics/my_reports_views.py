@@ -1,18 +1,16 @@
 """
 Researcher-facing endpoints for the Reporting Campaigns workflow.
 
-A researcher only ever sees submissions assigned to THEIR UserID —
-enforced at the SQL boundary in every query here. No permission check
-needed (the auth gate `IsAuthenticated` is enough) because every query
-is scoped by request.user.user_id.
+Every query is scoped to request.user.user_id, so a researcher only ever
+sees their own submissions — that SQL boundary is the access control here,
+which is why IsAuthenticated alone is enough.
 
-Endpoint map:
-    GET    /api/my-reports/                          — my submissions
-    GET    /api/my-reports/<sub_id>/                 — detail + paper list
-    POST   /api/my-reports/<sub_id>/decisions/       — record/update a decision
-    POST   /api/my-reports/<sub_id>/missing/         — add a missing-paper entry
-    DELETE /api/my-reports/<sub_id>/decisions/<id>/  — remove a decision (pre-submit)
-    POST   /api/my-reports/<sub_id>/submit/          — final submit
+    GET    /api/my-reports/                         — my submissions
+    GET    /api/my-reports/<sub_id>/                — detail + paper list
+    POST   /api/my-reports/<sub_id>/decisions/      — record/update a decision
+    POST   /api/my-reports/<sub_id>/missing/        — add a missing-paper entry
+    DELETE /api/my-reports/<sub_id>/decisions/<id>/ — remove a decision (pre-submit)
+    POST   /api/my-reports/<sub_id>/submit/         — final submit
 """
 import json
 
@@ -25,14 +23,11 @@ from rest_framework.response import Response
 from accounts.views import audit
 
 
-# ----------------------------------------------------------------------
-# Helpers
-# ----------------------------------------------------------------------
 def _ownership_or_404(cur, submission_id, user_id):
     """
-    Confirm the submission belongs to the caller. Returns the campaign
-    info needed by downstream queries, or None if no match (404).
-    Locking is done by the caller when needed.
+    Confirm the submission belongs to the caller. Returns the campaign info
+    downstream queries need, or None if there's no match (404). The caller
+    handles locking when it's needed.
     """
     cur.execute(
         '''SELECT s."SubmissionID", s."CampaignID", s."Status",
@@ -48,28 +43,18 @@ def _ownership_or_404(cur, submission_id, user_id):
 
 
 def _is_editable(submission_status, campaign_status):
-    """
-    Can the researcher still write decisions to this submission?
-
-    Yes when:
-      • submission is pending / in_progress / reopened
-      • campaign is still active
-    """
+    """True while the researcher can still write decisions: submission is
+    pending/in_progress/reopened and the campaign is still active."""
     return (
         submission_status in ('pending', 'in_progress', 'reopened')
         and campaign_status == 'active'
     )
 
 
-# ----------------------------------------------------------------------
-# List my submissions
-# ----------------------------------------------------------------------
 @api_view(['GET'])
 def my_submissions(request):
-    """
-    Returns active + recent submissions. Used by the sidebar badge AND
-    the /my-reports landing page.
-    """
+    """Active + recent submissions — feeds both the sidebar badge and the
+    /my-reports landing page."""
     with connection.cursor() as cur:
         cur.execute('''
             SELECT
@@ -94,7 +79,7 @@ def my_submissions(request):
         cols = [d[0] for d in cur.description]
         rows = [dict(zip(cols, r)) for r in cur.fetchall()]
 
-    # Count pending/in-progress for the sidebar badge
+    # Count pending/in-progress for the sidebar badge.
     pending_count = sum(
         1 for r in rows
         if r['Status'] in ('pending', 'in_progress', 'reopened')
@@ -107,21 +92,15 @@ def my_submissions(request):
     })
 
 
-# ----------------------------------------------------------------------
-# Submission detail — the heart of the researcher UI
-# ----------------------------------------------------------------------
 @api_view(['GET'])
 def submission_detail(request, submission_id):
     """
-    Full submission payload:
-        • submission + campaign metadata
-        • auto-populated paper list (papers authored by this user
-          whose PubYear ∈ campaign.target_years)
-        • per-paper existing decision (LEFT JOIN — null if untouched)
-        • separate list of missing-paper entries this user has added
-
-    The frontend renders each paper as a card with Confirm/Not-mine
-    toggles, and shows the missing list in its own section.
+    Full submission payload: submission + campaign metadata, the
+    auto-populated paper list (this user's papers within the campaign's
+    target years), each paper's existing decision (LEFT JOIN, null if
+    untouched), and the missing-paper entries this user added. The frontend
+    renders each paper as a Confirm/Not-mine card with missing in its own
+    section.
     """
     with connection.cursor() as cur:
         info = _ownership_or_404(cur, submission_id, request.user.user_id)
@@ -131,7 +110,7 @@ def submission_detail(request, submission_id):
         (_, campaign_id, sub_status, submitted_at,
          c_title, target_years, c_opens, c_closes, c_status) = info
 
-        # Auto-populated paper list, with any existing decision joined in.
+        # Auto-populated papers, with any existing decision joined in.
         cur.execute('''
             SELECT
                 rp."PaperID", rp."Title", rp."Title_En", rp."DOI",
@@ -178,7 +157,7 @@ def submission_detail(request, submission_id):
                 } if r[10] else None,
             })
 
-        # Missing-paper entries (decision='missing', no paper_id)
+        # Missing-paper entries (decision='missing', no paper_id).
         cur.execute('''
             SELECT "DecisionID", "MissingTitle", "MissingDOI",
                    "MissingYear", "Note", "DecidedAt",
@@ -221,19 +200,14 @@ def submission_detail(request, submission_id):
     })
 
 
-# ----------------------------------------------------------------------
-# Record / update a decision
-# ----------------------------------------------------------------------
 @api_view(['POST'])
 def record_decision(request, submission_id):
     """
     UPSERT a decision for an existing paper.
-
     Body: { paper_id: int, decision: 'confirmed' | 'not_mine', note?: str }
 
-    Idempotent — same paper+decision pair is a no-op. Different decision
-    on the same paper updates in place. This lets researchers change
-    their mind freely until they hit Submit.
+    Idempotent — re-sending the same decision is a no-op; a different one
+    updates in place, so researchers can change their mind until they submit.
     """
     paper_id  = request.data.get('paper_id')
     decision  = (request.data.get('decision') or '').strip()
@@ -263,9 +237,8 @@ def record_decision(request, submission_id):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # Verify the paper actually belongs to this researcher AND
-            # is in the campaign's target year window. Prevents
-            # researchers from submitting decisions on arbitrary papers.
+            # The paper must belong to this researcher and fall in the
+            # campaign's year window — blocks decisions on arbitrary papers.
             cur.execute(
                 '''SELECT 1 FROM "Authors" a
                    JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
@@ -280,7 +253,7 @@ def record_decision(request, submission_id):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # UPSERT — relies on the UNIQUE (SubmissionID, PaperID) constraint
+            # UPSERT on the UNIQUE (SubmissionID, PaperID) constraint.
             cur.execute(
                 '''INSERT INTO "ReportPaperDecision"
                        ("SubmissionID", "PaperID", "Decision", "Note")
@@ -294,7 +267,7 @@ def record_decision(request, submission_id):
             )
             decision_id = cur.fetchone()[0]
 
-            # Bump submission to in_progress if it was still pending
+            # First touch moves the submission to in_progress.
             if sub_status == 'pending':
                 cur.execute(
                     '''UPDATE "ReportSubmission"
@@ -309,16 +282,12 @@ def record_decision(request, submission_id):
     })
 
 
-# ----------------------------------------------------------------------
-# Add a missing-paper entry
-# ----------------------------------------------------------------------
 @api_view(['POST'])
 def add_missing(request, submission_id):
     """
     POST /api/my-reports/<sub_id>/missing/
     Body: { title: str, year: int, doi?: str, note?: str }
-
-    Creates a Decision row with PaperID=NULL. Admin resolves later.
+    Creates a decision row with PaperID=NULL for the admin to resolve later.
     """
     title = (request.data.get('title') or '').strip()
     year  = request.data.get('year')
@@ -374,14 +343,11 @@ def add_missing(request, submission_id):
                     status=status.HTTP_201_CREATED)
 
 
-# ----------------------------------------------------------------------
-# Delete a decision (pre-submit only)
-# ----------------------------------------------------------------------
 @api_view(['DELETE'])
 def delete_decision(request, submission_id, decision_id):
     """
-    Useful for removing a missing-paper entry the researcher added by
-    mistake, or undoing a confirmed/not_mine click before submit.
+    Remove a decision before submit — an accidental missing-paper entry, or
+    undoing a confirmed/not_mine click.
     """
     with transaction.atomic():
         with connection.cursor() as cur:
@@ -410,22 +376,15 @@ def delete_decision(request, submission_id, decision_id):
     return Response({'message': 'Decision removed'})
 
 
-# ----------------------------------------------------------------------
-# Submit (final)
-# ----------------------------------------------------------------------
 @api_view(['POST'])
 def submit_submission(request, submission_id):
     """
-    Lock the submission. After this:
-      • The frontend renders read-only.
-      • Decisions cannot be added/edited/deleted (enforced by
-        _is_editable returning False for status='submitted').
-      • Admin receives a Notification.
-      • IsLate is set if NOW() > campaign.closes_at.
+    Lock the submission: it goes read-only, further decisions are blocked
+    (_is_editable returns False for 'submitted'), the admin gets a
+    notification, and IsLate is set if we're past closes_at.
 
-    The submit endpoint does NOT enforce "must have decided on every
-    paper" — that's a product call. We let researchers submit partial
-    reports so they can come back later (admin can reopen if needed).
+    Partial reports are allowed on purpose — we don't require a decision on
+    every paper; researchers can come back and the admin can reopen.
     """
     with transaction.atomic():
         with connection.cursor() as cur:
@@ -468,11 +427,9 @@ def submit_submission(request, submission_id):
                 [now, is_late, submission_id],
             )
 
-            # Notify the campaign creator (admin who opened it). The
-            # message includes the researcher's display name so the
-            # admin's inbox is informative without a click-through.
-            # English copy throughout — matches the "Research Reports"
-            # label in the UI.
+            # Notify the admin who opened the campaign. Include the
+            # researcher's name so the inbox is useful without a click-through.
+            # English copy, matching the "Research Reports" UI label.
             full_name = (request.user.full_name_ar
                          or request.user.get_full_name()
                          or request.user.email)

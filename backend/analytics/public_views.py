@@ -1,47 +1,14 @@
 """
 Public read-only API for the supervisor dashboard.
 
-=============================================================================
-WHY THIS EXISTS
-=============================================================================
-The Litrix supervisor (مشرف) needs to view research output of the college
-without going through the auth flow. These endpoints serve a curated subset
-of the analytics data with NO authentication required — designed for
-embedding in a public dashboard at /public/dashboard.
+The supervisor (مشرف) views the college's research output without logging
+in, so these endpoints are fully public, read-only, and strip sensitive
+fields (Email, tracker IDs). DRF's anonymous throttle keeps scraping in
+check. If access control is ever needed, the route shape lets us drop a
+single @require_public_token decorator on the whole module.
 
-Security stance (intentional):
-    • Endpoints are FULLY PUBLIC — no token, no login.
-    • READ-ONLY — no mutations are possible.
-    • Sensitive fields (Email, raw IDs of certain trackers) are stripped
-      from responses; only academically-relevant information is exposed.
-    • Throttled by DRF's anonymous scope to discourage scraping.
-
-If the institution later requires access control, gate this entire module
-behind a single `@require_public_token` decorator + ENV var. The route
-shape is designed so that's a one-line change.
-
-=============================================================================
-ENDPOINT MAP
-=============================================================================
-    GET /api/public/overview/
-        College-wide KPI cards: total_papers, total_researchers,
-        total_citations, q1_papers, avg_h_index.
-
-    GET /api/public/departments/
-        4 department cards with per-dept stats.
-
-    GET /api/public/researchers/?department_id=N
-        Researcher list (browseable). Filter by department optional.
-
-    GET /api/public/researchers/{litrix_id}/profile/
-        Full profile: bio + papers + per-year citations chart.
-
-    GET /api/public/papers/?department_id=N&year=Y&quartile=Q1
-        Paper list with filters. Paginated.
-
-    GET /api/public/trends/
-        Yearly publication trend data (chart-ready).
-=============================================================================
+Endpoints: overview, departments, researchers (+profile), papers (+detail),
+kpis, trends, and an Excel export mirroring the admin layout.
 """
 
 from __future__ import annotations
@@ -53,30 +20,16 @@ from rest_framework import decorators, response
 from rest_framework.permissions import AllowAny
 
 
-# =============================================================================
-# DASHBOARD SCOPE
-# =============================================================================
-# This public dashboard is scoped to the current biennium (2025-2026).
-# Every aggregation that references PubYear is constrained to these years
-# so the supervisor sees "current academic output" not the lifetime archive.
-# To extend later (e.g. add 2027), append to this tuple and redeploy — no
-# other code change is needed because every query reads from the constant.
+# Dashboard scope: the current biennium. Every PubYear aggregation is
+# constrained to these so the supervisor sees current output, not the
+# lifetime archive. To add a year later, append here and redeploy.
 DASHBOARD_YEARS = (2025, 2026)
 
-# =============================================================================
-# RETRACTED PAPERS FILTER
-# =============================================================================
-# Papers that were officially withdrawn from their journals must NEVER count
-# toward the college's research metrics — NCAAA, ABET, and Scimago all
-# exclude retracted work from impact assessment.
-#
-# We detect retractions by title pattern, not by a flag column, because the
-# scraper imports don't always populate one consistently across sources
-# (Scholar uses "[retracted]", Scopus uses "RETRACTED:", retraction NOTES
-# start with "Retraction note:"). Any of these forms is grounds for exclusion.
-#
-# To use, embed this snippet in any WHERE clause:
-#   WHERE ... AND {NOT_RETRACTED_SQL}
+# Retracted papers must never count toward metrics (NCAAA/ABET/Scimago all
+# exclude them). We match on title because the scrapers don't populate a
+# flag consistently — Scholar uses "[retracted]", Scopus "RETRACTED:",
+# retraction notes start with "Retraction note:". Embed NOT_RETRACTED_SQL
+# in any WHERE clause.
 RETRACTION_PATTERNS = (
     "rp.\"Title\" ILIKE 'RETRACTED:%%'",
     "rp.\"Title\" ILIKE 'RETRACTED %%'",
@@ -88,38 +41,22 @@ RETRACTION_PATTERNS = (
 NOT_RETRACTED_SQL = "NOT (" + " OR ".join(RETRACTION_PATTERNS) + ")"
 
 
-# =============================================================================
-# AFFILIATION VERIFICATION FILTER
-# =============================================================================
-# Excludes papers that have been DEFINITIVELY verified as NOT-Al-Baha.
-# Run by `affiliation_verifier.py` — see backend/affiliation_verifier_README.md.
-#
-# Decision matrix:
-#   AffiliationVerified = TRUE   → include in stats (confirmed Al-Baha)
-#   AffiliationVerified = NULL   → include in stats (not yet verified —
-#                                  benefit of the doubt, retry later)
-#   AffiliationVerified = FALSE  → EXCLUDE (confirmed authored elsewhere)
-#
-# Why we don't exclude NULL papers: doing so would drop 119+ papers that
-# simply couldn't be verified due to paywalled PDFs or missing metadata.
-# Most of those ARE legitimate Al-Baha papers — Scholar's metadata is just
-# sparse. We err on the side of inclusion until proven otherwise.
+# Excludes papers definitively verified as NOT-Al-Baha (set by
+# affiliation_verifier.py). Decision matrix:
+#   TRUE  → include (confirmed Al-Baha)
+#   NULL  → include (unverified — benefit of the doubt, retry later)
+#   FALSE → exclude (confirmed authored elsewhere)
+# We keep NULL in on purpose: excluding it would drop 119+ papers we just
+# couldn't verify (paywalled PDFs, sparse Scholar metadata) — most of which
+# are legitimately ours.
 AFFILIATION_VERIFIED_SQL = '(rp."AffiliationVerified" IS DISTINCT FROM FALSE)'
 
 
-# =============================================================================
-# H-INDEX LIVE COMPUTATION
-# =============================================================================
-# We compute H-Index dynamically from the paper × citations data instead of
-# trusting the stale `Researcher.H_Index` column (which the scrapers don't
-# always refresh).
-#
-# Definition (NCAAA / standard): A researcher has h-index h if h of their
-# papers each have ≥ h citations. We sort papers per author by citations DESC,
-# rank them, then h = MAX(rank) where cites >= rank.
-#
-# Returns one row per UserID: ("UserID", h_index). Researchers with zero
-# attributed papers won't appear (use COALESCE downstream for them).
+# Compute h-index live from the paper × citations data rather than trust the
+# stale Researcher.H_Index column. Definition: a researcher has h-index h if
+# h of their papers each have >= h citations. We rank papers per author by
+# citations DESC and take MAX(rank) where cites >= rank. Returns ("UserID",
+# h_index); researchers with no attributed papers drop out (COALESCE downstream).
 CITES_EXPR = (
     'COALESCE('
     '(rp."RawData_Log"->\'cited_by\'->>\'value\')::int,'
@@ -145,10 +82,9 @@ H_INDEX_PER_USER_SQL = f'''
 '''
 
 
-# Apply to every public endpoint via decorator stack. Throttling is
-# intentionally omitted to keep the dashboard snappy for the supervisor.
-# If scraping becomes a concern, add `decorators.throttle_classes([...])`
-# here AND register the throttle rate in settings.REST_FRAMEWORK.
+# Decorator stack shared by every public endpoint. No throttle here so the
+# dashboard stays snappy — if scraping becomes a problem, add a
+# throttle_classes decorator and register its rate in REST_FRAMEWORK.
 public_endpoint = [
     decorators.api_view(['GET']),
     decorators.permission_classes([AllowAny]),
@@ -165,17 +101,8 @@ def _apply_decorators(decorators_list):
 
 
 def _resolve_years(request) -> list[int]:
-    """
-    Returns the list of years to scope by based on the `year` query param.
-
-    Accepts:
-      • year=2025  → [2025]
-      • year=2026  → [2026]
-      • year=all   → list(DASHBOARD_YEARS)
-      • (absent)   → list(DASHBOARD_YEARS)
-
-    Any value outside DASHBOARD_YEARS is dropped (security boundary).
-    """
+    """Years to scope by from the `year` param. A single in-range year gives
+    [year]; 'all', absent, or anything out of DASHBOARD_YEARS gives them all."""
     raw = (request.query_params.get('year') or '').strip().lower()
     if raw and raw != 'all' and raw.isdigit():
         y = int(raw)
@@ -184,23 +111,18 @@ def _resolve_years(request) -> list[int]:
     return list(DASHBOARD_YEARS)
 
 
-# =============================================================================
-# OVERVIEW (KPI cards across the whole college)
-# =============================================================================
-
 @_apply_decorators(public_endpoint)
 def overview(request):
     """
     GET /api/public/overview/[?year=2025|2026|all]
-    College-wide aggregated KPIs for the dashboard header.
-    Honors the dashboard's global year filter.
+    College-wide aggregated KPIs for the dashboard header, scoped by the
+    global year filter.
     """
     years = _resolve_years(request)
     with connection.cursor() as cur:
-        # CRITICAL: every paper-derived metric MUST join with Authors so
-        # orphan papers (no Litrix researcher attached) don't inflate the
-        # numbers. The Authors JOIN + DISTINCT pattern gives us "papers
-        # attributed to our faculty" semantics consistently.
+        # Join every paper-derived metric with Authors so orphan papers (no
+        # Litrix researcher attached) don't inflate the totals. The JOIN +
+        # DISTINCT gives consistent "attributed to our faculty" semantics.
         cur.execute(f'''
             WITH attributed_papers AS (
                 SELECT DISTINCT
@@ -241,29 +163,22 @@ def overview(request):
     })
 
 
-# =============================================================================
-# DEPARTMENTS — the 4 cards
-# =============================================================================
-
 @_apply_decorators(public_endpoint)
 def departments_list(request):
     """
     GET /api/public/departments/[?year=2025|2026|all]
-    Returns each department with summary stats. Drives the 4-card row
-    on the dashboard. Honors the global year filter.
+    Per-department summary stats — drives the department-card row. Scoped by
+    the global year filter.
     """
     years = _resolve_years(request)
     with connection.cursor() as cur:
-        # Paper-level counters restricted to DASHBOARD_YEARS.
-        # researchers_count stays "current faculty" (not year-scoped) because
-        # a faculty member exists regardless of publishing — the KPI section
-        # already shows the "publishing in year X" subset.
-        # DISTINCT-aware aggregation: when 2+ researchers from the same
-        # department co-author a paper, the Authors JOIN produces multiple
-        # rows for that (dept, paper) pair. COUNT(DISTINCT PaperID) handles
-        # the paper count fine, but SUM(cited_by_count) would multiply.
-        # Solution: aggregate citations in a CTE that has one row per
-        # (dept, paper), then SUM that.
+        # Paper counters are year-scoped; researchers_count stays current
+        # faculty (a member exists regardless of publishing — the KPI section
+        # already shows the "published in year X" subset).
+        # Citations need their own CTE: when co-authors share a department,
+        # the Authors JOIN duplicates the (dept, paper) row, so a plain SUM
+        # would multiply. COUNT(DISTINCT PaperID) is fine; SUM is not — hence
+        # one row per (dept, paper) in dept_papers, then SUM that.
         cur.execute(f'''
             WITH dept_papers AS (
                 SELECT DISTINCT
@@ -334,17 +249,12 @@ def departments_list(request):
     })
 
 
-# =============================================================================
-# RESEARCHERS — browseable list, optionally filtered by department
-# =============================================================================
-
 @_apply_decorators(public_endpoint)
 def researchers_list(request):
     """
     GET /api/public/researchers/[?department_id=N][&year=2025|2026|all]
-    Returns researchers (academically-relevant fields only).
-    Honors the dashboard's global year filter — paper/citation counts
-    reflect only the selected year (or both if 'all').
+    Researcher list (academic fields only). Paper/citation counts reflect
+    the selected year (or both if 'all').
     """
     years = _resolve_years(request)
     dept_id = request.query_params.get('department_id')
@@ -416,19 +326,14 @@ def researchers_list(request):
     })
 
 
-# =============================================================================
-# RESEARCHER PROFILE — drill-down by Litrix_ID
-# =============================================================================
-
 @_apply_decorators(public_endpoint)
 def researcher_profile(request, litrix_id: str):
     """
     GET /api/public/researchers/{litrix_id}/profile/
-    Returns researcher metadata + their papers + per-year citation series.
-    Resolves Litrix_ID (e.g. "Lit-000042") to UserID internally.
+    Researcher metadata + papers + per-year citation series. Resolves
+    Litrix_ID (e.g. "Lit-000042") to UserID internally.
     """
     with connection.cursor() as cur:
-        # Resolve LitrixID -> UserID
         cur.execute(
             'SELECT "UserID" FROM "Users" WHERE "Litrix_ID" = %s LIMIT 1',
             [litrix_id],
@@ -438,7 +343,6 @@ def researcher_profile(request, litrix_id: str):
             return response.Response({'error': 'researcher not found'}, status=404)
         user_id = row[0]
 
-        # Bio
         cur.execute(f'''
             SELECT
                 u."UserID",
@@ -464,10 +368,8 @@ def researcher_profile(request, litrix_id: str):
         ''', [user_id])
         bio = cur.fetchone()
 
-        # Aggregated stats — LIFETIME for individual profile pages.
-        # Unlike the main dashboard (biennium-scoped), the per-researcher
-        # profile shows their full career history. Supervisors want the
-        # complete picture when drilling into one person.
+        # Lifetime stats here, not biennium — a profile page should show the
+        # full career when a supervisor drills into one person.
         cur.execute('''
             SELECT
                 COUNT(DISTINCT rp."PaperID")                         AS total_papers,
@@ -490,8 +392,7 @@ def researcher_profile(request, litrix_id: str):
         ''', [user_id])
         stats_row = cur.fetchone()
 
-        # Papers list — LIFETIME, no year filter, to surface the
-        # researcher's entire publication record.
+        # Papers list — lifetime, no year filter, so the whole record shows.
         cur.execute('''
             SELECT
                 rp."PaperID",
@@ -520,7 +421,7 @@ def researcher_profile(request, litrix_id: str):
         ''', [user_id])
         papers = cur.fetchall()
 
-    # Build citations_by_year aggregate from researcher row (if any)
+    # Build the citations-by-year series from the researcher row (if any).
     citations_by_year_chart: list[dict] = []
     raw_cby = bio[11] if bio else None
     if raw_cby:
@@ -575,15 +476,11 @@ def researcher_profile(request, litrix_id: str):
     })
 
 
-# =============================================================================
-# PAPERS — filterable, paginated paper list
-# =============================================================================
-
 @_apply_decorators(public_endpoint)
 def papers_list(request):
     """
     GET /api/public/papers/?department_id=N&year=Y&quartile=Q1&page=1
-    Returns paginated paper list for the dashboard's papers tab.
+    Paginated paper list for the dashboard's papers tab.
     """
     dept_id  = request.query_params.get('department_id')
     year     = request.query_params.get('year')
@@ -609,7 +506,6 @@ def papers_list(request):
         where += " AND " + " AND ".join(filters_sql)
 
     with connection.cursor() as cur:
-        # Count
         cur.execute(f'''
             SELECT COUNT(DISTINCT rp."PaperID")
             FROM "ResearchPaper" rp
@@ -625,7 +521,6 @@ def papers_list(request):
         ''', params)
         total = cur.fetchone()[0]
 
-        # Page rows
         cur.execute(f'''
             SELECT DISTINCT
                 rp."PaperID",
@@ -676,16 +571,12 @@ def papers_list(request):
 
 
 
-# =============================================================================
-# PAPER DETAIL — modal data for a single paper
-# =============================================================================
-
 @_apply_decorators(public_endpoint)
 def paper_detail(request, paper_id: int):
     """
     GET /api/public/papers/{paper_id}/detail/
-    Returns rich metadata for a single paper. Drives the paper detail
-    modal opened from researcher-profile.
+    Rich metadata for one paper — drives the detail modal opened from a
+    researcher profile.
     """
     with connection.cursor() as cur:
         cur.execute('''
@@ -725,7 +616,7 @@ def paper_detail(request, paper_id: int):
         if not row:
             return response.Response({'error': 'paper not found'}, status=404)
 
-        # Internal authors (researchers from Users)
+        # Internal authors (registered researchers)
         cur.execute('''
             SELECT u."UserID", u."Litrix_ID", u."FullName_Ar",
                    a."AuthorOrder", a."IsCorrespondingAuthor"
@@ -745,7 +636,7 @@ def paper_detail(request, paper_id: int):
             for r in cur.fetchall()
         ]
 
-        # External co-authors (not in Users table)
+        # External co-authors (not registered)
         cur.execute('''
             SELECT "FullName", "Affiliation"
             FROM "ExternalAuthors"
@@ -756,13 +647,12 @@ def paper_detail(request, paper_id: int):
             {'name': r[0], 'affiliation': r[1]} for r in cur.fetchall()
         ]
 
-        # Fallback: if no ExternalAuthors recorded (common for older
-        # Scholar/OpenAlex/ORCID papers), parse the raw scraper JSON.
-        # We handle ALL known shapes because each scraper persists a
-        # different structure under "RawData_Log":
-        #   • Scopus           → "Authors" (Capital A), pipe-separated string
-        #   • Google Scholar   → "authors" (lowercase), comma-separated string
-        #   • OpenAlex / ORCID → "authorships" → list of {author: {display_name}}
+        # No ExternalAuthors row (common for older Scholar/OpenAlex/ORCID
+        # papers) → parse the raw scraper JSON. Each source stores authors
+        # differently under RawData_Log:
+        #   Scopus           "Authors" (capital A), pipe-separated
+        #   Google Scholar   "authors" (lowercase), comma-separated
+        #   OpenAlex / ORCID "authorships" -> [{author: {display_name}}]
         if not external_authors:
             cur.execute(
                 'SELECT "RawData_Log" FROM "ResearchPaper" WHERE "PaperID" = %s',
@@ -791,28 +681,27 @@ def paper_detail(request, paper_id: int):
                         {'name': clean, 'affiliation': affiliation}
                     )
 
-                # 1) Scopus shape — "Authors" (capital A), pipe-separated
+                # Scopus: pipe-separated
                 scopus_field = raw_log.get('Authors')
                 if isinstance(scopus_field, str) and '|' in scopus_field:
                     for raw_name in scopus_field.split('|'):
                         _add(raw_name)
 
-                # 2) Google Scholar shape — "authors" (lowercase) comma-separated string
+                # Google Scholar: comma-separated string (sometimes a list)
                 scholar_field = raw_log.get('authors')
                 if isinstance(scholar_field, str) and scholar_field:
-                    # Could also be a list (defensive); handle both
                     parts = (
                         scholar_field.split(',')
                         if ',' in scholar_field
                         else [scholar_field]
                     )
                     for raw_name in parts:
-                        # Strip "..." truncation markers Scholar sometimes adds
+                        # Strip the truncation marks Scholar sometimes adds
                         clean = raw_name.replace('…', '').replace('...', '').strip()
                         if clean and clean not in ('and', '...'):
                             _add(clean)
 
-                # 3) OpenAlex / ORCID shape — "authorships": [{author: {display_name}, institutions: [...]}]
+                # OpenAlex / ORCID: "authorships" list
                 authorships = raw_log.get('authorships')
                 if isinstance(authorships, list):
                     for ship in authorships:
@@ -825,15 +714,14 @@ def paper_detail(request, paper_id: int):
                             or ship.get('display_name')
                             or ship.get('name')
                         )
-                        # Try to surface a primary affiliation if present
+                        # Surface a primary affiliation if present
                         affs = ship.get('institutions') or []
                         aff_name = None
                         if affs and isinstance(affs[0], dict):
                             aff_name = affs[0].get('display_name')
                         _add(name, aff_name)
 
-                # 4) Generic list shape — "authors" as a list of strings/dicts
-                #    (some manual imports use this)
+                # Generic: "authors" as a list of strings/dicts (manual imports)
                 generic_authors = raw_log.get('authors')
                 if isinstance(generic_authors, list):
                     for entry in generic_authors:
@@ -871,18 +759,14 @@ def paper_detail(request, paper_id: int):
     })
 
 
-# =============================================================================
-# KPIs — academic performance metrics (NCAAA-style)
-# =============================================================================
-
 @_apply_decorators(public_endpoint)
 def kpis(request):
     """
     GET /api/public/kpis/?year=2026[&department_id=N]
-    Computes 3 standard academic performance KPIs:
-        KPI-I-13: % Faculty Published (in year)
-        KPI-I-14: Avg Publications per Faculty (in year)
-        KPI-I-15: Avg Citations per Publication (all-time)
+    Three NCAAA-style KPIs:
+        KPI-I-13: % faculty published (in year)
+        KPI-I-14: avg publications per faculty (in year)
+        KPI-I-15: avg citations per publication (all-time)
     """
     from datetime import datetime
     year_param = request.query_params.get('year')
@@ -899,7 +783,7 @@ def kpis(request):
         dept_params = [int(dept_id)]
 
     with connection.cursor() as cur:
-        # Total faculty (scoped to dept if filter given)
+        # Total faculty (dept-scoped if a filter was given)
         cur.execute(f'''
             SELECT COUNT(DISTINCT u."UserID")
             FROM "Users" u
@@ -909,7 +793,7 @@ def kpis(request):
         ''', dept_params)
         total_faculty = cur.fetchone()[0] or 0
 
-        # Faculty who published in `year`
+        # Faculty who published in the target year
         cur.execute(f'''
             SELECT COUNT(DISTINCT a."UserID")
             FROM "Authors" a
@@ -924,7 +808,7 @@ def kpis(request):
         ''', [year, *dept_params])
         published_count = cur.fetchone()[0] or 0
 
-        # Publications in `year`
+        # Publications in the target year
         cur.execute(f'''
             SELECT COUNT(DISTINCT rp."PaperID")
             FROM "ResearchPaper" rp
@@ -937,9 +821,9 @@ def kpis(request):
         ''', [year, *dept_params])
         pubs_in_year = cur.fetchone()[0] or 0
 
-        # All-time citations + publications (LIFETIME for KPI-15).
-        # CTE collapses (paper × author) duplicates so each paper's
-        # citations count once even when multiple researchers co-authored.
+        # All-time citations + publications for KPI-15. The CTE collapses
+        # (paper × author) duplicates so each paper counts once even with
+        # multiple co-authors.
         cur.execute(f'''
             WITH unique_papers AS (
                 SELECT DISTINCT
@@ -992,32 +876,24 @@ def kpis(request):
     })
 
 
-# =============================================================================
-# TRENDS — yearly chart data
-# =============================================================================
-# EXCEL EXPORT
-# =============================================================================
-
-
 @_apply_decorators(public_endpoint)
 def export_excel(request):
     """
     GET /api/public/export/excel/?years=2025,2026&sheets=overview,summary,departments,researchers,journals,conferences
 
-    Produces a workbook mirroring the admin export layout:
-        • Overview            — once
-        • Summary YYYY        — one per year picked
-        • Departments YYYY    — one per year picked (Journal/Conference split + Q1-Q4)
-        • Researchers         — once (window + all-time + h-index)
-        • Journals YYYY       — one per year picked
-        • Conferences YYYY    — one per year picked
+    Workbook mirroring the admin export layout:
+        Overview      — once
+        Summary YYYY  — one per picked year
+        Departments YYYY — one per year (journal/conference split + Q1-Q4)
+        Researchers   — once (window + all-time + h-index)
+        Journals YYYY / Conferences YYYY — one per picked year
     """
     from openpyxl import Workbook
     from openpyxl.styles import Font, Alignment, PatternFill
     from django.http import HttpResponse
     from datetime import datetime
 
-    # ---- parse + validate filters ------------------------------------
+    # Parse + validate filters.
     years_param = (request.query_params.get('years') or '').strip()
     if years_param:
         requested = [int(y.strip()) for y in years_param.split(',') if y.strip().isdigit()]
@@ -1037,7 +913,7 @@ def export_excel(request):
     wb = Workbook()
     wb.remove(wb.active)
 
-    # ---- shared styling ----------------------------------------------
+    # Shared styling.
     header_font = Font(bold=True, color='FFFFFF', size=11)
     header_fill = PatternFill('solid', fgColor='1D1D1F')
     header_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
@@ -1052,10 +928,9 @@ def export_excel(request):
             c.font = header_font; c.fill = header_fill; c.alignment = header_align
         ws.row_dimensions[1].height = 28
 
-    # Venue classifier — used to split papers into Journals vs Conferences.
-    # Mirrors the heuristic the admin export uses; OpenAlex/Scopus VenueType
-    # is sometimes blank so we also check the Journals.JournalName for the
-    # usual conference/proceedings tokens.
+    # Venue classifier to split journals from conferences. Same heuristic as
+    # the admin export — VenueType is often blank, so we also sniff the
+    # JournalName for the usual conference/proceedings tokens.
     venue_case_sql = '''
         CASE
             WHEN LOWER(COALESCE(j."VenueType", '')) LIKE 'conference%%' THEN 'conference'
@@ -1070,9 +945,7 @@ def export_excel(request):
 
     years_label = ', '.join(str(y) for y in years)
 
-    # ==================================================================
-    # OVERVIEW
-    # ==================================================================
+    # --- Overview sheet ---
     if 'overview' in sheets:
         ws = wb.create_sheet('Overview')
         ws['A1'] = 'Litrix — Research Analytics Overview'
@@ -1082,9 +955,8 @@ def export_excel(request):
         ws['A2'].font = sublabel_font
 
         with connection.cursor() as cur:
-            # SAME RIGOR as the dashboard's overview() endpoint: build the
-            # CTE once with Authors INNER JOIN, then aggregate. Without this,
-            # the Excel header would show different totals than the dashboard.
+            # Same CTE-with-Authors-JOIN approach as the overview() endpoint,
+            # so the Excel header totals match the dashboard exactly.
             cur.execute(f'''
                 WITH attributed_papers AS (
                     SELECT DISTINCT
@@ -1138,21 +1010,16 @@ def export_excel(request):
         for ch in 'ABCDEFG':
             ws.column_dimensions[ch].width = 18
 
-    # ==================================================================
-    # SUMMARY YYYY
-    # ==================================================================
+    # --- Summary YYYY sheets ---
     if 'summary' in sheets:
         for year in years:
             ws = wb.create_sheet(f'Summary {year}')
             _header_row(ws, ['Metric', 'Value'])
             with connection.cursor() as cur:
-                # CTE deduplicates (author × paper) rows so each paper is counted
-                # once even if multiple Litrix researchers co-authored it.
-                # Citation SUM picks one cites value per paper (MAX) so
-                # co-authorship doesn't inflate citations.
-                # INNER JOIN with Authors via the CTE filters orphan papers
-                # (no Litrix researcher attached) — matches the dashboard's
-                # "papers attributed to our faculty" semantics.
+                # The CTE dedupes (author × paper) rows so each paper counts
+                # once despite co-authorship, and the Authors JOIN drops
+                # orphan papers — same "attributed to our faculty" semantics
+                # as the dashboard.
                 cur.execute(f'''
                     WITH attributed_papers AS (
                         SELECT DISTINCT
@@ -1205,9 +1072,7 @@ def export_excel(request):
             ws.column_dimensions['A'].width = 22
             ws.column_dimensions['B'].width = 14
 
-    # ==================================================================
-    # DEPARTMENTS YYYY
-    # ==================================================================
+    # --- Departments YYYY sheets ---
     if 'departments' in sheets:
         for year in years:
             ws = wb.create_sheet(f'Departments {year}')
@@ -1264,9 +1129,7 @@ def export_excel(request):
             for ch, w in zip('ABCDEFGHIJ', widths):
                 ws.column_dimensions[ch].width = w
 
-    # ==================================================================
-    # RESEARCHERS
-    # ==================================================================
+    # --- Researchers sheet ---
     if 'researchers' in sheets:
         ws = wb.create_sheet('Researchers')
         _header_row(ws, [
@@ -1327,9 +1190,7 @@ def export_excel(request):
         for ch, w in zip('ABCDEFGHIJK', widths):
             ws.column_dimensions[ch].width = w
 
-    # ==================================================================
-    # JOURNALS YYYY
-    # ==================================================================
+    # --- Journals YYYY sheets ---
     if 'journals' in sheets:
         for year in years:
             ws = wb.create_sheet(f'Journals {year}')
@@ -1381,9 +1242,7 @@ def export_excel(request):
             for ch, w in zip('ABCDEFGHIJ', widths):
                 ws.column_dimensions[ch].width = w
 
-    # ==================================================================
-    # CONFERENCES YYYY
-    # ==================================================================
+    # --- Conferences YYYY sheets ---
     if 'conferences' in sheets:
         for year in years:
             ws = wb.create_sheet(f'Conferences {year}')
@@ -1438,16 +1297,12 @@ def export_excel(request):
     return resp
 
 
-# =============================================================================
-# TRENDS — yearly chart data for the dashboard
-# =============================================================================
-
 @_apply_decorators(public_endpoint)
 def trends(request):
     """
     GET /api/public/trends/
-    Returns yearly papers + citations counts across the dashboard window.
-    Retracted papers are excluded so the chart matches all other KPIs.
+    Yearly papers + citations across the dashboard window. Retracted papers
+    excluded so the chart lines up with the other KPIs.
     """
     years = list(DASHBOARD_YEARS)
     with connection.cursor() as cur:

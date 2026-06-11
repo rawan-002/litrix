@@ -1,18 +1,11 @@
 """
-Django settings for Litrix Backend.
+Django settings for the Litrix backend.
 
-Architecture notes:
-    • The backend READS from the existing LitrixDB (populated by the
-      scraper). It does NOT manage Django-style migrations on the
-      domain tables (Users, Researcher, ResearchPaper, etc.).
-    • Django's auth + admin tables go to a DIFFERENT schema-prefix to
-      keep the domain DB clean. We use the public schema for both, but
-      Django's tables are prefixed (django_*, auth_*, etc.) so they
-      don't conflict.
-    • All domain models declare `managed = False` so Django won't try
-      to ALTER them.
-    • Production deployment expects DATABASE_URL env var (set by Render,
-      Railway, Heroku, etc.). Falls back to discrete DB_* vars locally.
+The backend reads from the scraper-populated LitrixDB and never runs
+migrations on the domain tables (they're all managed = False); Django's own
+auth/admin tables share the schema but are prefixed (django_*, auth_*) so
+they don't collide. Production reads DATABASE_URL; locally it falls back to
+discrete DB_* vars.
 """
 from pathlib import Path
 import os
@@ -22,23 +15,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 load_dotenv(BASE_DIR.parent / '.env')
 
-# ----------------------------------------------------------------------
-# Security-critical defaults.
-#
-# Why fail-fast in production?
-#   A missing DJANGO_SECRET_KEY in production used to silently fall back
-#   to a hardcoded dev string — which means every Django session token,
-#   password reset token, and signed cookie becomes forgeable by anyone
-#   with the source. Same story for DEBUG: a missing env var would boot
-#   the server with `DEBUG = True`, leaking stack traces with secrets.
-#
-# New behavior:
-#   • DEBUG defaults to FALSE (safe default).
-#   • SECRET_KEY: if DEBUG is True, a dev-only key is allowed (so local
-#     setup keeps working). If DEBUG is False (production), a missing
-#     SECRET_KEY raises ImproperlyConfigured — the deploy hard-stops
-#     instead of running insecurely.
-# ----------------------------------------------------------------------
+# Security-critical defaults. DEBUG defaults to False so a missing env var
+# can't boot the server leaking stack traces. A dev-only SECRET_KEY is only
+# allowed when DEBUG is True; in production a missing key hard-stops the
+# deploy rather than falling back to a hardcoded string that would make every
+# session token, reset token, and signed cookie forgeable from the source.
 from django.core.exceptions import ImproperlyConfigured
 
 DEBUG = os.getenv('DJANGO_DEBUG', 'false').lower() == 'true'
@@ -157,22 +138,12 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
-# ----------------------------------------------------------------------
-# DRF Renderers — why DEBUG-conditional?
-#   The BrowsableAPIRenderer renders the HTML "explore the API" pages
-#   that make local dev pleasant. In production it's pure attack surface:
-#   it exposes endpoint schemas, available methods, and a CSRF-bypassing
-#   POST form to anonymous users who hit a 401 URL. Keep it for dev only.
-#
-# DRF Throttling — why?
-#   The auth endpoints (login, register, password-reset) are AllowAny.
-#   Without throttling, an attacker can run credential stuffing or
-#   email enumeration at full speed. We attach two named scopes:
-#     • 'auth_anon' — 5/min for anonymous auth attempts
-#     • 'auth_user' — 60/min for authenticated mutations
-#   Views opt in via @throttle_classes(...) so the rest of the API
-#   (analytics reads, etc.) stays untouched.
-# ----------------------------------------------------------------------
+# BrowsableAPIRenderer is dev-only: handy locally, but in production it's
+# attack surface — it exposes endpoint schemas and a CSRF-bypassing POST form
+# to anonymous users. Throttling guards the AllowAny auth endpoints (login,
+# register, reset) against credential stuffing and email enumeration:
+# auth_anon 5/min, auth_user 60/min. Views opt in via @throttle_classes so
+# the rest of the API stays untouched.
 _renderers = ['rest_framework.renderers.JSONRenderer']
 if DEBUG:
     _renderers.append('rest_framework.renderers.BrowsableAPIRenderer')
@@ -223,9 +194,9 @@ CORS_ALLOWED_ORIGINS = [
 if _extra_origins:
     CORS_ALLOWED_ORIGINS += [o.strip() for o in _extra_origins.split(',') if o.strip()]
 
-# Regex patterns let us allow ALL Vercel preview deployments
-# (litrix-XXX-rawan-002s-projects.vercel.app) without listing each
-# explicitly. Set CORS_ALLOWED_ORIGIN_REGEXES env var to override.
+# Regex patterns allow every Vercel preview deployment
+# (litrix-XXX-rawan-002s-projects.vercel.app) without listing each one.
+# Override with the CORS_ALLOWED_ORIGIN_REGEXES env var.
 import re as _re
 _default_regexes = [
     r'^https://litrix(-[a-z0-9]+)*-rawan-002s-projects\.vercel\.app$',

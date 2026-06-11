@@ -11,31 +11,17 @@ from rest_framework.response import Response
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 SCRAPER_DIR = PROJECT_ROOT / 'scrapers'
 
-# ============================================================================
-# Sync cooldown — researchers who already have papers stored shouldn't be
-# re-scraped on every whim. Hitting Scholar/OpenAlex repeatedly burns the
-# SerpAPI quota and rarely yields new data within a single week.
-#
-# The gate is enforced in TWO places (defense-in-depth):
-#   1. trigger_sync API — rejects with 409 unless force=true.
-#   2. The scraper scripts themselves — exit early when invoked without
-#      --force on a recently-synced researcher (protects against CLI
-#      invocation bypassing the API).
-# ============================================================================
+# Don't re-scrape researchers who already have papers on every whim — it
+# burns SerpAPI quota and rarely finds anything new within a week. Enforced
+# in two places: the trigger_sync API (409 unless force=true) and the
+# scraper scripts themselves (so a direct CLI call can't bypass it).
 SYNC_COOLDOWN_DAYS = 7
 
 
 def check_sync_eligibility(user_id: int) -> dict:
-    """
-    Decide whether a researcher should be (re-)scraped.
-
-    Returns a dict with:
-        eligible        : bool   — True only when sync should proceed
-        reason          : str    — human-readable code
-        last_synced_at  : str|None
-        papers_count    : int
-        cooldown_until  : str|None  ISO datetime when cooldown expires
-    """
+    """Decide whether a researcher should be (re-)scraped. Returns a dict:
+    eligible (bool), reason (code), last_synced_at, papers_count,
+    cooldown_until (ISO datetime when the cooldown expires)."""
     with connection.cursor() as cur:
         cur.execute('''
             SELECT
@@ -56,7 +42,7 @@ def check_sync_eligibility(user_id: int) -> dict:
 
     last_synced, papers = row[0], row[1] or 0
 
-    # Never synced AND no papers → first-time sync, always eligible.
+    # Never synced and no papers → first-time sync, always eligible.
     if last_synced is None and papers == 0:
         return {
             'eligible': True, 'reason': 'first_time',
@@ -64,8 +50,8 @@ def check_sync_eligibility(user_id: int) -> dict:
             'cooldown_until': None,
         }
 
-    # Has papers but no LastSyncedAt — defensive: papers were imported
-    # by another path. Treat as "needs sync" but warn caller.
+    # Papers but no LastSyncedAt → they were imported some other way.
+    # Treat as needing a sync, but flag the reason for the caller.
     if last_synced is None:
         return {
             'eligible': True, 'reason': 'unsynced_with_papers',
@@ -161,8 +147,7 @@ def trigger_sync(request):
 
     target_user_id = request.data.get('user_id')
     source = request.data.get('source', 'scholar')
-    # Allow callers to bypass the cooldown explicitly. Accept any truthy
-    # value so the frontend can send `true`, `1`, "true", etc.
+    # Explicit cooldown bypass — any truthy value works (true, 1, "true").
     force = bool(request.data.get('force', False))
 
     if not target_user_id:
@@ -183,8 +168,7 @@ def trigger_sync(request):
     if source == 'orcid' and not orcid_id:
         return Response({'error': 'User has no ORCID'}, status=400)
 
-    # Cooldown gate — protects the SerpAPI quota and avoids needless
-    # re-processing of already-stored papers. Surfaces enough metadata
+    # Cooldown gate — protects the SerpAPI quota. Returns enough metadata
     # for the frontend to render a meaningful "Force re-sync" prompt.
     eligibility = check_sync_eligibility(int(target_user_id))
     if not eligibility['eligible'] and not force:
@@ -208,16 +192,15 @@ def trigger_sync(request):
     else:
         args = ['--uid', str(target_user_id)]
 
-    # Pass --force through to the scraper script. The scraper enforces
-    # the same cooldown as a second line of defense; without --force it
-    # will refuse to call SerpAPI even if the API layer somehow let it
-    # through (e.g. CLI invocation, test scripts, etc).
+    # Pass --force through: the scraper enforces the same cooldown itself,
+    # so without it the script refuses to call SerpAPI even if the API
+    # layer let the request through (CLI, test scripts).
     if force:
         args.append('--force')
 
     with connection.cursor() as cur:
-        # Explicit %s::jsonb cast — see _kickoff_initial_sync in views.py
-        # for the full reasoning. Postgres won't implicitly cast TEXT → JSONB.
+        # %s::jsonb cast needed — Postgres won't implicitly cast TEXT → JSONB.
+        # See _kickoff_initial_sync in views.py for the full reasoning.
         cur.execute('''
             INSERT INTO "SyncJob" (
                 "TenantID", "UserID", "TriggeredBy", "Source", "Status", "Metadata"
@@ -226,7 +209,7 @@ def trigger_sync(request):
             RETURNING "JobID"
         ''', [
             request.user.tenant_id, target_user_id, request.user.user_id, source,
-            # Audit trail — was this a forced sync, what was the prior state?
+            # Audit trail: was this forced, and what was the prior state?
             __import__('json').dumps({
                 'force': force,
                 'prior_papers_count': eligibility['papers_count'],
@@ -248,14 +231,11 @@ def trigger_sync(request):
 
 
 def _run_project_script(job_id, steps):
-    """Background runner for repo-level maintenance jobs made of one or
-    more sequential script steps.
-
-    steps: list of (label, script_path, args, timeout) tuples. Steps run
-    in order; a failed step aborts the chain and marks the job failed.
-    Lifecycle mirrors _run_scraper (queued → running → completed/failed)
-    with each step's stdout tail captured into Metadata.
-    """
+    """Background runner for repo-level maintenance jobs built from sequential
+    steps. `steps` is a list of (label, script_path, args, timeout) tuples;
+    they run in order and a failure aborts the chain. Lifecycle mirrors
+    _run_scraper (queued → running → completed/failed), with each step's
+    stdout tail captured into Metadata."""
     with connection.cursor() as cur:
         cur.execute(
             'UPDATE "SyncJob" SET "Status" = %s, "StartedAt" = NOW() WHERE "JobID" = %s',
@@ -305,8 +285,8 @@ def _run_project_script(job_id, steps):
 
 
 def _run_citation_refresh(job_id, args):
-    """citations/refresh_hybrid.py — citation NUMBERS only on existing papers
-    (never inserts papers, never touches Authors links)."""
+    """citations/refresh_hybrid.py — refreshes citation numbers only on
+    existing papers; never inserts papers or touches Authors links."""
     _run_project_script(job_id, [
         ('citation-refresh',
          PROJECT_ROOT / 'citations' / 'refresh_hybrid.py', args, 3600),
@@ -314,18 +294,16 @@ def _run_citation_refresh(job_id, args):
 
 
 def _run_new_papers_scrape(job_id, args):
-    """Two-step chain (user requirement — scrape MUST verify affiliation):
+    """Scrape new papers, then verify their affiliation — scraping must
+    always be followed by the affiliation check (user requirement).
 
-    1. scrapers/scholar_new_papers.py — NEW papers only: per researcher,
-       fetches Scholar newest-first and stops at the first paper older
-       than their latest stored PubYear. Existing papers are never
-       re-downloaded or modified; cooldown (LastSyncedAt) untouched.
-    2. backend/affiliation_verifier.py --apply --source Scholar — the
-       multi-tier Al-Baha affiliation check (OpenAlex → Crossref → PDF →
-       publisher HTML) runs over the still-unverified Scholar papers,
-       which includes everything step 1 just inserted. Papers confirmed
-       NOT Al-Baha get AffiliationVerified=FALSE and drop out of the
-       dashboards; unresolvable ones stay NULL for manual review.
+    Step 1 (scholar_new_papers.py) fetches each researcher's Scholar profile
+    newest-first and stops at the first paper older than their latest stored
+    PubYear; existing papers and LastSyncedAt are left alone. Step 2 runs the
+    multi-tier Al-Baha check (OpenAlex → Crossref → PDF → publisher HTML) over
+    the still-unverified Scholar papers, including whatever step 1 inserted.
+    Confirmed non-Al-Baha papers get AffiliationVerified=FALSE and drop out of
+    the dashboards; unresolvable ones stay NULL for manual review.
     """
     _run_project_script(job_id, [
         ('scrape-new-papers',
@@ -340,17 +318,13 @@ def _run_new_papers_scrape(job_id, args):
 def trigger_citation_refresh(request):
     """POST /api/auth/sync/refresh-citations/
 
-    Body (all optional):
-        scope       : 'missing' (default — only papers without citation data)
-                      | 'all' (re-refresh every paper's citation numbers)
-        serp_budget : int >= 0, default 0. Hard cap on PAID SerpAPI calls;
-                      0 = OpenAlex only (free). Each call costs 1 credit.
-        user_id     : restrict the refresh to one researcher's papers.
+    Body (all optional): scope ('missing' default, or 'all' to re-refresh
+    every paper), serp_budget (int >= 0, default 0 = OpenAlex only; caps
+    paid SerpAPI calls), user_id (restrict to one researcher).
 
-    Citation-numbers-only by design: the underlying script never inserts
-    papers, never edits paper metadata, never touches Authors links, and
-    never modifies Researcher.CitationsByYear (the dashboard's author-level
-    graph stays Scholar-owned).
+    Citation numbers only — the script never inserts papers, edits metadata,
+    touches Authors links, or modifies Researcher.CitationsByYear (the
+    dashboard's author-level graph stays Scholar-owned).
     """
     if not request.user.has_litrix_perm('trigger_sync'):
         return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
@@ -363,13 +337,13 @@ def trigger_citation_refresh(request):
         serp_budget = max(0, int(request.data.get('serp_budget', 0)))
     except (TypeError, ValueError):
         return Response({'error': 'serp_budget must be an integer'}, status=400)
-    # Server-side ceiling so a typo in the UI can't burn the whole quota.
+    # Server-side ceiling so a UI typo can't burn the whole quota.
     serp_budget = min(serp_budget, 500)
 
     user_id = request.data.get('user_id')
 
-    # One refresh at a time — a second concurrent run would duplicate API
-    # calls (and SerpAPI spend) for zero benefit.
+    # One refresh at a time — a concurrent run just duplicates API calls
+    # (and SerpAPI spend) for nothing.
     with connection.cursor() as cur:
         cur.execute('''
             SELECT "JobID" FROM "SyncJob"
@@ -428,16 +402,14 @@ def trigger_citation_refresh(request):
 def trigger_new_papers_scrape(request):
     """POST /api/auth/sync/scrape-new/
 
-    Incremental scrape — NEW papers only (user requirement):
-    for every researcher with a Scholar_ID, look up the year of their most
-    recent stored paper, fetch their Scholar profile newest-first, and stop
-    the moment an older paper appears. Only genuinely-new papers are
-    inserted; existing papers are never re-downloaded or modified.
+    Incremental scrape of new papers only (user requirement): for every
+    researcher with a Scholar_ID, fetch their profile newest-first and stop
+    at the first paper older than their latest stored one. Only genuinely-new
+    papers are inserted; existing ones are never re-downloaded.
 
-    Body (optional):
-        serp_budget : int, default 100 — hard cap on SerpAPI calls.
-                      A researcher with no new papers costs exactly 1 call.
-        user_id     : restrict to one researcher.
+    Body (optional): serp_budget (int, default 100 — caps SerpAPI calls; a
+    researcher with no new papers costs exactly 1) and user_id (restrict to
+    one researcher).
     """
     if not request.user.has_litrix_perm('trigger_sync'):
         return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
@@ -450,8 +422,8 @@ def trigger_new_papers_scrape(request):
 
     user_id = request.data.get('user_id')
 
-    # One incremental scrape at a time — concurrent runs would race on the
-    # same researchers and double the SerpAPI spend.
+    # One incremental scrape at a time — concurrent runs race on the same
+    # researchers and double the SerpAPI spend.
     with connection.cursor() as cur:
         cur.execute('''
             SELECT "JobID" FROM "SyncJob"
@@ -509,10 +481,9 @@ def list_sync_jobs(request):
         params.append(int(user_filter))
 
     with connection.cursor() as cur:
-        # Surface enough name signals so the frontend can fall back
-        # gracefully when FullName_Ar is missing (researcher imported
-        # with English-only metadata, etc.). Display order on the
-        # client: Arabic name → English first+last → Email → User #ID.
+        # Pull several name fields so the frontend can fall back when
+        # FullName_Ar is missing (English-only imports). Client display
+        # order: Arabic name → English first+last → Email → User #ID.
         cur.execute(f'''
             SELECT sj."JobID", sj."Source", sj."Status",
                    sj."StartedAt", sj."FinishedAt", sj."ErrorMessage",
@@ -537,9 +508,8 @@ def list_syncable_researchers(request):
     if not request.user.has_litrix_perm('trigger_sync'):
         return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
 
-    # We compute cooldown fields right here in SQL so the frontend can
-    # disable the Sync button and offer a Force option without an extra
-    # round trip per researcher.
+    # Compute the cooldown fields in SQL so the frontend can disable the
+    # Sync button (and offer Force) without an extra round trip each.
     with connection.cursor() as cur:
         cur.execute('''
             SELECT u."UserID", u."Litrix_ID", u."FullName_Ar", u."Email",

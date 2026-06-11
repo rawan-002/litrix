@@ -1,16 +1,9 @@
-"""
-DRF ViewSets — REST endpoint logic.
+"""Read-only DRF endpoints for the dashboard and reports.
 
-Each ViewSet is read-only (ReadOnlyModelViewSet) because the Angular
-frontend never WRITES to the DB through these — writes go through the
-scraper and bootstrap scripts. This is enforced at the framework level
-(no PUT/POST/DELETE handlers exist), giving us defense-in-depth.
-
-Filtering: we expose django-filter's DjangoFilterBackend so the frontend
-can do GET /api/researchers/?department_id=2 etc.
-
-Dashboard scope: the overview/export endpoints focus on the years in
-FOCUS_YEARS. Edit this list to broaden or narrow the dashboard window.
+Everything here is ReadOnlyModelViewSet — the frontend never writes through
+these; the scraper and bootstrap scripts own all writes. Filtering goes
+through django-filter (e.g. ?department_id=2). The overview/export endpoints
+are scoped to FOCUS_YEARS, so widen or narrow that list to move the window.
 """
 import re
 
@@ -20,10 +13,9 @@ from django.db.models import Sum, Count, Avg
 from django.http import HttpResponse
 
 
-# Canonical Litrix-ID = "Lit-" + 6 zero-padded digits (e.g. Lit-000042).
-# We accept user input liberally (LIT-42, lit-0042, Lit-000042) and
-# normalize to canonical form before any DB lookup. This keeps URLs
-# robust to manual typing and case-insensitive path parameters.
+# Canonical Litrix-ID is "Lit-" + 6 zero-padded digits. We accept anything
+# loose (LIT-42, lit-0042, Lit-000042) and normalize before a DB lookup so
+# manually-typed and differently-cased URLs still resolve.
 LITRIX_ID_PATTERN = re.compile(r'^lit-(\d+)$', re.IGNORECASE)
 
 
@@ -46,21 +38,11 @@ from .serializers import (
     ResearchPaperSerializer,
 )
 
-# Two windows, two different purposes:
-#
-#   YEAR_FLOOR (2011) — the institutional "all-time" floor.
-#       College of Computing was founded in 2011, so any meaningful
-#       cumulative KPI (total papers, total citations, h-index avg)
-#       starts here. Used for the totals strip and the per-dept tables.
-#
-#   CHART_YEAR_FLOOR (2019) — the time-series chart floor.
-#       The trend/area charts on the dashboard render one data point
-#       per year. Stretching them back to 2011 makes a sparse, crowded
-#       X-axis and the recent growth signal gets lost. 2019 gives a
-#       readable 7–8 point window that still captures the post-sync
-#       era.
-#
-# Both upper bounds slide forward with the current year automatically.
+# YEAR_FLOOR is the institutional "all-time" floor: the College of Computing
+# was founded in 2011, so cumulative KPIs (totals strip, per-dept tables) start
+# there. CHART_YEAR_FLOOR (2019) is the trend-chart floor — stretching the
+# yearly charts back to 2011 just gives a sparse X-axis and buries recent
+# growth. Both upper bounds slide forward with the current year.
 YEAR_FLOOR        = 2011
 CHART_YEAR_FLOOR  = 2019
 
@@ -83,17 +65,11 @@ FOCUS_YEARS = _default_focus_years()
 
 @decorators.api_view(['GET'])
 def paper_detail(request, paper_id):
-    """
-    GET /api/papers/<paper_id>/detail/
+    """GET /api/papers/<paper_id>/detail/
 
-    Full paper details for the modal popup. Pulls everything from
-    ResearchPaper + RawData_Log (the original scraped JSON), including:
-      - title, abstract, doi, year, publisher
-      - authors string (raw from Scholar)
-      - citation_id, link, total citations
-      - per-year citations breakdown
-      - journal info (name, issn, venue type, quartile, IF)
-      - department + Al-Baha researchers attribution
+    Full paper details for the modal popup, pulled from ResearchPaper plus the
+    original scraped RawData_Log: metadata, raw author string, citation graph,
+    journal info, and the Al-Baha researchers attributed to the paper.
     """
     from django.db import connection
     with connection.cursor() as cur:
@@ -143,11 +119,10 @@ def paper_detail(request, paper_id):
         else:
             cby = cby_raw
 
-        # Normalise the authorships blob (RawData_Log->'authorships' is
-        # the OpenAlex-shape array we now store on every scrape). For
-        # each authorship pull the display name + every institution
-        # name we can reach (display_name + raw_affiliation_strings),
-        # and flag whether any affiliation matches Al-Baha University.
+        # RawData_Log->'authorships' is the OpenAlex-shape array we store on
+        # every scrape. For each entry grab the display name and every
+        # institution string we can reach, then flag whether any of them is
+        # Al-Baha University.
         import re as _re
         ALBAHA = _re.compile(r'(al[\s\-]?baha|albaha|الباحة)', _re.IGNORECASE)
         authorships_payload = []
@@ -200,9 +175,8 @@ def paper_detail(request, paper_id):
             'venue_type':      row[15],
             'quartile':        row[16],
             'impact_factor':   row[17],
-            # Structured authorships: empty until backfill_authorships
-            # runs (or until new scrapes populate it). Frontend should
-            # fall back to `raw_authors` when this list is empty.
+            # Empty until backfill_authorships runs or a new scrape fills it;
+            # the frontend falls back to raw_authors when this list is empty.
             'authorships':     authorships_payload,
         }
 
@@ -235,46 +209,31 @@ def _excel_response(filename: str):
 
 @decorators.api_view(['GET'])
 def export_excel(request):
-    """
-    GET /api/export/excel/?years=2025,2026&sheets=summary,departments,researchers,journals,conferences
+    """GET /api/export/excel/?years=2025,2026&sheets=summary,departments,researchers,journals,conferences
 
-    Build a comprehensive xlsx workbook based on user-selected years +
-    sheets. The Dashboard opens an options modal that posts to this URL
-    with the chosen filters. Defaults to all years + all sheets if no
-    params are provided.
-
-    Sheet layout (when all selected):
-        • Summary YYYY            — one per year picked
-        • Departments YYYY        — one per year picked (journal/conf split)
-        • Researchers             — single sheet, contributions in window
-        • Journals YYYY           — one per year, full paper details
-        • Conferences YYYY        — one per year, full paper details
+    Builds an xlsx workbook from the years + sheets the dashboard's options
+    modal picks (defaults to all of both). With everything selected you get a
+    Summary, Departments, Journals, and Conferences sheet per year, plus a
+    single Researchers sheet of contributions in the window.
     """
     from openpyxl import Workbook
     from openpyxl.styles import Font, Alignment, PatternFill
     from django.db import connection
 
-    # ------------------------------------------------------------------
-    # AuthZ gate. The export carries per-researcher rows (names, Scholar/
-    # ORCID IDs) + full paper lists, so it's limited to roles that may view
-    # researchers. Without this, a plain authenticated Researcher (who has
-    # neither perm and would otherwise fall into the unscoped branch below)
-    # could pull the whole institution.
-    # ------------------------------------------------------------------
+    # The export carries per-researcher rows (names, Scholar/ORCID IDs) and full
+    # paper lists, so limit it to roles that may view researchers. Otherwise a
+    # plain Researcher would fall into the unscoped branch below and pull the
+    # whole institution.
     _u = getattr(request, 'user', None)
     if not (_u and _u.is_authenticated and (
             _u.has_litrix_perm('view_all_researchers') or
             _u.has_litrix_perm('view_dept_researchers'))):
         return response.Response({'error': 'Forbidden'}, status=403)
 
-    # ------------------------------------------------------------------
-    # HoD scoping. A HoD (view_dept_researchers without view_all_researchers)
-    # may only export their OWN department, so every sheet below is filtered
-    # to `hod_dept_id`. Admin/Dean get the full institution (hod_dept_id is
-    # None → all the `scoped`-guarded clauses are skipped). The shared helper
-    # resolves the department via Department.HeadID then current Works_In and
-    # returns the sentinel -1 for a HoD with no department at all.
-    # ------------------------------------------------------------------
+    # A HoD may only export their own department, so every sheet below is
+    # filtered to hod_dept_id. Admin/Dean get the full institution (hod_dept_id
+    # is None, so the `scoped` clauses are skipped). The helper returns the
+    # sentinel -1 for a HoD with no department at all.
     hod_dept_id = _hod_scope_department_id(request)
     if hod_dept_id == -1:
         return response.Response(
@@ -296,9 +255,9 @@ def export_excel(request):
             _row = _c.fetchone()
             hod_dept_name = _row[0] if _row else None
 
-    # EXISTS predicate: the paper has at least one author whose CURRENT
+    # EXISTS predicate: the paper has at least one author whose current
     # position is in the HoD's department. Appended to paper queries when
-    # scoped; `rp_alias` is the ResearchPaper alias in the target query.
+    # scoped; rp_alias is the ResearchPaper alias in the target query.
     def _dept_paper_clause(rp_alias: str) -> str:
         return (
             f' AND EXISTS (SELECT 1 FROM "Authors" a_dept '
@@ -319,9 +278,9 @@ def export_excel(request):
     if not years:
         years = list(FOCUS_YEARS)
 
-    # Affiliation filter — when the dashboard exports in "Al-Baha only" mode it
-    # passes ?affiliation=albaha; every paper/citation query below then drops
-    # papers confirmed authored elsewhere, so the workbook matches the screen.
+    # In "Al-Baha only" mode (?affiliation=albaha) every paper/citation query
+    # below drops papers confirmed authored elsewhere, so the workbook matches
+    # the screen.
     albaha_only = _albaha_only(request)
     AFFIL     = _affil_clause(albaha_only, 'rp')
     AFFIL_RP2 = _affil_clause(albaha_only, 'rp2')
@@ -339,8 +298,8 @@ def export_excel(request):
     header_fill = PatternFill('solid', fgColor='1D1D1F')
     header_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
-    # Apple-style KPI overview sheet — first sheet so it opens by default.
-    # Mirrors the dashboard cards: Researchers / Publications / Citations / h-index.
+    # KPI overview as the first sheet so it opens by default; mirrors the
+    # dashboard cards (Researchers / Publications / Citations / h-index).
     if 'summary' in sheets or 'departments' in sheets or 'researchers' in sheets:
         ws_overview = wb.create_sheet('Overview', 0)
         big_value_font = Font(bold=True, size=28, color='1D1D1F')
@@ -357,9 +316,8 @@ def export_excel(request):
         ws_overview['A2'] = f'Window: {years_label}{scope_label}'
         ws_overview['A2'].font = sublabel_font
 
-        # KPI computation — same per-year semantics as the dashboard. Each
-        # KPI is its own small query so the HoD department filter can be
-        # added cleanly (param order stays trivial).
+        # Same per-year semantics as the dashboard. Each KPI is its own small
+        # query so the HoD filter drops in cleanly without juggling param order.
         year_strs = [str(y) for y in years]
         with connection.cursor() as cur:
             # Researchers + active (scoped to current dept positions).
@@ -402,10 +360,10 @@ def export_excel(request):
             cur.execute(papers_sql, papers_params)
             p_total, p_q1 = cur.fetchone()
 
-            # Citations RECEIVED in the selected years, per-paper
-            # (ResearchPaper.CitationsByYear) — the SAME definition the
-            # overview dashboard uses, so the export and the dashboard agree.
-            # EXISTS (not JOIN) counts each paper once across co-authors.
+            # Citations received in the selected years, per-paper
+            # (ResearchPaper.CitationsByYear) — same definition as the overview
+            # dashboard so the two agree. EXISTS, not JOIN, so each paper counts
+            # once across its co-authors.
             year_keys_expr = _cites_expr('rp', years)
             cit_sql = (
                 f'SELECT COALESCE(SUM({year_keys_expr}), 0) FROM "ResearchPaper" rp '
@@ -438,8 +396,7 @@ def export_excel(request):
                 cur.execute('SELECT ROUND(AVG(h_index)::numeric, 1) FROM v_researcher_h_index')
             avg_h = cur.fetchone()[0]
 
-        # KPI cards laid out across columns (4 cards in a row)
-        # Each card spans 2 columns: A-B, C-D, E-F, G-H
+        # Four cards in a row, each spanning two columns (A-B, C-D, E-F, G-H).
         cards = [
             ('Researchers',  str(r_total),                f'{r_active} active'),
             ('Publications', f'{p_total:,}',              f'{p_q1} in Q1 journals'),
@@ -450,18 +407,15 @@ def export_excel(request):
             col_label = chr(ord('A') + idx * 2)
             col_value = chr(ord('A') + idx * 2)  # same col, multiple rows
 
-            # Row 4: label
             cell_label = ws_overview.cell(row=4, column=idx * 2 + 1, value=label.upper())
             cell_label.font = label_font
             cell_label.fill = bg_fill
 
-            # Row 5: big value
             cell_val = ws_overview.cell(row=5, column=idx * 2 + 1, value=value)
             cell_val.font = big_value_font
             cell_val.fill = bg_fill
             ws_overview.row_dimensions[5].height = 44
 
-            # Row 6: sublabel
             cell_sub = ws_overview.cell(row=6, column=idx * 2 + 1, value=sub)
             cell_sub.font = sublabel_font
             cell_sub.fill = bg_fill
@@ -485,11 +439,8 @@ def export_excel(request):
             ws.column_dimensions[chr(64 + col_idx)].width = w
 
     def wrap_column(ws, col_idx: int):
-        """
-        Apply wrap_text alignment to every body cell in the given
-        column. Used for the Abstract column so long paragraphs render
-        readably in Excel instead of overflowing into the next cell.
-        """
+        """Wrap text in every body cell of a column — used for the Abstract
+        column so long paragraphs don't overflow into the next cell."""
         from openpyxl.styles import Alignment
         for row in range(2, ws.max_row + 1):
             ws.cell(row=row, column=col_idx).alignment = Alignment(
@@ -527,9 +478,8 @@ def export_excel(request):
                 cur.execute(summary_sql, summary_params)
                 p, q1, q2, q3, q4, jp, cp = cur.fetchone()
 
-                # Citations RECEIVED this year, per-paper
-                # (ResearchPaper.CitationsByYear[year]) — same definition as
-                # the overview dashboard. EXISTS counts each paper once.
+                # Citations received this year, per-paper — same definition as
+                # the overview dashboard; EXISTS counts each paper once.
                 cit_sql = (
                     f'SELECT COALESCE(SUM({_cites_expr("rp", [year])}), 0) '
                     'FROM "ResearchPaper" rp '
@@ -572,11 +522,10 @@ def export_excel(request):
             ])
             style_header(ws, 10)
             with connection.cursor() as cur:
-                # Citations RECEIVED this year, per-paper
-                # (ResearchPaper.CitationsByYear[year]) — same definition as
-                # the overview dashboard. DISTINCT on (dept, paper) dedupes a
-                # paper co-authored by two members of the same department so
-                # its citations aren't double-counted for that department.
+                # Citations received this year, per-paper, same definition as
+                # the overview dashboard. DISTINCT on (dept, paper) keeps a paper
+                # co-authored by two members of the same department from being
+                # double-counted for that department.
                 dept_sql = (
                     'WITH dept_cites AS ('
                     '    SELECT dept AS "DepartmentID", SUM(cites) AS cites FROM ('
@@ -682,8 +631,8 @@ def export_excel(request):
                          r."LastSyncedAt"
                 ORDER BY papers_window DESC, h_index DESC
             '''
-            # Per-year keys for the windowed citation sum (named params so they
-            # coexist with the dict-style %(years)s / %(dept)s params).
+            # Named params so the per-year keys coexist with the dict-style
+            # %(years)s / %(dept)s params.
             cite_window_expr = ' + '.join([
                 f'COALESCE((rp_w."CitationsByYear"->>%(y{i})s)::int, 0)'
                 for i in range(len(years))
@@ -706,12 +655,8 @@ def export_excel(request):
     if 'journals' in sheets:
         for year in sorted(years):
             ws = wb.create_sheet(f'Journals {year}')
-            # Columns:
-            #   • Department, Title, Abstract
-            #   • Two author columns:
-            #       1. Al-Baha researchers only (Arabic names)
-            #       2. All authors combined (Arabic + foreign, no affiliations)
-            #   • Journal, Quartile, IF, Indexing, Citations, DOI
+            # Two author columns: Al-Baha researchers only (Arabic), then all
+            # authors combined (Arabic + foreign, no affiliations).
             ws.append([
                 'Department', 'Title', 'Abstract',
                 'Al-Baha Researchers', 'All Authors (raw)',
@@ -720,11 +665,9 @@ def export_excel(request):
             ])
             style_header(ws, 11)
             with connection.cursor() as cur:
-                # LEFT JOIN ResearchPaper to attach Abstract.
-                # v_paper_details doesn't expose paper_id, so we match
-                # by DOI when available (canonical identifier) and fall
-                # back to a case-insensitive title match for papers
-                # without a DOI on either side.
+                # v_paper_details has no paper_id, so to attach Abstract we
+                # match ResearchPaper by DOI when available and fall back to a
+                # case-insensitive title match when either side lacks a DOI.
                 journals_sql = (
                     'SELECT '
                     '    v.department_name, v.title, '
@@ -903,41 +846,27 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
 
     @decorators.action(detail=True, methods=['get'])
     def profile(self, request, pk=None):
-        """
-        GET /api/researchers/{id}/profile/
+        """GET /api/researchers/{id}/profile/
 
-        `id` accepts either an internal numeric UserID or the public
-        Lit-NNNNNN identifier. We resolve Litrix_ID → UserID at the
-        boundary so the rest of the SQL can keep using the integer PK
-        (cheaper joins, established indices). Why allow both?
-          • Backward compat with any tooling that stored numeric IDs.
-          • The frontend now drives all profile URLs with Litrix_ID.
+        `id` accepts either a numeric UserID or the public Lit-NNNNNN; we
+        resolve to the integer PK at the boundary so the SQL keeps using the
+        indexed key. Both are accepted for backward compat with tooling that
+        stored numeric IDs (the frontend now uses Litrix_ID everywhere).
 
-        One-shot payload powering the researcher profile page:
-          - identity         (name, dept, scholar/orcid/openalex IDs)
-          - aggregated stats (papers, citations, h-index)
-          - per-year citations (merged across all papers — chart-ready)
-          - papers list      (full metadata: journal, quartile, citations,
-                              citations_by_year, source, indexing)
-
-        Why one endpoint: the profile page renders 3 sections that all
-        depend on the same data; batching avoids 3 round-trips and a
-        flash of empty-then-filled UI.
+        One shot for the whole profile page — identity, aggregated stats,
+        chart-ready per-year citations, and the papers list. The page renders
+        all of these from the same data, so batching avoids three round-trips
+        and a flash of empty-then-filled UI.
         """
         from django.db import connection
 
-        # Resolve the public identifier → internal UserID at the boundary.
-        # Two paths:
-        #   1. Litrix-ID (case-insensitive, any digit length) → normalize
-        #      to canonical Lit-NNNNNN, then look up.
-        #   2. Pure numeric → treat as UserID directly.
-        # Any malformed input returns 400 instead of leaking a 500 from
-        # a Postgres type error.
+        # Litrix-ID gets normalized then looked up; a pure number is treated as
+        # the UserID directly. Malformed input returns 400 rather than leaking a
+        # 500 from a Postgres type error.
         canonical = normalize_litrix_id(pk)
         if canonical is not None:
-            # Match the numeric core regardless of case or zero-padding
-            # in the stored value. This way "LIT-0001", "Lit-000001",
-            # and "lit-1" all resolve to the same user.
+            # Match on the numeric core so "LIT-0001", "Lit-000001" and "lit-1"
+            # all resolve to the same user regardless of stored zero-padding.
             seq = int(LITRIX_ID_PATTERN.match(pk.strip()).group(1))
             with connection.cursor() as cur:
                 cur.execute(
@@ -1001,9 +930,8 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                 'litrix_id':         row[11],
             }
 
-            # Aggregated stats. For citations, sum the per-paper Scholar
-            # cited_by.value (most accurate per-paper signal), falling
-            # back to OpenAlex's cumulative count.
+            # For citations, sum the per-paper Scholar cited_by.value (the most
+            # accurate per-paper signal), falling back to OpenAlex's count.
             cur.execute('''
                 SELECT
                     COUNT(DISTINCT rp."PaperID")                         AS total_papers,
@@ -1025,8 +953,8 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
             ''', [resolved_user_id])
             stats_row = cur.fetchone()
 
-            # If we have author-level per-year data from Scholar, prefer
-            # its TOTAL (Scholar's own count) over per-paper aggregation.
+            # When Scholar gives us an author-level per-year graph, prefer its
+            # total over the per-paper aggregation above.
             try:
                 cur.execute(
                     'SELECT "CitationsByYear" FROM "Researcher" WHERE "UserID" = %s',
@@ -1064,10 +992,9 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                 'isi_papers':      stats_row[4],
             }
 
-            # Per-year citations: PREFER Researcher.CitationsByYear (the
-            # author-level data straight from Scholar's cited_by.graph,
-            # which is what Scholar itself displays in the profile).
-            # Fall back to summing per-paper CitationsByYear if not set.
+            # Prefer Researcher.CitationsByYear — the author-level graph straight
+            # from Scholar's cited_by.graph, which is what Scholar shows on the
+            # profile. Fall back to summing the per-paper CitationsByYear.
             citations_by_year = []
             try:
                 cur.execute('''
@@ -1111,10 +1038,8 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                         for r in cur.fetchall()
                     ]
 
-                # Clip to CHART_YEAR_FLOOR (2019) to match the admin chart
-                # window. Years before 2019 stretch the X-axis and the
-                # recent-growth signal gets lost. Same logic as the
-                # admin yearly_breakdown view (see line ~1353).
+                # Clip to CHART_YEAR_FLOOR to match the admin chart window —
+                # earlier years just stretch the X-axis and bury recent growth.
                 citations_by_year = [
                     pt for pt in citations_by_year
                     if pt['year'] >= CHART_YEAR_FLOOR
@@ -1122,10 +1047,9 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
             except Exception:
                 citations_by_year = []
 
-            # Papers list with full metadata.
-            # Journal name falls back to Scholar's free-text "publication"
-            # string (like "Sustainability 14 (2), 829, 2022") when we
-            # don't have a JournalID linked.
+            # Papers with full metadata. When there's no linked JournalID, the
+            # journal name falls back to Scholar's free-text "publication" string
+            # (e.g. "Sustainability 14 (2), 829, 2022").
             cur.execute('''
                 SELECT
                     rp."PaperID", rp."Title", rp."DOI", rp."PubYear",
@@ -1201,17 +1125,14 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 def _hod_scope_department_id(request):
-    """
-    The single department a HoD-scoped user is limited to, or None for
-    institution-wide roles (Admin/Dean see every department).
+    """The one department a HoD-scoped user is limited to, or None for
+    institution-wide roles (Admin/Dean).
 
-    A HoD is anyone with `view_dept_researchers` but NOT
-    `view_all_researchers`. Their department is resolved two ways, in
-    order: the canonical `Department.HeadID`, then their current
-    `Works_In` position — invitation-provisioned HoDs are linked via
-    `Works_In`, not `HeadID`. Returns the sentinel -1 when the user IS
-    HoD-scoped but has no department at all, so callers scope to nothing
-    instead of accidentally leaking every department.
+    A HoD has `view_dept_researchers` but not `view_all_researchers`. We resolve
+    their department from `Department.HeadID` first, then their current
+    `Works_In` position — invite-provisioned HoDs are linked via Works_In, not
+    HeadID. Returns the sentinel -1 when a HoD has no department at all, so
+    callers scope to nothing rather than leaking every department.
     """
     u = getattr(request, 'user', None)
     if not (u and u.is_authenticated):
@@ -1239,19 +1160,13 @@ def _hod_scope_department_id(request):
     return r[0] if r else -1
 
 
-# ----------------------------------------------------------------------------
 # This-period (FOCUS_YEARS) per-paper stats for the /departments page.
-#
-# The v_department_stats / v_researcher_stats views are ALL-TIME + lifetime
-# citations, which disagreed with the overview dashboard (this-period
-# per-paper). Rather than rewrite those shared views (they feed other places
-# and an individual researcher's "lifetime total" is legitimately different),
-# we recompute the period-scoped numbers here with the SAME definition the
-# overview uses, and override them onto the serialized rows. Result: the
-# /departments cards + researcher rows now agree with the overview to the
-# number. Structural columns the views own (researcher counts, h-index) are
-# left untouched.
-# ----------------------------------------------------------------------------
+# v_department_stats / v_researcher_stats are all-time + lifetime citations,
+# which disagreed with the overview dashboard. Rather than rewrite those shared
+# views (a researcher's lifetime total is legitimately different elsewhere), we
+# recompute the period-scoped numbers here with the overview's definition and
+# override them onto the serialized rows. Structural columns the views own
+# (researcher counts, h-index) are left untouched.
 def _albaha_only(request):
     """True when the caller asked to exclude papers confirmed authored under a
     non-Al-Baha affiliation (?affiliation=albaha). Mirrors the overview parse."""
@@ -1260,19 +1175,14 @@ def _albaha_only(request):
     return v in ('albaha', 'al-baha', 'verified', 'true', '1')
 
 
-# ===========================================================================
-# CANONICAL SQL FRAGMENTS  (single source of truth)
-# ===========================================================================
-# These two helpers define, in ONE place, how every dashboard/report surface
-# expresses (a) the per-paper "citations received in a set of years" sum and
-# (b) the Al-Baha affiliation filter. The formulas used to be copy-pasted
-# across overview(), the /departments helpers, and export_excel() — which is
-# exactly how the surfaces drifted apart before. Change the rule here and it
-# propagates everywhere; the surfaces can no longer disagree.
-#
+# Single source of truth for two SQL fragments every dashboard/report surface
+# needs: the per-paper "citations received in a set of years" sum and the
+# Al-Baha affiliation filter. These were copy-pasted across overview(), the
+# /departments helpers, and export_excel(), which is exactly how those surfaces
+# drifted apart before — change the rule here and it propagates everywhere.
 # `alias` is the ResearchPaper alias in the target query (rp, rp_all, rp2,
 # rp_w, ...). `_cites_expr` emits one %s per year; the caller appends
-# [str(y) for y in years] to its params, in the position the expr appears.
+# [str(y) for y in years] to its params where the expr appears.
 
 def _cites_expr(alias, years):
     """Per-paper citations RECEIVED in `years` (sum of CitationsByYear keys)."""
@@ -1481,15 +1391,11 @@ class PublicationTrendViewSet(viewsets.ReadOnlyModelViewSet):
 
 @decorators.api_view(['GET'])
 def yearly_breakdown(request):
-    """
-    GET /api/yearly-breakdown/?year=2025
+    """GET /api/yearly-breakdown/?year=2025
 
-    Returns the department-level breakdown for a given year:
-        • For each department: journal_papers + conference_papers + citations
-        • A flat list of all papers (split by venue_type on the frontend)
-
-    The frontend renders this as: Year tabs → Dept summary cards →
-    expandable Journal/Conference paper lists.
+    Department-level breakdown for one year: per-department journal/conference
+    counts and citations, plus a flat paper list the frontend splits by
+    venue_type into expandable lists under each department card.
     """
     year = request.query_params.get('year')
     if not year:
@@ -1503,9 +1409,9 @@ def yearly_breakdown(request):
             {'error': 'year must be an integer'}, status=400
         )
 
-    # This drill-down belongs to the institutional overview — same gate +
-    # HoD scoping so a plain Researcher can't pull it and a HoD only sees
-    # their own department (was unscoped: every dept leaked to every viewer).
+    # This drill-down belongs to the institutional overview, so it gets the same
+    # gate + HoD scoping: a plain Researcher can't pull it and a HoD sees only
+    # their own department (it was unscoped before — every dept leaked).
     _u = getattr(request, 'user', None)
     if not (_u and _u.is_authenticated and (
             _u.has_litrix_perm('view_all_researchers') or
@@ -1565,13 +1471,9 @@ def yearly_breakdown(request):
 
 
 def _resolve_years(request) -> list:
-    """
-    Read the year filter from the request, supporting:
-      • single year   — ?year=2025
-      • multiple      — ?year=2024,2025,2026  (or ?years=...)
-      • all (default) — no param given → uses FOCUS_YEARS
-    Anything non-numeric inside the comma list is silently ignored so a
-    stray comma or trailing space won't 500 the dashboard.
+    """Read the year filter from ?year= / ?years= — one year, a comma list, or
+    nothing (defaults to FOCUS_YEARS). Non-numeric entries in the list are
+    dropped so a stray comma or trailing space won't 500 the dashboard.
     """
     raw = (
         request.query_params.get('year')
@@ -1591,51 +1493,38 @@ def _resolve_years(request) -> list:
 
 @decorators.api_view(['GET'])
 def overview(request):
-    """
-    GET /api/stats/overview/         → both focus years
-    GET /api/stats/overview/?year=2025  → just 2025
-    GET /api/stats/overview/?year=2026  → just 2026
+    """GET /api/stats/overview/ (optionally ?year=YYYY)
 
-    A one-shot payload that powers the Admin/Dean/HoD landing page.
-    HoDs are auto-scoped to their own department (detected via
-    Department.HeadID = current user).
+    One-shot payload for the Admin/Dean/HoD landing page; HoDs are auto-scoped
+    to their own department.
 
-    Affiliation filter: pass ?affiliation=albaha to restrict every
-    PAPER-derived metric to papers NOT confirmed authored elsewhere
-    (AffiliationVerified IS DISTINCT FROM FALSE — keeps confirmed-Al-Baha
-    TRUE and not-yet-verified NULL, drops only confirmed-elsewhere FALSE).
-    Mirrors the public dashboard's AFFILIATION_VERIFIED_SQL. The default
-    (all) preserves the historical numbers untouched. Citation totals come
-    from Scholar's author-level CitationsByYear graph and can't be
-    paper-filtered, so the toggle intentionally affects paper counts only.
+    Pass ?affiliation=albaha to restrict every paper-derived metric to papers
+    not confirmed authored elsewhere (AffiliationVerified IS DISTINCT FROM FALSE
+    keeps confirmed-Al-Baha TRUE and not-yet-verified NULL, drops only
+    confirmed-elsewhere FALSE). The default leaves the historical numbers
+    untouched. Citation totals come from Scholar's author-level CitationsByYear
+    graph and can't be paper-filtered, so the toggle only affects paper counts.
     """
     years = _resolve_years(request)
 
     albaha_only = _albaha_only(request)
     AFFIL_CLAUSE = _affil_clause(albaha_only, 'rp')
-    # Same predicate for the citation CTEs that alias the paper table as
-    # rp_all (top-researchers + departments citations).
+    # Same predicate for the citation CTEs that alias the paper table as rp_all.
     AFFIL_CLAUSE_RPALL = _affil_clause(albaha_only, 'rp_all')
 
-    # AuthZ gate — institutional dashboard data is for roles that may view
-    # researchers (Admin/Dean/HoD). A plain Researcher (neither perm) would
-    # otherwise fall into the unscoped branch and receive the full
-    # institution view; the UI already routes them to their own dashboard.
+    # Institutional dashboard data is for roles that may view researchers; a
+    # plain Researcher would otherwise fall into the unscoped branch and get the
+    # full institution view (the UI already routes them to their own dashboard).
     _u = getattr(request, 'user', None)
     if not (_u and _u.is_authenticated and (
             _u.has_litrix_perm('view_all_researchers') or
             _u.has_litrix_perm('view_dept_researchers'))):
         return response.Response({'error': 'Forbidden'}, status=403)
 
-    # --- HoD scoping ---
-    # Admin/Dean keep the full institution view (perm: view_all_researchers).
-    # HoD has perm view_dept_researchers but NOT view_all_researchers.
-    # Resolve via the shared helper so detection matches the rest of the
-    # app (Department.HeadID, then current Works_In — invite-provisioned
-    # HoDs are linked via Works_In). Returns None for institution-wide
-    # roles, a dept id for a HoD, or -1 when a HoD has no department — the
-    # -1 sentinel scopes every query below to nothing instead of leaking
-    # the whole institution.
+    # Resolve via the shared helper so HoD detection matches the rest of the
+    # app. Returns None for Admin/Dean (full institution), a dept id for a HoD,
+    # or -1 when a HoD has no department — the -1 sentinel scopes every query
+    # below to nothing instead of leaking the whole institution.
     hod_dept_id = _hod_scope_department_id(request)
 
     # avg_h keeps the historical definition (average of dept averages).
@@ -1644,10 +1533,9 @@ def overview(request):
         _dept_qs = _dept_qs.filter(department_id=hod_dept_id)
     dept_agg = _dept_qs.aggregate(avg_h=Avg('avg_h_index'))
 
-    # Researcher head-count: COUNT(DISTINCT UserID) over current positions.
-    # The previous Sum('total_researchers') across DepartmentStats rows
-    # double-counted any researcher holding positions in TWO departments
-    # (they appear once in each department's row).
+    # COUNT(DISTINCT UserID) over current positions. The old
+    # Sum('total_researchers') across DepartmentStats rows double-counted anyone
+    # holding positions in two departments (one row each).
     from django.db import connection as _hc_conn
     with _hc_conn.cursor() as _hc_cur:
         _hc_cur.execute('''
@@ -1667,10 +1555,8 @@ def overview(request):
 
     from django.db import connection
     with connection.cursor() as cur:
-        # Papers count: papers PUBLISHED in window (sets the denominator
-        # for "publications" KPI).
-        # KPI papers + Q1/Scopus/ISI counts. Author-in-dept clause added
-        # at the end for HoDs only.
+        # Papers KPI plus Q1/Scopus/ISI counts — papers published in window.
+        # The author-in-dept clause is appended for HoDs only.
         kpi_sql = (
             'SELECT COUNT(DISTINCT rp."PaperID") AS papers, '
             '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q1\') AS q1, '
@@ -1696,15 +1582,13 @@ def overview(request):
         cur.execute(kpi_sql, kpi_params)
         paper_count_row = cur.fetchone()
 
-        # Citations RECEIVED in the window — summed per-paper over the
-        # selected years across ALL the scope's papers (ANY publication year),
-        # so the metric stays meaningful when a single recent year is picked:
-        # older highly-cited papers still contribute the citations they earned
-        # that year. (Folding citations into the papers-PUBLISHED-in-window
-        # query above made e.g. "2026 only" read ~1, since papers published in
-        # 2026 have barely been cited yet.) The per-paper CitationsByYear graph
-        # keeps it filterable by affiliation + HoD scope; EXISTS (not JOIN)
-        # counts each paper once even when several scope authors share it.
+        # Citations received in the window, summed per-paper over the selected
+        # years across ALL the scope's papers (any publication year) — not
+        # citations of papers published in the window. This keeps the metric
+        # meaningful for a single recent year: older highly-cited papers still
+        # contribute what they earned that year, whereas papers published in
+        # e.g. 2026 have barely been cited yet. EXISTS, not JOIN, counts each
+        # paper once even when several scope authors share it.
         cites_year_expr = _cites_expr('rp', years)
         cit_sql = (
             f'SELECT COALESCE(SUM({cites_year_expr}), 0) AS citations '
@@ -1725,8 +1609,8 @@ def overview(request):
         cur.execute(cit_sql, cit_params)
         citations_row = cur.fetchone()
 
-        # Combine into the (papers, citations, q1, scopus, isi) shape.
-        # paper_count_row = (papers, q1, scopus, isi).
+        # paper_count_row is (papers, q1, scopus, isi); splice the citation total
+        # in to get the (papers, citations, q1, scopus, isi) shape.
         paper_totals = (
             paper_count_row[0],
             citations_row[0],
@@ -1774,9 +1658,9 @@ def overview(request):
         ''', [years] + [str(y) for y in years] + [hod_dept_id, hod_dept_id])
         top_researchers_rows = cur.fetchall()
 
-        # Top papers — for a HoD, restrict to papers authored by someone
-        # currently in their department (otherwise this list leaks the
-        # institution's most-cited papers onto a department dashboard).
+        # For a HoD, restrict to papers authored by someone currently in their
+        # department, else this leaks the institution's most-cited papers onto a
+        # department dashboard.
         top_papers_sql = 'SELECT * FROM v_top_papers WHERE pub_year = ANY(%s)'
         top_papers_params = [years]
         if hod_dept_id is not None:
@@ -1798,10 +1682,10 @@ def overview(request):
         top_paper_cols = [c[0] for c in cur.description]
         top_papers = [dict(zip(top_paper_cols, row)) for row in cur.fetchall()]
 
-        # Departments: papers PUBLISHED in window + citations RECEIVED in
-        # window (per-year). Citation aggregation lives in a separate CTE
-        # to avoid the cartesian explosion of joining authors→papers→
-        # citations (each Department-Researcher contributes once).
+        # Papers published in window + citations received in window. The
+        # citation aggregation lives in its own CTE to avoid the cartesian blowup
+        # of joining authors→papers→citations; each dept-researcher contributes
+        # once.
         year_keys_dept = _cites_expr('rp_all', years)
         cur.execute(f'''
             WITH dept_citations AS (
@@ -1858,27 +1742,15 @@ def overview(request):
         dept_cols = [c[0] for c in cur.description]
         departments = [dict(zip(dept_cols, row)) for row in cur.fetchall()]
 
-        # ----------------------------------------------------------------
-        # Time-series chart window.
-        #
-        # The KPI strip and per-department table use `years` (the full
-        # 2011-present floor — every paper that's ever been written by
-        # an Al-Baha researcher counts). The trend chart is different:
-        # rendering 16 sparse data points crushes the recent-growth
-        # signal. We clip to CHART_YEAR_FLOOR (2019) for that surface.
-        #
-        # If the caller explicitly filtered to a narrower window via
-        # ?year=, honor it — the intersection is just whatever overlap
-        # exists. Empty intersection falls back to `years` so we never
-        # send back an empty chart.
-        # ----------------------------------------------------------------
+        # The KPI strip and per-department table use the full `years` floor, but
+        # the trend chart clips to CHART_YEAR_FLOOR — 16 sparse points crush the
+        # recent-growth signal. A narrower explicit ?year= filter is honored via
+        # the intersection; an empty intersection falls back to `years` so we
+        # never return an empty chart.
         chart_years = [y for y in years if y >= CHART_YEAR_FLOOR] or years
 
-        # Per-year breakdown per department.
-        # Papers: published count per (dept, year) — DISTINCT to avoid
-        # double-counting papers shared across multiple co-authored faculty.
-        # Citations: sum of Researcher.CitationsByYear[year] for each
-        # researcher in the dept (Scholar's authoritative author-level graph).
+        # Papers published per (dept, year) — DISTINCT so a paper shared by
+        # several co-authored faculty isn't double-counted.
         cur.execute(f'''
             SELECT w."DepartmentID", rp."PubYear",
                    COUNT(DISTINCT rp."PaperID") AS papers
@@ -1894,12 +1766,11 @@ def overview(request):
         for did, yr, n in cur.fetchall():
             papers_by_dept_year.setdefault(did, {})[int(yr)] = int(n)
 
-        # Per-year citations per department, from the per-paper graph so the
-        # affiliation filter applies (the KPI uses the same source). DISTINCT
-        # on (dept, paper, year) dedupes papers co-authored by two researchers
-        # in the SAME department — otherwise the paper's citations would be
-        # double-counted for that department. A paper spanning two departments
-        # still counts once per department, which is intended.
+        # Per-year citations per department from the per-paper graph (same source
+        # as the KPI, so the affiliation filter applies). DISTINCT on (dept,
+        # paper, year) keeps a paper co-authored within one department from being
+        # double-counted; a paper spanning two departments still counts once per
+        # department, which is intended.
         cur.execute(f'''
             SELECT dept, yr, SUM(cites) AS citations
             FROM (
@@ -1925,8 +1796,8 @@ def overview(request):
         for did, yr, n in cur.fetchall():
             cites_by_dept_year.setdefault(did, {})[int(yr)] = int(n)
 
-        # Inject by_year into each department row — uses chart_years
-        # so the chart axis is reasonable, even when the KPIs span 2011+.
+        # Attach by_year to each department row over chart_years, so the chart
+        # axis stays reasonable even though the KPIs span 2011+.
         for d in departments:
             did = d['department_id']
             d['by_year'] = [
@@ -1940,11 +1811,9 @@ def overview(request):
 
     return response.Response({
         'focus_years': years,
-        # Echo the affiliation filter back so the UI can reflect the
-        # active mode ('albaha' = Al-Baha-only, 'all' = unfiltered).
+        # Echo the active filter back so the UI can reflect the mode.
         'affiliation_filter': 'albaha' if albaha_only else 'all',
-        # Separate axis-year list for any frontend chart so it doesn't
-        # have to re-derive the window from the by_year length.
+        # Axis-year list so a chart doesn't have to re-derive the window.
         'chart_years': sorted(chart_years),
         'totals': {
             'researchers':         dept_agg['researchers'] or 0,
@@ -1972,30 +1841,19 @@ def overview(request):
     })
 
 
-# ============================================================================
-# Universal Search — Spotlight-style global search.
-# ============================================================================
-# Returns a unified payload: { profiles: [...], papers: [...] }.
-#
-# Permission gate (the key business rule):
-#   • view_all_researchers / view_dept_researchers (Admin/Dean/HoD) →
-#     full corpus, including papers whose authors are external (not
-#     registered Users). They need this for institutional oversight.
-#   • Otherwise (Researcher) → restrict to papers that have AT LEAST ONE
-#     author who is a registered system User. Researchers shouldn't be
-#     surfacing papers from authors outside the institution they don't
-#     have a relationship with.
-#
-# Both sides cap result count to keep the modal snappy.
-# ============================================================================
+# Spotlight-style global search returning { profiles: [...], papers: [...] }.
+# The permission gate is the key rule: Admin/Dean/HoD see the full corpus
+# (including papers by external, non-registered authors) for institutional
+# oversight, while a plain Researcher only sees papers with at least one
+# registered system author. Both sides cap results to keep the modal snappy.
 @decorators.api_view(['GET'])
 def universal_search(request):
     q = (request.query_params.get('q') or '').strip()
     if len(q) < 2:
         return response.Response({'profiles': [], 'papers': []})
 
-    # has_litrix_perm is on accounts.User; safe even when SimpleJWT
-    # hands us an AnonymousUser-like object — we just default to False.
+    # has_litrix_perm lives on accounts.User; getattr keeps this safe when
+    # SimpleJWT hands us an AnonymousUser-like object — we default to False.
     user = getattr(request, 'user', None)
     has_full_access = bool(
         user
@@ -2012,34 +1870,16 @@ def universal_search(request):
     PROFILE_LIMIT = 8
     PAPER_LIMIT   = 10
 
-    # --------------------------------------------------------------------
-    # Profile search — registered system Users matching the query.
-    # Researchers see only Researcher-type profiles; full-access roles
-    # see every UserType (so an Admin can find a Dean by name, etc).
-    # --------------------------------------------------------------------
-    # All roles see all UserTypes - the search is intentionally
-    # unrestricted now (was: Researchers saw only Researcher-type).
+    # All roles now see every UserType — the search is intentionally
+    # unrestricted (it used to limit Researchers to Researcher-type profiles).
     user_type_filter = ''
 
     with connection.cursor() as cur:
-        # ----------------------------------------------------------------
-        # Profile search — cross-script aware.
-        #
-        # We match against four signals so an English query can still
-        # find an Arabic-only profile (and vice versa):
-        #
-        #   1. Users.FullName_Ar       — Arabic side
-        #   2. Users.FirstName / LastName — English side, if registered
-        #   3. Users.Email / Litrix_ID — exact-ish identifiers
-        #   4. Authors.AuthorNameRaw   — bridge: scrapers (Scholar /
-        #      OpenAlex) populate this with the English-script author
-        #      string for every paper, so even if the user only has
-        #      FullName_Ar locally, their English transliteration lives
-        #      here and we surface it through this EXISTS subquery.
-        #
-        # No transliteration heuristics — we lean on real data captured
-        # from the academic sources of truth.
-        # ----------------------------------------------------------------
+        # Cross-script aware: we match Arabic name, English first/last, the
+        # email/Litrix_ID identifiers, and Authors.AuthorNameRaw. That last one
+        # is the bridge — scrapers populate it with the English-script author
+        # string per paper, so an English query finds an Arabic-only profile (and
+        # vice versa) without any transliteration heuristics.
         cur.execute(f'''
             SELECT
                 u."UserID",
@@ -2095,11 +1935,9 @@ def universal_search(request):
             for r in cur.fetchall()
         ]
 
-        # ----------------------------------------------------------------
-        # Paper search — title match, with the permission gate baked in.
-        # The EXISTS subquery enforces "at least one system author" for
-        # restricted users; the full-access path skips it entirely.
-        # ----------------------------------------------------------------
+        # Title match with the permission gate baked in: the EXISTS subquery
+        # enforces "at least one system author" for restricted users, while the
+        # full-access path skips it.
         if has_full_access:
             paper_filter = ''
         else:

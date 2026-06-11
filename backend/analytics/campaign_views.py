@@ -1,24 +1,20 @@
 """
-Admin-facing endpoints for the Reporting Campaigns workflow.
+Admin endpoints for the Reporting Campaigns workflow.
 
-Endpoint map:
-    GET    /api/campaigns/                       — list (filtered by perm)
-    POST   /api/campaigns/                       — create draft
-    GET    /api/campaigns/<id>/                  — detail + submission stats
-    PATCH  /api/campaigns/<id>/                  — edit draft only
-    POST   /api/campaigns/<id>/open/             — draft → active (fan-out)
-    POST   /api/campaigns/<id>/close/            — active → closed
-    GET    /api/campaigns/<id>/submissions/      — list submissions
+    GET    /api/campaigns/                  — list (filtered by perm)
+    POST   /api/campaigns/                  — create draft
+    GET    /api/campaigns/<id>/             — detail + submission stats
+    PATCH  /api/campaigns/<id>/             — edit draft only
+    POST   /api/campaigns/<id>/open/        — draft → active (fan-out)
+    POST   /api/campaigns/<id>/close/       — active → closed
+    GET    /api/campaigns/<id>/submissions/ — list submissions
 
-Key design decisions:
-    • State transitions are HTTP-action endpoints, not PATCH on the
-      status field. This makes the workflow explicit + lets each
-      transition perform its side effects atomically (auto-generating
-      submissions, queuing notifications, etc.).
-    • Opening a campaign is the heavy operation: it expands the
-      audience query into N ReportSubmission rows AND inserts the
-      reminder/final notifications into ScheduledNotification, all in
-      one transaction. Failure mid-way → nothing lands.
+State transitions are their own action endpoints rather than a PATCH on the
+status field, so each transition can run its side effects (generating
+submissions, queuing notifications) atomically. Opening is the heavy one: it
+expands the audience into N ReportSubmission rows and queues the
+reminder/final notifications in a single transaction — fail midway, nothing
+lands.
 """
 import json
 from datetime import timedelta
@@ -34,17 +30,10 @@ from .serializers import ReportCampaignSerializer
 from accounts.views import audit
 
 
-# ----------------------------------------------------------------------
-# JSONB coercion
-# ----------------------------------------------------------------------
-# psycopg2's JSONB → Python conversion isn't always wired up the way
-# Django's ORM expects when you go through `connection.cursor()`. In
-# practice we sometimes get the raw JSON text back as a Python str
-# instead of a parsed dict — which then explodes the first time we try
-# `**scope_filter` for kwargs unpacking. This helper makes every read
-# site idempotent: pass anything (None / dict / JSON string) and you
-# always get a dict back.
-# ----------------------------------------------------------------------
+# Going through connection.cursor() (not the ORM), psycopg2 sometimes hands
+# back JSONB as a raw str instead of a parsed dict, which blows up the first
+# time we try **scope_filter. This makes every read site safe: None / dict /
+# JSON string all come back as a dict.
 def _coerce_jsonb(value):
     if value is None:
         return {}
@@ -59,9 +48,7 @@ def _coerce_jsonb(value):
     return {}
 
 
-# ----------------------------------------------------------------------
-# Permission helpers
-# ----------------------------------------------------------------------
+# Permission helpers.
 def _can_manage(user):
     return user.is_authenticated and user.has_litrix_perm('manage_campaigns')
 
@@ -73,16 +60,12 @@ def _can_view(user):
     )
 
 
-# ----------------------------------------------------------------------
-# Audience expansion — translate ScopeFilter into a list of UserIDs
-# ----------------------------------------------------------------------
+# Expand a ScopeFilter into a list of UserIDs.
 def _expand_audience(cur, tenant_id, scope_type, scope_filter):
     """
-    Return the set of UserIDs that match the campaign's scope.
-
-    Always restricts to Researchers in the tenant — Deans/HoDs/Admins
-    don't get verification submissions even if explicitly listed (they
-    don't have a Scholar/ORCID-driven paper list to verify).
+    UserIDs matching the campaign's scope. Always Researchers in the tenant —
+    Deans/HoDs/Admins never get verification submissions even if listed,
+    since they have no Scholar/ORCID paper list to verify.
     """
     scope_filter = _coerce_jsonb(scope_filter)
 
@@ -95,7 +78,6 @@ def _expand_audience(cur, tenant_id, scope_type, scope_filter):
             [tenant_id],
         )
     elif scope_type == 'department':
-        # scope_filter.department_ids: list[int]
         dept_ids = scope_filter.get('department_ids') or []
         if not dept_ids:
             return []
@@ -127,9 +109,7 @@ def _expand_audience(cur, tenant_id, scope_type, scope_filter):
     return [r[0] for r in cur.fetchall()]
 
 
-# ----------------------------------------------------------------------
-# List + Create
-# ----------------------------------------------------------------------
+# List + create.
 @api_view(['GET', 'POST'])
 def campaign_list_create(request):
     if request.method == 'GET':
@@ -137,7 +117,6 @@ def campaign_list_create(request):
             return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
         return _list_campaigns(request)
 
-    # POST
     if not _can_manage(request.user):
         return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
     return _create_campaign(request)
@@ -145,9 +124,8 @@ def campaign_list_create(request):
 
 def _list_campaigns(request):
     """
-    List campaigns visible to the caller. Includes inline submission
-    stats so the frontend can render progress bars without a second
-    round-trip per campaign.
+    Campaigns visible to the caller, with inline submission stats so the
+    frontend can draw progress bars without a round-trip per campaign.
     """
     status_filter = (request.query_params.get('status') or '').strip()
     where = ['c."TenantID" = %s']
@@ -184,8 +162,7 @@ def _list_campaigns(request):
         cols = [d[0] for d in cur.description]
         rows = [dict(zip(cols, r)) for r in cur.fetchall()]
 
-    # Normalize column-case for the serializer (which uses snake_case).
-    # We do the mapping inline to avoid a round-trip through the ORM.
+    # Map the PascalCase columns to snake_case inline (cheaper than the ORM).
     out = []
     for r in rows:
         out.append({
@@ -197,8 +174,7 @@ def _list_campaigns(request):
             'closes_at':             r['ClosesAt'],
             'status':                r['Status'],
             'scope_type':            r['ScopeType'],
-            # Normalize JSONB so the frontend always receives a dict
-            # (or null), never a raw JSON string.
+            # Always a dict (or null) — never a raw JSON string.
             'scope_filter':          _coerce_jsonb(r['ScopeFilter']),
             'created_by_user_id':    r['CreatedByUserID'],
             'created_at':            r['CreatedAt'],
@@ -253,9 +229,7 @@ def _create_campaign(request):
                     status=status.HTTP_201_CREATED)
 
 
-# ----------------------------------------------------------------------
-# Detail + Edit
-# ----------------------------------------------------------------------
+# Detail + edit.
 @api_view(['GET', 'PATCH'])
 def campaign_detail(request, campaign_id):
     if request.method == 'GET':
@@ -315,9 +289,9 @@ def _detail(request, campaign_id):
 
 def _edit(request, campaign_id):
     """
-    Edit a draft campaign. Once a campaign is `active`, edits are
-    refused — submissions and notifications have already gone out, and
-    silently changing the target_years would invalidate everything.
+    Edit a draft campaign. Once active, edits are refused — submissions and
+    notifications have gone out, and silently changing target_years would
+    invalidate everything.
     """
     with connection.cursor() as cur:
         cur.execute(
@@ -335,14 +309,14 @@ def _edit(request, campaign_id):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-    # Build a partial-update from whatever the client sent
+    # Partial update from whatever the client sent.
     allowed = {'title', 'description', 'target_years', 'opens_at',
                'closes_at', 'scope_type', 'scope_filter'}
     payload = {k: v for k, v in request.data.items() if k in allowed}
     if not payload:
         return Response({'error': 'Nothing to update'}, status=400)
 
-    # Re-run validation through the serializer
+    # Re-validate through the serializer.
     s = ReportCampaignSerializer(data=payload, partial=True)
     s.is_valid(raise_exception=True)
     d = s.validated_data
@@ -384,21 +358,15 @@ def _edit(request, campaign_id):
     return Response({'message': 'Updated'})
 
 
-# ----------------------------------------------------------------------
-# Open — the big transition
-# ----------------------------------------------------------------------
 @api_view(['POST'])
 def campaign_open(request, campaign_id):
     """
-    Transition a draft campaign to active.
-
-    Side effects (all in one transaction):
-        1. Status: draft → active. OpensAt clamped to NOW() if past.
-        2. Auto-generate one ReportSubmission per matched researcher.
-        3. Queue three notifications:
-             - 'campaign_open'     → send NOW
-             - 'campaign_reminder' → send 3 days before ClosesAt (if room)
-             - 'campaign_final'    → send 24h before ClosesAt (if room)
+    Draft → active, all in one transaction:
+        - flip status (OpensAt clamped to NOW() if it was in the past)
+        - one ReportSubmission per matched researcher
+        - queue three notifications: open (now), reminder (3 days before
+          close), final (24h before close), each skipped if its send time
+          has already passed
     """
     if not _can_manage(request.user):
         return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
@@ -420,7 +388,6 @@ def campaign_open(request, campaign_id):
                 return Response({'error': 'Not found'},
                                 status=status.HTTP_404_NOT_FOUND)
             cid, title, current_status, opens_at, closes_at, scope_type, scope_filter = row
-            # Normalize JSONB at the read boundary — see _coerce_jsonb docstring.
             scope_filter = _coerce_jsonb(scope_filter)
 
             if current_status != 'draft':
@@ -436,8 +403,8 @@ def campaign_open(request, campaign_id):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # 1) Activate the campaign. Clamp OpensAt to NOW() if it
-            #    was scheduled in the past (admin clicked Open Now).
+            # Activate. Clamp OpensAt to NOW() if it was in the past
+            # (admin clicked Open Now).
             effective_opens = opens_at if opens_at and opens_at > now else now
             cur.execute(
                 '''UPDATE "ReportCampaign"
@@ -446,13 +413,12 @@ def campaign_open(request, campaign_id):
                 [effective_opens, campaign_id],
             )
 
-            # 2) Expand audience → bulk-insert submissions
+            # Expand audience and bulk-insert submissions. ON CONFLICT keeps
+            # this safe to re-run if an archived campaign is reopened later.
             user_ids = _expand_audience(
                 cur, request.user.tenant_id, scope_type, scope_filter,
             )
             if user_ids:
-                # ON CONFLICT lets us re-run the open operation safely
-                # if the admin reopens an archived campaign later.
                 cur.executemany(
                     '''INSERT INTO "ReportSubmission" ("CampaignID", "UserID")
                        VALUES (%s, %s)
@@ -460,10 +426,9 @@ def campaign_open(request, campaign_id):
                     [(campaign_id, uid) for uid in user_ids],
                 )
 
-            # 3) Schedule the three notifications. The worker uses
-            #    RelatedCampaignID to resolve recipients — so the
-            #    audience JSON here is mostly informational. We still
-            #    fold scope_type in so the audit trail is clear.
+            # Schedule the three notifications. The worker resolves
+            # recipients via RelatedCampaignID, so this audience JSON is
+            # mostly informational — we fold scope_type in for the audit trail.
             audience_with_type = {
                 **scope_filter,
                 'campaign_id': campaign_id,
@@ -472,25 +437,20 @@ def campaign_open(request, campaign_id):
             target_json = json.dumps(audience_with_type)
 
             campaign_title = title  # already a str
-            # Notification copy is intentionally in English — the
-            # Litrix UI labels this surface as "Research Reports", so
-            # the user-facing language stays consistent across the
-            # sidebar, the page, and the inbox.
+            # English copy on purpose — the UI labels this "Research Reports",
+            # so the sidebar, page, and inbox stay consistent.
             schedule_rows = [
-                # Open immediately
                 ('campaign_open',
                  f'Research report opened: {campaign_title}',
                  f'The research report "{campaign_title}" is now open. '
                  f'Please review your publications list and submit your '
                  f'report before the closing date.',
                  now),
-                # 3-day reminder (only if there's room)
                 ('campaign_reminder',
                  f'Reminder: 3 days left to submit — {campaign_title}',
                  f'You have not submitted your report for '
                  f'"{campaign_title}" yet. The window closes in 3 days.',
                  closes_at - timedelta(days=3)),
-                # Final 24h warning
                 ('campaign_final',
                  f'Final reminder: 24 hours left — {campaign_title}',
                  f'Last chance to submit your report for '
@@ -499,8 +459,7 @@ def campaign_open(request, campaign_id):
             ]
 
             for ntype, ntitle, nbody, send_at in schedule_rows:
-                # Skip reminders whose send time is already in the past
-                # (campaign opened too close to deadline).
+                # Skip reminders already past due (opened too close to close).
                 if send_at <= now and ntype != 'campaign_open':
                     continue
                 cur.execute(
@@ -529,18 +488,12 @@ def campaign_open(request, campaign_id):
     })
 
 
-# ----------------------------------------------------------------------
-# Close
-# ----------------------------------------------------------------------
 @api_view(['POST'])
 def campaign_close(request, campaign_id):
     """
-    Active → closed. Optional payload { close_at: ISO timestamp } lets
-    admin "close now" (default) or explicitly set the timestamp.
-
-    No automatic submission lock — submissions get their IsLate flag
-    at submit time. Closing a campaign just prevents new submissions
-    (enforced in my_reports_views.submit_submission).
+    Active → closed. Closing doesn't lock existing submissions (IsLate is set
+    at submit time) — it just blocks new ones, enforced in
+    my_reports_views.submit_submission.
     """
     if not _can_manage(request.user):
         return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
@@ -581,30 +534,22 @@ def campaign_close(request, campaign_id):
     return Response({'message': 'Campaign closed', 'status': 'closed'})
 
 
-# ----------------------------------------------------------------------
-# Submissions list (admin view)
-# ----------------------------------------------------------------------
-# ----------------------------------------------------------------------
-# Excel export — per-campaign workbook
-# ----------------------------------------------------------------------
+# Per-campaign Excel export.
 @api_view(['GET'])
 def campaign_export(request, campaign_id):
     """
     GET /api/campaigns/<id>/export/
 
-    Builds a 5-sheet xlsx workbook for download:
-        Overview         — campaign metadata + aggregate counts
+    A 5-sheet workbook:
+        Overview         — metadata + aggregate counts
         Researchers      — one row per submission (all statuses)
-        Confirmed Papers — papers researchers said "this is mine"
-        Not Mine         — papers researchers rejected (cleanup queue)
-        Missing Papers   — papers researchers added that we didn't have
+        Confirmed Papers — papers researchers claimed
+        Not Mine         — papers they rejected (feeds Authors cleanup)
+        Missing Papers   — papers they added that we lacked (feeds ingest)
 
-    Why the cleanup/missing sheets?
-        The whole point of running a verification campaign isn't just
-        the green checkmarks — it's catching misattributions AND
-        finding papers we missed. The "Not Mine" sheet feeds the
-        admin's Authors-cleanup workflow; the "Missing Papers" sheet
-        feeds the manual-ingest workflow.
+    The Not Mine / Missing sheets are the point of running a verification
+    campaign — catching misattributions and papers we missed, not just the
+    green checkmarks.
     """
     if not _can_view(request.user):
         return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
@@ -613,7 +558,7 @@ def campaign_export(request, campaign_id):
     from openpyxl.styles import Font, PatternFill, Alignment
 
     with connection.cursor() as cur:
-        # Confirm campaign exists + load metadata for the cover sheet
+        # Confirm the campaign exists + load metadata for the cover sheet.
         cur.execute(
             '''SELECT "CampaignID", "Title", "Description",
                       "TargetYears", "OpensAt", "ClosesAt", "Status",
@@ -648,9 +593,7 @@ def campaign_export(request, campaign_id):
         for i, w in enumerate(widths, start=1):
             ws.column_dimensions[chr(64 + i)].width = w
 
-    # =================================================================
-    # Sheet 1: Overview
-    # =================================================================
+    # Sheet 1: Overview.
     ws = wb.create_sheet('Overview', 0)
     ws['A1'] = camp[1]  # Title
     ws['A1'].font = title_font
@@ -659,7 +602,6 @@ def campaign_export(request, campaign_id):
         ws['A2'] = camp[2]  # Description
         ws['A2'].font = label_font
 
-    # Metadata block
     meta = [
         ('Target Years',  ', '.join(str(y) for y in camp[3] or [])),
         ('Opens At',      camp[4].strftime('%Y-%m-%d %H:%M') if camp[4] else '—'),
@@ -674,7 +616,7 @@ def campaign_export(request, campaign_id):
     ws.column_dimensions['A'].width = 18
     ws.column_dimensions['B'].width = 40
 
-    # Aggregate stats
+    # Aggregate stats.
     with connection.cursor() as cur:
         cur.execute(
             '''SELECT
@@ -708,9 +650,7 @@ def campaign_export(request, campaign_id):
         ws.cell(row=i, column=1, value=k).font = label_font
         ws.cell(row=i, column=2, value=v)
 
-    # =================================================================
-    # Sheet 2: Researchers — submission status per person
-    # =================================================================
+    # Sheet 2: Researchers — submission status per person.
     ws = wb.create_sheet('Researchers')
     ws.append([
         'Name (AR)', 'Name (EN)', 'Email', 'Litrix ID',
@@ -762,9 +702,7 @@ def campaign_export(request, campaign_id):
             ])
     set_widths(ws, [25, 25, 30, 12, 22, 14, 18, 6, 10, 10, 10])
 
-    # =================================================================
-    # Sheet 3: Confirmed Papers
-    # =================================================================
+    # Sheet 3: Confirmed Papers.
     ws = wb.create_sheet('Confirmed Papers')
     ws.append([
         'Researcher (AR)', 'Department', 'Paper Title', 'Year',
@@ -804,9 +742,7 @@ def campaign_export(request, campaign_id):
             ws.append(list(r))
     set_widths(ws, [25, 22, 60, 8, 28, 10, 10, 10, 30])
 
-    # =================================================================
-    # Sheet 4: Not Mine — admin cleanup queue
-    # =================================================================
+    # Sheet 4: Not Mine — admin cleanup queue.
     ws = wb.create_sheet('Not Mine')
     ws.append([
         'Researcher (AR)', 'Department', 'Paper Title',
@@ -839,9 +775,7 @@ def campaign_export(request, campaign_id):
             ws.append(list(r))
     set_widths(ws, [25, 22, 60, 8, 28, 30, 40])
 
-    # =================================================================
-    # Sheet 5: Missing Papers — researcher-reported additions
-    # =================================================================
+    # Sheet 5: Missing Papers — researcher-reported additions.
     ws = wb.create_sheet('Missing Papers')
     ws.append([
         'Researcher (AR)', 'Department', 'Title',
@@ -873,9 +807,7 @@ def campaign_export(request, campaign_id):
             ws.append(list(r))
     set_widths(ws, [25, 22, 60, 8, 30, 40, 12])
 
-    # =================================================================
-    # Stream the workbook back
-    # =================================================================
+    # Stream the workbook back.
     safe_title = ''.join(
         c if (c.isalnum() or c in ' -_') else '_'
         for c in (camp[1] or 'campaign')
@@ -896,24 +828,16 @@ def campaign_export(request, campaign_id):
     return response
 
 
-# ----------------------------------------------------------------------
-# Admin view of a single researcher's submission
-# ----------------------------------------------------------------------
 @api_view(['GET'])
 def campaign_submission_detail(request, campaign_id, submission_id):
     """
     GET /api/campaigns/<campaign_id>/submissions/<submission_id>/
 
-    Mirror of /api/my-reports/<id>/ but for admins. Returns the same
-    payload shape (submission + campaign + papers + missing) so the
-    frontend can reuse rendering logic.
-
-    Why an admin-side mirror instead of widening my-reports?
-        The researcher endpoint scopes by `request.user.user_id` for
-        safety — every query in there hard-filters to "MY UserID". An
-        admin shouldn't have to authenticate-as-the-researcher to look
-        at a submitted report. Cleaner to keep the two surfaces
-        separate and verify perms here at the boundary.
+    Admin-side mirror of /api/my-reports/<id>/ — same payload shape so the
+    frontend can reuse its rendering. A separate surface (rather than
+    widening my-reports) because that endpoint hard-filters every query to
+    the caller's own UserID; an admin shouldn't have to act as the researcher
+    to read a report. Perms are verified here at the boundary.
     """
     if not _can_view(request.user):
         return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
@@ -945,7 +869,7 @@ def campaign_submission_detail(request, campaign_id, submission_id):
          c_title, target_years, c_opens, c_closes, c_status,
          name_ar, email, litrix_id, dept_name) = row
 
-        # Paper list (same shape as my-reports endpoint)
+        # Paper list (same shape as the my-reports endpoint).
         cur.execute(
             '''SELECT
                  rp."PaperID", rp."Title", rp."Title_En", rp."DOI",
@@ -991,7 +915,7 @@ def campaign_submission_detail(request, campaign_id, submission_id):
                 } if r[10] else None,
             })
 
-        # Missing-paper entries
+        # Missing-paper entries.
         cur.execute(
             '''SELECT "DecisionID", "MissingTitle", "MissingDOI",
                       "MissingYear", "Note", "DecidedAt",
@@ -1053,7 +977,7 @@ def campaign_submissions(request, campaign_id):
         return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
 
     with connection.cursor() as cur:
-        # Confirm campaign exists + tenant matches
+        # Confirm the campaign exists + tenant matches.
         cur.execute(
             'SELECT 1 FROM "ReportCampaign" '
             'WHERE "CampaignID" = %s AND "TenantID" = %s',
@@ -1062,7 +986,7 @@ def campaign_submissions(request, campaign_id):
         if not cur.fetchone():
             return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Join with Users + Department for a list-ready payload
+        # Join Users + Department for a list-ready payload.
         cur.execute('''
             SELECT
                 s."SubmissionID", s."UserID", s."Status",

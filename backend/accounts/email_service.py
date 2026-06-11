@@ -51,35 +51,20 @@ def verify_token(email, token, purpose='registration'):
 
 
 def send_email(to, subject, body):
-    """
-    Dispatch a transactional email through the configured backend.
+    """Send a transactional email via the backend named in EMAIL_BACKEND.
 
-    Pick a backend via the EMAIL_BACKEND env var:
-      • console  — prints to stdout (dev default)
-      • smtp     — generic SMTP (Gmail, Outlook, Brevo, any host).
-                   NOTE: Render blocks outbound SMTP ports, so this
-                   fails in production there — use an HTTPS API backend.
-      • sendgrid — SendGrid REST API
-      • resend   — Resend REST API (needs a verified domain to send
-                   to anyone but yourself)
-      • brevo    — Brevo (ex-Sendinblue) REST API. HTTPS, free 300/day,
-                   sends from a verified address without owning a domain.
-      • gmail    — Gmail API (HTTPS) as the litrix.team@gmail.com account
-                   itself. No third-party provider / phone / domain / trial.
-                   OAuth2 refresh token minted once via tools/gmail_oauth.py.
+    Options: console (dev default), smtp, sendgrid, resend, brevo, gmail.
+    Render blocks outbound SMTP, so on production we use one of the HTTPS
+    API backends instead of smtp.
     """
     backend = os.getenv('EMAIL_BACKEND', 'console').lower()
 
     if backend == 'console':
-        # Use plain print() here on purpose. The 'console' backend is
-        # dev-only and its whole job is to make verification codes,
-        # password-reset tokens, and invitation links visible to the
-        # developer running `manage.py runserver`. Routing through
-        # `logger.info` would respect Django's default WARNING root
-        # level and silently swallow these messages — exactly what
-        # broke this in 2026-05. Logger is reserved for real email
-        # backends (SMTP/Resend/SendGrid) where structured logging
-        # actually helps.
+        # print() on purpose, not logger: the console backend exists to
+        # show verification codes / reset tokens / invite links to whoever
+        # is running manage.py runserver. Going through logger.info would
+        # get swallowed by Django's default WARNING root level (it did, in
+        # 2026-05). Logger stays for the real backends.
         print(f"\n{'='*60}")
         print(f"EMAIL → {to}")
         print(f"Subject: {subject}")
@@ -108,16 +93,10 @@ def send_email(to, subject, body):
 
 
 def _send_via_smtp(to, subject, body):
-    """
-    Generic SMTP backend — works with Gmail, Outlook, Brevo, ProtonMail
-    Bridge, your university SMTP, etc.
+    """Generic SMTP backend (Gmail, Outlook, Brevo, ProtonMail Bridge, etc).
 
-    Required env vars:
-        SMTP_HOST       e.g. smtp.gmail.com
-        SMTP_PORT       587 (STARTTLS) or 465 (SSL)
-        SMTP_USER       your login
-        SMTP_PASSWORD   app password / SMTP token
-        SMTP_FROM       optional — display address (defaults to SMTP_USER)
+    Env: SMTP_HOST, SMTP_PORT (587 STARTTLS / 465 SSL), SMTP_USER,
+    SMTP_PASSWORD, and optional SMTP_FROM (defaults to SMTP_USER).
     """
     import smtplib
     from email.message import EmailMessage
@@ -131,11 +110,10 @@ def _send_via_smtp(to, subject, body):
         logger.error('[smtp] missing SMTP_HOST / SMTP_USER / SMTP_PASSWORD')
         return False
 
-    # SMTP_FROM may be a bare address (litrix.team@gmail.com) OR a full
-    # display form (Litrix <litrix.team@gmail.com>). Use it verbatim and
-    # only add the "Litrix" display name when it's a bare address — never
-    # wrap a value that already has angle brackets, or the From collapses
-    # to a malformed "Litrix <Litrix>" that Gmail rejects / spam-folders.
+    # SMTP_FROM may be a bare address or already a "Litrix <addr>" form.
+    # Only add the display name when there are no angle brackets yet —
+    # double-wrapping produces a malformed "Litrix <Litrix>" that Gmail
+    # rejects / spam-folders.
     from_value = os.getenv('SMTP_FROM') or user
     from_header = from_value if '<' in from_value else f'Litrix <{from_value}>'
 
@@ -146,7 +124,7 @@ def _send_via_smtp(to, subject, body):
     msg.set_content(body)
 
     try:
-        # Port 465 = SMTP_SSL (implicit TLS); 587 = STARTTLS upgrade.
+        # 465 = implicit TLS; 587 = STARTTLS upgrade.
         if port == 465:
             with smtplib.SMTP_SSL(host, port, timeout=15) as s:
                 s.login(user, pwd)
@@ -163,10 +141,7 @@ def _send_via_smtp(to, subject, body):
 
 
 def _send_via_resend(to, subject, body):
-    """
-    Resend (resend.com) — modern, developer-friendly transactional API.
-    Required env: RESEND_API_KEY, RESEND_FROM.
-    """
+    """Resend (resend.com) transactional API. Env: RESEND_API_KEY, RESEND_FROM."""
     api_key = os.getenv('RESEND_API_KEY')
     sender  = os.getenv('RESEND_FROM', 'Litrix <noreply@litrix.app>')
     if not api_key:
@@ -195,23 +170,16 @@ def _send_via_resend(to, subject, body):
 
 
 def _send_via_gmail(to, subject, body):
-    """
-    Gmail API over HTTPS (port 443 — works on Render, which blocks SMTP).
-    Sends as the litrix.team@gmail.com account itself, so there is no
-    third-party provider and no phone / domain / trial gate.
+    """Gmail API over HTTPS — works on Render, which blocks SMTP. Sends as
+    the litrix.team@gmail.com account itself (no third-party provider, no
+    phone / domain / trial gate).
 
-    Auth is OAuth2: a long-lived refresh token (minted once with
-    tools/gmail_oauth.py) is exchanged for a short-lived access token on
-    each send. The refresh token stays valid as long as the OAuth consent
-    screen is published "In production" (Testing status expires it in 7d).
+    OAuth2: the long-lived refresh token (minted once via tools/gmail_oauth.py)
+    buys a short-lived access token per send. The consent screen must be
+    published "In production" or Testing status expires the token after 7d.
 
-    Required env:
-        GMAIL_CLIENT_ID
-        GMAIL_CLIENT_SECRET
-        GMAIL_REFRESH_TOKEN
-    Optional env:
-        GMAIL_FROM       sender address (defaults to SMTP_USER)
-        GMAIL_FROM_NAME  display name (defaults to 'Litrix')
+    Env: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, plus
+    optional GMAIL_FROM (defaults to SMTP_USER) and GMAIL_FROM_NAME.
     """
     import base64
     from email.message import EmailMessage
@@ -231,7 +199,7 @@ def _send_via_gmail(to, subject, body):
 
     try:
         import httpx
-        # 1) Trade the refresh token for a short-lived access token.
+        # Trade the refresh token for a short-lived access token.
         tok = httpx.post(
             'https://oauth2.googleapis.com/token',
             data={
@@ -250,8 +218,8 @@ def _send_via_gmail(to, subject, body):
             logger.error('[gmail] no access_token in refresh response')
             return False
 
-        # 2) Build the RFC-822 message and base64url-encode it (Gmail API
-        #    wants the whole message in a single url-safe base64 "raw" field).
+        # Gmail wants the whole RFC-822 message in one url-safe base64
+        # "raw" field.
         msg = EmailMessage()
         msg['From']    = f'{from_name} <{from_addr}>' if from_name else from_addr
         msg['To']      = to
@@ -259,7 +227,6 @@ def _send_via_gmail(to, subject, body):
         msg.set_content(body)
         raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
 
-        # 3) Send via the Gmail API.
         r = httpx.post(
             'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
             headers={'Authorization': f'Bearer {access_token}'},
@@ -276,19 +243,14 @@ def _send_via_gmail(to, subject, body):
 
 
 def _send_via_brevo(to, subject, body):
-    """
-    Brevo (brevo.com, formerly Sendinblue) — transactional email over
-    HTTPS. Picked over SMTP because Render blocks outbound SMTP ports,
-    and over Resend/SendGrid because Brevo's free tier (300/day) lets us
-    send from a verified sender address WITHOUT owning a custom domain —
+    """Brevo (ex-Sendinblue) transactional email over HTTPS. Chosen over SMTP
+    (Render blocks it) and over Resend/SendGrid because Brevo's free tier
+    (300/day) sends from a verified address without owning a custom domain,
     which Litrix doesn't have yet (still on *.vercel.app).
 
-    Required env: BREVO_API_KEY (starts with 'xkeysib-').
-    Optional env: BREVO_FROM       sender address (defaults to SMTP_USER)
-                  BREVO_FROM_NAME  display name (defaults to 'Litrix')
-
-    BREVO_FROM may be a bare address or a full 'Name <addr>' form — we
-    parse it either way so we never repeat the From double-wrap bug.
+    Env: BREVO_API_KEY (starts with 'xkeysib-'), plus optional BREVO_FROM
+    (defaults to SMTP_USER) and BREVO_FROM_NAME. BREVO_FROM is parsed
+    whether it's bare or "Name <addr>", to avoid the From double-wrap bug.
     """
     from email.utils import parseaddr
 
@@ -328,23 +290,12 @@ def _send_via_brevo(to, subject, body):
 
 
 def _send_via_sendgrid(to, subject, body):
-    """
-    Send a single transactional email through SendGrid's v3 API.
+    """Send one transactional email through SendGrid's v3 API.
 
-    Why `bypass_list_management`?
-        Our emails (invitations, password resets, verification codes)
-        are TRANSACTIONAL — the recipient explicitly triggered them
-        via an action they took or an admin took on their behalf. They
-        are NOT marketing. SendGrid by default injects an unsubscribe
-        footer into every send, which:
-          1. Is legally unnecessary for transactional mail (CAN-SPAM,
-             GDPR exempt these from opt-out requirements).
-          2. Confuses users — they can't really "unsubscribe" from
-             their own password reset.
-        Setting bypass_list_management=true tells SendGrid to skip the
-        unsubscribe footer/group for this specific send. The
-        {{{unsubscribe}}} placeholders the template editor shows
-        won't appear in the delivered email.
+    bypass_list_management=true skips the unsubscribe footer SendGrid
+    injects by default. Our mail (invites, resets, codes) is transactional,
+    not marketing — the footer is legally unnecessary (CAN-SPAM/GDPR exempt)
+    and confusing (you can't unsubscribe from your own password reset).
     """
     api_key = os.getenv('SENDGRID_API_KEY')
     from_email = os.getenv('SENDGRID_FROM', 'noreply@litrix.com')
@@ -360,7 +311,7 @@ def _send_via_sendgrid(to, subject, body):
                 'from': {'email': from_email, 'name': 'Litrix'},
                 'subject': subject,
                 'content': [{'type': 'text/plain', 'value': body}],
-                # Skip the unsubscribe injection — this is transactional.
+                # Skip unsubscribe injection — transactional mail.
                 'mail_settings': {
                     'bypass_list_management': {'enable': True},
                 },
@@ -368,9 +319,8 @@ def _send_via_sendgrid(to, subject, body):
             timeout=10,
         )
         if r.status_code != 202:
-            # SendGrid returns details in the body when something is off
-            # (unverified sender, invalid email, etc.). Log so the
-            # operator can debug from the Django logs.
+            # SendGrid puts the failure reason (unverified sender, bad
+            # email, etc.) in the body — log it so we can debug.
             logger.error('[SendGrid] %s %s', r.status_code, r.text[:500])
             return False
         return True
@@ -424,11 +374,8 @@ This code expires in 1 hour. If you didn't request this, ignore this email.
 
 
 def send_invitation_email(to: str, role: str, token: str, inviter_name: str):
-    """
-    Email the role-scoped invitation link. The base URL is configurable
-    so we can swap between local dev (localhost:4200) and production
-    (litrix.app, etc.) without touching the call site.
-    """
+    """Email the role-scoped invitation link. FRONTEND_BASE_URL lets us swap
+    between local dev and production without touching the call site."""
     base = os.getenv('FRONTEND_BASE_URL', 'http://localhost:4200').rstrip('/')
     link = f'{base}/register?invite={token}'
     role_label = {

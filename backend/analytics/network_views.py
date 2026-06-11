@@ -1,40 +1,21 @@
 """
-Litrix Research Network
-=======================
-Endpoints powering the /network page: given a researcher, return the
-shape of their collaboration graph as nodes + edges. The frontend
-renders this with a D3 force simulation.
+Collaboration-graph endpoints for the /network page. Given a researcher,
+return their graph as nodes + edges for the D3 force simulation.
 
-Modes
------
-?mode=coauthors  (default)  -> only people who actually wrote a paper
-                                with the centre.
-?mode=interests             -> only "thematic" neighbours — researchers
-                                whose Top-N OpenAlex `concepts` overlap
-                                with the centre, even if they never
-                                co-authored. Edge weight = #shared
-                                concepts.
-?mode=both                  -> union of the two graphs.
+Modes:
+    coauthors (default) — people who actually co-wrote a paper with the centre
+    interests           — thematic neighbours whose interests overlap the
+                          centre even without co-authoring (edge weight =
+                          shared concepts)
+    both                — union of the two
 
-Hidden gems
------------
-Registered Users with HIGH interest overlap but ZERO co-authored papers
-with the centre. Surfaces "people you should probably talk to."
+"Hidden gems" are registered users with high interest overlap but zero
+shared papers — people the centre should probably talk to.
 
-Interests source (hybrid, in this order)
-----------------------------------------
-1. **Researcher.ResearchInterests** — Google-Scholar-style profile
-   labels the researcher curated themselves (e.g. "Artificial
-   Intelligence", "Computational Intelligence"). Populated by the
-   `fetch_scholar_interests` management command, or edited manually
-   from the profile page. This is the **preferred** signal because
-   it reflects the researcher's stated intent.
-2. **RawData_Log->'concepts' + 'topics'** — OpenAlex auto-tags derived
-   from paper content. Used as a **fallback** for any researcher who
-   hasn't refreshed their Scholar interests yet, so the network
-   keeps working on day one.
-
-The hybrid logic lives in INTERESTS_SQL and INTEREST_NEIGHBOURS_SQL.
+Interests come from a hybrid source, preferring the researcher's curated
+Scholar labels (Researcher.ResearchInterests) and falling back to OpenAlex
+concepts/topics from their papers when they haven't refreshed yet, so the
+network works on day one. See INTERESTS_SQL and INTEREST_NEIGHBOURS_SQL.
 """
 import logging
 import re
@@ -49,10 +30,9 @@ LITRIX_ID_RE = re.compile(r'^lit-(\d+)$', re.IGNORECASE)
 
 CONCEPT_MIN_SCORE = 0.25
 INTERESTS_PER_NODE = 5
-# Min number of shared topics required to draw an "interest" edge.
-# We start at 1 because most researchers only have 3-5 Scholar labels —
-# requiring 2 overlaps is too strict at this data volume. Bump back to
-# 2 once most researchers have populated interests.
+# Shared topics needed to draw an interest edge. Kept at 1 for now: most
+# researchers only have 3-5 Scholar labels, so requiring 2 is too strict.
+# Bump to 2 once interests are widely populated.
 INTEREST_OVERLAP_MIN = 1
 MAX_INTERNAL = 80
 MAX_EXTERNAL = 40
@@ -148,11 +128,10 @@ GROUP BY "UserID", canonicalize_interest(name)
 
 def _fetch_interests(cur, user_ids, year_sql, year_params):
     """
-    Returns {UserID: {'top': [...], 'set': {...}}} or {} on failure.
+    Returns {UserID: {'top': [...], 'set': {...}}}, or {} on failure.
 
-    SAFETY NET: any SQL/runtime failure here is swallowed and logged —
-    we don't want a problem in the (optional, decorative) interests
-    chips to bring down the whole network endpoint.
+    Any failure is swallowed and logged — the interests chips are optional,
+    so a problem here shouldn't take down the whole network endpoint.
     """
     if not user_ids:
         return {}
@@ -165,10 +144,8 @@ def _fetch_interests(cur, user_ids, year_sql, year_params):
         rows_raw = cur.fetchall()
     except Exception as e:
         logger.exception("interests fetch failed: %s", e)
-        # CRITICAL: roll back so the aborted transaction state doesn't
-        # poison the *next* cursor.execute() inside the same with-block.
-        # Without this, every subsequent query in the endpoint dies with
-        # 'current transaction is aborted'.
+        # Roll back, or the aborted transaction poisons the next
+        # cursor.execute() in this with-block ('transaction is aborted').
         try:
             connection.rollback()
         except Exception:
@@ -311,24 +288,11 @@ LIMIT %s
 '''
 
 
-# ----------------------------------------------------------------------
-# Researcher-editable interests
-# ----------------------------------------------------------------------
-#
-# GET  /api/researchers/<id>/interests/  → current list
-# PUT  /api/researchers/<id>/interests/  → replace the whole list
-#                                           body: {"interests": [...]}
-#
-# Permission model
-#   • A researcher can edit their OWN interests (UserID match).
-#   • Admins can edit anyone's (relies on the existing role middleware
-#     attaching `request.user`).
-#
-# Why PUT (not PATCH): the list is intentionally replace-all. The
-# editor in the UI is a chip-list — the user sees the final state and
-# saves it as a whole. PATCH would invite race conditions in a chip
-# UI with multiple browser tabs open.
-# ----------------------------------------------------------------------
+# Researcher-editable interests.
+#   GET  /api/researchers/<id>/interests/  → current list
+#   PUT  /api/researchers/<id>/interests/  → replace the list, {"interests": [...]}
+# A researcher can edit their own; admins can edit anyone's. PUT (not PATCH)
+# because the UI chip-list is replace-all — PATCH would race across tabs.
 
 @decorators.api_view(['GET', 'PUT'])
 def researcher_interests(request, pk):
@@ -339,7 +303,7 @@ def researcher_interests(request, pk):
     if not user_id:
         return response.Response({'error': 'Invalid researcher id'}, status=404)
 
-    # ---- READ ----
+    # Read.
     if request.method == 'GET':
         with connection.cursor() as cur:
             cur.execute(
@@ -362,7 +326,7 @@ def researcher_interests(request, pk):
                 'updated_at': row[1].isoformat() if row[1] else None,
             })
 
-    # ---- WRITE (PUT) ----
+    # Write (PUT).
     auth_user = getattr(request, 'user', None)
     auth_user_id = getattr(auth_user, 'user_id', None) or getattr(auth_user, 'pk', None)
     is_admin = bool(getattr(auth_user, 'is_staff', False)) or \
@@ -376,7 +340,7 @@ def researcher_interests(request, pk):
         return response.Response(
             {'error': '`interests` must be a JSON array of strings.'}, status=400)
 
-    # Sanitise: trim, drop empties, dedupe (case-insensitive), cap to 20.
+    # Trim, drop empties, dedupe case-insensitively, cap at 20.
     seen, cleaned = set(), []
     for x in raw:
         if not isinstance(x, str):
@@ -441,7 +405,7 @@ def researcher_network(request, pk):
 
     with connection.cursor() as cur:
 
-        # ---- Center node ----
+        # Centre node.
         cur.execute(
             'SELECT u."UserID", u."FullName_Ar", '
             '       TRIM(CONCAT_WS(\' \', u."FirstName", u."LastName")), '
@@ -475,7 +439,7 @@ def researcher_network(request, pk):
             'papers':    crow[5] or 0,
         }
 
-        # ---- Internal co-authors ----
+        # Internal co-authors.
         cur.execute(
             f'''
             WITH coauthor_papers AS (
@@ -515,25 +479,14 @@ def researcher_network(request, pk):
         )
         internal_rows = cur.fetchall()
 
-        # ---- External co-authors ----
-        # ID-FIRST DISAMBIGUATION
-        # -----------------------
-        # We deliberately DROP name-based matching. Name comparison
-        # across languages ("سعد القثامي" vs "Saad Alqithami") is
-        # unreliable, produces duplicates, and creates ghost externals.
-        #
-        # The new rule: an authorship is "external" iff
-        #   - its author.id (OpenAlex)  is NOT a registered Researcher, AND
-        #   - its author.orcid          is NOT a registered Researcher.
-        #
-        # Trade-off: any authorship in the JSON that lacks BOTH ids is
-        # also kept as external (we have no signal to dedupe). That's
-        # correct — without an id, we can't claim it's anyone in particular.
-        #
-        # We also drop the from_ext_table path: the ExternalAuthors
-        # table stores only names/affiliations (no ids), so it
-        # inherently can't be disambiguated. We rely solely on the JSON
-        # authorships which are the OpenAlex source of truth.
+        # External co-authors, matched by ID only. Name matching across
+        # languages ("سعد القثامي" vs "Saad Alqithami") is unreliable and
+        # spawns ghost externals, so an authorship counts as external when
+        # neither its OpenAlex author.id nor its ORCID belongs to a
+        # registered Researcher. Authorships missing both ids stay external
+        # too — without an id we can't claim it's anyone in particular. We
+        # don't read ExternalAuthors here: it stores only names (no ids), so
+        # the JSON authorships (OpenAlex) are the source of truth.
         ext_rows = []
         if mode in ('coauthors', 'both') and not internal_only:
             cur.execute(
@@ -640,23 +593,18 @@ def researcher_network(request, pk):
             )
             ext_rows = cur.fetchall()
 
-        # ---- Interests for centre + internal coauthors ----
+        # Interests for the centre + internal co-authors.
         interests_ids = [user_id] + [r[0] for r in internal_rows]
         interests_map = _fetch_interests(cur, interests_ids, year_sql, year_params)
 
-        # ---- Interest neighbours ----
-        # Wrapped in try/except so a SQL hiccup here doesn't kill the
-        # whole endpoint — we degrade gracefully to an empty interest
-        # neighbours list and still return the co-authors graph.
+        # Interest neighbours. Wrapped in try/except so a SQL hiccup just
+        # gives an empty list — the co-authors graph still returns.
         interest_rows = []
         if mode in ('interests', 'both'):
-            # Param order matches CTEs in INTEREST_NEIGHBOURS_SQL:
-            # centre_concepts.scholar (user_id)
-            # centre_concepts.openalex (user_id, year_params, CONCEPT_MIN_SCORE)
-            # coauthor_ids (user_id)
-            # candidate_concepts.scholar (user_id)
-            # candidate_concepts.openalex (user_id, year_params, CONCEPT_MIN_SCORE)
-            # HAVING / LIMIT (INTEREST_OVERLAP_MIN, MAX_INTEREST_NEIGHBOURS)
+            # Param order follows the CTEs in INTEREST_NEIGHBOURS_SQL:
+            # centre scholar, centre openalex (+year, score), coauthor_ids,
+            # candidate scholar, candidate openalex (+year, score),
+            # then HAVING/LIMIT.
             params = (
                 [user_id, user_id]
                 + year_params
@@ -675,8 +623,8 @@ def researcher_network(request, pk):
                 interest_rows = cur.fetchall()
             except Exception as e:
                 logger.exception("interest neighbours fetch failed: %s", e)
-                # Roll back so the aborted transaction doesn't poison
-                # the next cursor.execute() below.
+                # Roll back so the aborted transaction doesn't poison the
+                # next cursor.execute() below.
                 try:
                     connection.rollback()
                 except Exception:
@@ -689,7 +637,7 @@ def researcher_network(request, pk):
                     extra = _fetch_interests(cur, new_ids, year_sql, year_params)
                     interests_map.update(extra)
 
-    # ---- Build payload ----
+    # Build payload.
     centre_interests = interests_map.get(center['user_id'], {'top': [], 'set': set()})
     centre_set = centre_interests['set']
 

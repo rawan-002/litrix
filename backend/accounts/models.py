@@ -3,13 +3,10 @@ from django.db import models, connection, transaction
 
 
 def generate_litrix_id() -> str:
-    """
-    Generate the next sequential Litrix_ID in the form Lit-NNNNNN.
+    """Next sequential Litrix_ID (Lit-NNNNNN).
 
-    The DB trigger fn_assign_litrix_id is the source of truth and will
-    overwrite any value we set here if it's NULL. We still expose this
-    helper so application-level code (admin scripts, tests) has a way to
-    pre-compute the value when needed.
+    The DB trigger fn_assign_litrix_id is canonical and fills in any NULL,
+    but app code (admin scripts, tests) sometimes needs the value up front.
     """
     with connection.cursor() as cur:
         cur.execute('''
@@ -32,10 +29,9 @@ class UserManager(BaseUserManager):
         user = self.model(email=email, **extra)
         if password:
             user.set_password(password)
-        # Pre-assign litrix_id inside the same transaction so the value is
-        # available immediately on the returned instance. The DB trigger
-        # is still the canonical safety net for any path that bypasses
-        # this manager (raw SQL, bulk_create, etc).
+        # Assign litrix_id in the same transaction so it's set on the
+        # returned instance. The DB trigger still covers paths that skip
+        # this manager (raw SQL, bulk_create).
         with transaction.atomic(using=self._db):
             if not user.litrix_id:
                 user.litrix_id = generate_litrix_id()

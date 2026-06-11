@@ -1,25 +1,15 @@
 """
-Admin Author Reconciliation endpoints
-======================================
-Backs the Angular page that lets an admin work through low-confidence
-co-author matches one at a time.
+Admin author-reconciliation endpoints — the page where an admin works
+through low-confidence co-author matches one at a time.
 
-Endpoint map:
     GET  /api/admin/author-review-queue/             → list pending items
     POST /api/admin/author-review-queue/<id>/decide/ → CONFIRM / REJECT / SKIP
 
-Design notes
-------------
-• Permissions follow the project's `has_litrix_perm` convention. We reuse
-  the existing `manage_users` permission since author linkage is a
-  user-data integrity operation; Admin and Dean roles already have it.
-• Every decision is an atomic transaction:
-      1. flip the queue row status
-      2. on CONFIRM: insert into Authors with `MappingCriteria = 'admin_reconcile'`
-      3. write to AuditLog so the change is traceable
-  If any step fails, none of them land.
-• ScopedNames are paged (default 50/req). The Angular UI hits this once
-  on load and only re-fetches when the cursor advances past the buffer.
+Permissions reuse manage_users (author linkage is a user-data integrity
+operation; Admin and Dean already hold it). Each decision is one atomic
+transaction — flip the queue row, on CONFIRM insert into Authors with
+MappingCriteria='admin_reconcile', and write the AuditLog — so a failure
+mid-way lands nothing. The list is paged (default 50/req).
 """
 import json
 
@@ -32,10 +22,7 @@ from rest_framework.response import Response
 from accounts.views import audit
 
 
-# -----------------------------------------------------------------------------
-# Permission helpers (mirror campaign_views convention)
-# -----------------------------------------------------------------------------
-
+# Permission helper (mirrors the campaign_views convention).
 def _can_reconcile(user) -> bool:
     return user.is_authenticated and (
         user.has_litrix_perm('manage_users')
@@ -43,10 +30,7 @@ def _can_reconcile(user) -> bool:
     )
 
 
-# -----------------------------------------------------------------------------
 # GET /api/admin/author-review-queue/
-# -----------------------------------------------------------------------------
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def review_queue_list(request):
@@ -116,10 +100,7 @@ def review_queue_list(request):
     return Response(items)
 
 
-# -----------------------------------------------------------------------------
 # POST /api/admin/author-review-queue/<id>/decide/
-# -----------------------------------------------------------------------------
-
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def review_queue_decide(request, review_id: int):
@@ -155,7 +136,7 @@ def review_queue_decide(request, review_id: int):
                     status=http.HTTP_409_CONFLICT,
                 )
 
-            # 1) Update queue row.
+            # Update the queue row.
             cur.execute('''
                 UPDATE "AuthorReviewQueue"
                 SET "Status"           = %s,
@@ -165,8 +146,8 @@ def review_queue_decide(request, review_id: int):
                 WHERE "ReviewID" = %s
             ''', (decision, request.user.user_id, notes, review_id))
 
-            # 2) CONFIRMED → write the link into Authors. Use the admin
-            #    decision as the authoritative criteria + boost confidence.
+            # On CONFIRMED, write the link into Authors — the admin decision
+            # is the authoritative criteria and gets full confidence.
             if decision == 'CONFIRMED':
                 if not suggested_user_id:
                     return Response(
@@ -189,7 +170,7 @@ def review_queue_decide(request, review_id: int):
                         "Is_Verified"       = TRUE
                 ''', (suggested_user_id, paper_id, scraped_name))
 
-        # Audit log outside the cursor block (audit() opens its own cursor)
+        # Audit outside the cursor block — audit() opens its own cursor.
         audit(
             user_id=request.user.user_id,
             tenant_id=getattr(request.user, 'tenant_id', 1),
@@ -210,14 +191,11 @@ def review_queue_decide(request, review_id: int):
     return Response({'ok': True, 'reviewId': review_id, 'status': decision})
 
 
-# -----------------------------------------------------------------------------
 # GET /api/admin/author-review-queue/stats/
-# -----------------------------------------------------------------------------
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def review_queue_stats(request):
-    """Cheap counters for the Angular header / nav badge."""
+    """Cheap counters for the header / nav badge."""
     if not _can_reconcile(request.user):
         return Response({'error': 'permission_denied'}, status=http.HTTP_403_FORBIDDEN)
 

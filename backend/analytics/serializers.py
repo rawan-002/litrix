@@ -1,9 +1,8 @@
 """
-DRF Serializers — convert ORM rows to JSON for the Angular frontend.
+DRF serializers — ORM rows to JSON for the frontend.
 
-Each serializer here is intentionally minimal: it just lists fields. We
-don't add custom logic because the views (the SQL ones) already did the
-heavy lifting of aggregation and computation.
+Mostly just field lists: the raw-SQL views already do the aggregation, so
+there's little for the serializers to compute.
 """
 from rest_framework import serializers
 from .models import (
@@ -15,7 +14,7 @@ from .models import (
 
 
 class ResearcherStatsSerializer(serializers.ModelSerializer):
-    """The cornerstone payload for the Researcher dashboard."""
+    """Main payload for the researcher dashboard."""
     class Meta:
         model = ResearcherStats
         fields = [
@@ -81,24 +80,13 @@ class DepartmentSerializer(serializers.ModelSerializer):
         fields = ['department_id', 'department_name', 'college_id']
 
 
-# ============================================================================
-# Sprint 7: Reporting Campaigns serializers
-# ============================================================================
-# Two-tier strategy:
-#   • *Serializer        → full payload for detail endpoints
-#   • *ListSerializer    → trimmed payload for list endpoints (avoid
-#                          shipping huge JSON when the UI only renders cards)
-#
-# Decisions/Submissions intentionally keep their write/read on the same
-# class — the volume is tiny and the savings of separate classes would
-# not pay off.
-# ============================================================================
+# Reporting Campaigns serializers. Decisions/Submissions keep read and write
+# on one class — the volume is tiny, so splitting wouldn't pay off.
 class ReportCampaignSerializer(serializers.ModelSerializer):
     """
-    Full campaign payload. Counts (`submissions_total` /
-    `submissions_submitted`) are computed by the view and injected as
-    extra context — we expose them here as read-only Integer fields so
-    the schema is explicit at the API boundary.
+    Full campaign payload. The submission counts are computed in the view;
+    we declare them here as read-only Integer fields so the schema stays
+    explicit at the API boundary.
     """
     submissions_total     = serializers.IntegerField(read_only=True, required=False)
     submissions_submitted = serializers.IntegerField(read_only=True, required=False)
@@ -123,9 +111,8 @@ class ReportCampaignSerializer(serializers.ModelSerializer):
 
     def validate_target_years(self, value):
         """
-        Guard against accidental bad shapes. The DB CHECK constraint
-        catches an empty array too, but failing here gives the frontend
-        a friendlier 400 instead of a Postgres-level 500.
+        The DB CHECK catches an empty array too, but validating here turns
+        it into a friendly 400 instead of a Postgres 500.
         """
         if not isinstance(value, list) or len(value) == 0:
             raise serializers.ValidationError(
@@ -138,7 +125,7 @@ class ReportCampaignSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, data):
-        """Cross-field check: closes_at strictly after opens_at."""
+        """closes_at must be strictly after opens_at."""
         opens_at  = data.get('opens_at')  or getattr(self.instance, 'opens_at',  None)
         closes_at = data.get('closes_at') or getattr(self.instance, 'closes_at', None)
         if opens_at and closes_at and closes_at <= opens_at:
@@ -150,13 +137,11 @@ class ReportCampaignSerializer(serializers.ModelSerializer):
 
 class ReportPaperDecisionSerializer(serializers.ModelSerializer):
     """
-    A single paper-level decision. Two shapes ride on the same model:
+    A single paper-level decision. Two shapes on one model:
+      existing paper: { paper_id, decision: 'confirmed' | 'not_mine', note? }
+      missing entry:  { decision: 'missing', missing_title, missing_year, missing_doi? }
 
-      1. existing paper:   { paper_id, decision: 'confirmed' | 'not_mine', note? }
-      2. missing entry:    { decision: 'missing', missing_title, missing_year, missing_doi? }
-
-    The DB CHECK constraint enforces the shape; we ALSO validate here
-    so the API returns a friendly 400 instead of a 500.
+    The DB CHECK enforces the shape; we validate here too for a friendly 400.
     """
     class Meta:
         model = ReportPaperDecision
@@ -192,13 +177,12 @@ class ReportPaperDecisionSerializer(serializers.ModelSerializer):
 
 class ReportSubmissionSerializer(serializers.ModelSerializer):
     """
-    A researcher's submission for one campaign. The full payload
-    includes the auto-populated paper list + any existing decisions —
-    but that join lives in the view (raw SQL is cheaper than the ORM
-    here). This serializer is for the basic submission row only.
+    A researcher's submission for one campaign — the basic row only. The
+    auto-populated paper list + decisions are joined in the view (raw SQL is
+    cheaper than the ORM here).
     """
-    # Light denormalized view of the campaign so the frontend doesn't
-    # need a second round-trip just to show "Annual Report 2025–2026".
+    # A little campaign denorm so the frontend can show the title without a
+    # second round-trip.
     campaign_title    = serializers.CharField(
         source='campaign.title', read_only=True, required=False, default=None,
     )
@@ -225,12 +209,11 @@ class ReportSubmissionSerializer(serializers.ModelSerializer):
 
 class ScheduledNotificationSerializer(serializers.ModelSerializer):
     """
-    Admin notification composer payload.
+    Admin notification-composer payload.
 
-    `target_audience` is a free-form JSON spec the worker translates
-    into a SELECT — examples in the model's docstring. Validation here
-    is intentionally light because the worker tolerates missing/empty
-    audiences (no recipients = no-op send).
+    target_audience is a free-form JSON spec the worker turns into a SELECT
+    (examples in the model docstring). Validation stays light because the
+    worker tolerates an empty audience — no recipients just means no send.
     """
     class Meta:
         model = ScheduledNotification

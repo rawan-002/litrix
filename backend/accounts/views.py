@@ -17,19 +17,9 @@ from rest_framework_simplejwt.views import TokenRefreshView
 logger = logging.getLogger(__name__)
 
 
-# ============================================================================
-# Auth-endpoint throttles
-# ============================================================================
-# Why custom subclasses?
-#   The DRF Scoped/Anon defaults read their rate from the global
-#   DEFAULT_THROTTLE_RATES map in settings. We define dedicated classes
-#   here (rather than @scope decorators) so the throttle is self-
-#   contained — the view file declares its own rate-limit policy and
-#   it cannot accidentally fall through to the global anon limit.
-#
-# The rates come from settings.DEFAULT_THROTTLE_RATES['auth_anon'] etc.
-# Adjust there to tune; the view code never needs to change.
-# ============================================================================
+# A dedicated subclass (not a @scope decorator) so this view file owns its
+# own rate-limit policy and can't silently fall through to the global anon
+# limit. The actual rate lives in settings.DEFAULT_THROTTLE_RATES['auth_anon'].
 class AuthAnonThrottle(AnonRateThrottle):
     """5/min by default. Applied to login, register, password-reset, etc."""
     scope = 'auth_anon'
@@ -45,23 +35,12 @@ from .email_service import (
 )
 
 
-# ============================================================================
-# Post-approval scraper kickoff
-# ============================================================================
-# After an admin approves a registration, the new researcher should have
-# their publications fetched without requiring a second manual click in
-# the Sync admin page. This helper queues a SyncJob and spins up the
-# background thread that runs the scraper.
-#
-# Source priority:
-#   1. Scholar  — richer per-paper signal (cited_by, journal, etc).
-#   2. ORCID    — fallback if no Scholar_ID.
-#   3. (none)   — silently skip; admin can sync manually later.
-#
-# The cooldown gate in _run_scraper / scholar.py naturally lets a first-
-# time sync through because LastSyncedAt is NULL for a freshly created
-# Researcher row.
-# ============================================================================
+# After an admin approves a registration, fetch the new researcher's papers
+# without a second manual click in the Sync page: queue a SyncJob and run the
+# scraper on a background thread. Prefer Scholar (richer per-paper signal),
+# fall back to ORCID, and skip silently if neither ID is present (admin can
+# sync later). A first-time sync passes the cooldown gate naturally since
+# LastSyncedAt is NULL on a fresh Researcher row.
 def _kickoff_initial_sync(
     user_id: int,
     tenant_id: int,
@@ -76,13 +55,13 @@ def _kickoff_initial_sync(
         source = 'orcid'
         args = ['--orcid', orcid_id, '--user', str(user_id)]
     else:
-        return None  # Nothing to sync — user provided no academic IDs.
+        return None  # No academic IDs — nothing to sync.
 
     with connection.cursor() as cur:
-        # %s::jsonb is required because psycopg2 binds the dumped string
-        # as plain TEXT, and Postgres won't implicitly cast TEXT → JSONB
-        # inside an INSERT (you'd get 'column "Metadata" is of type jsonb
-        # but expression is of type text'). The cast is the canonical fix.
+        # %s::jsonb is required: psycopg2 binds the dumped string as TEXT,
+        # and Postgres won't implicitly cast TEXT → JSONB on INSERT (you'd
+        # get 'column "Metadata" is of type jsonb but expression is of type
+        # text'). The explicit cast is the fix.
         cur.execute(
             '''
             INSERT INTO "SyncJob" (
@@ -98,8 +77,8 @@ def _kickoff_initial_sync(
         )
         job_id = cur.fetchone()[0]
 
-    # Lazy import — avoids circular dependency at module load time and
-    # keeps sync_views as the single source of truth for _run_scraper.
+    # Lazy import — dodges a circular import and keeps sync_views the single
+    # owner of _run_scraper.
     from .sync_views import _run_scraper
     threading.Thread(
         target=_run_scraper, args=(job_id, source, args), daemon=True,
@@ -119,22 +98,12 @@ def get_tokens(user):
     }
 
 
-# ============================================================================
-# Identity Verification Gate (registration-time)
-# ============================================================================
-# Why?
-#   We may already have a Researcher record for this person from prior
-#   scraping (papers + dept + rank are populated). When that person comes
-#   to claim their account, the form values they enter must be reconciled
-#   against the stored record. Mismatches surface as warnings so:
-#     • Honest users catch a typo before submitting.
-#     • Identity-claim attempts surface visibly to admins at approval time.
-#   We do NOT block the submit — per the product spec, mismatches show as
-#   a notification ("اشعار") and the admin makes the final call.
-#
-# Lookup priority: Scholar_ID > ORCID > Email. Whichever hits first wins,
-# because Scholar_ID is the most specific academic identifier.
-# ============================================================================
+# We may already hold a scraped Researcher record (papers + dept + rank) for
+# the person claiming an account. Reconcile the form values against it: honest
+# users catch a typo, and identity-claim attempts surface to admins at approval
+# time. This only warns — per spec, mismatches show as a notification and the
+# admin decides. Lookup priority is Scholar_ID > ORCID > Email; first hit wins,
+# since Scholar_ID is the most specific academic identifier.
 def _normalize(s):
     return (s or '').strip()
 
@@ -147,16 +116,10 @@ def _lookup_existing_for_registration(
     academic_rank: str | None    = None,
     full_name_ar:  str | None    = None,
 ) -> dict:
-    """
-    Try to find an existing Users row that this registration is claiming
-    to be, and report any mismatches against the form-supplied values.
-
-    Returns:
-        match_found     : bool
-        matched_by      : 'scholar_id' | 'orcid_id' | 'email' | None
-        stored          : { user_id, full_name_ar, department_id,
-                            department_name, academic_rank, papers_count }
-        mismatches      : [ { field, your_value, our_value, label } ]
+    """Find the existing Users row this registration claims to be, and report
+    mismatches against the form values. Returns a dict: match_found,
+    matched_by ('scholar_id'|'orcid_id'|'email'|None), stored (profile
+    snapshot), and mismatches (list of {field, your_value, our_value, ...}).
     """
     sid   = _normalize(scholar_id)
     oid   = _normalize(orcid_id)
@@ -201,17 +164,14 @@ def _lookup_existing_for_registration(
                 'mismatches':  [],
             }
 
-        # Pull the stored profile snapshot for comparison.
-        # AccountStatus + IsActive let us distinguish a fully-claimed
-        # account (someone else is already using it) from a
-        # placeholder Users row created by an admin import / pre-scrape.
+        # Pull the stored profile to compare. AccountStatus + IsActive
+        # distinguish a fully-claimed account (someone's already using it)
+        # from a placeholder row from an admin import / pre-scrape.
         #
-        # Department lookup uses a LATERAL subquery that prefers the
-        # current position but falls back to ANY recorded Works_In row
-        # if IsCurrentPosition was never set (common when researchers
-        # are imported by admin and the flag was missed). Without this
-        # fallback, a stored department could silently show up as NULL
-        # and miss the mismatch comparison entirely.
+        # The department LATERAL prefers the current position but falls back
+        # to any Works_In row when IsCurrentPosition was never set (common on
+        # admin imports). Without the fallback the stored department shows up
+        # NULL and the mismatch check silently misses it.
         cur.execute('''
             SELECT
                 u."UserID",
@@ -243,7 +203,7 @@ def _lookup_existing_for_registration(
     is_active_user = bool(
         row[4]                          # IsActive
         and row[5]                      # EmailVerified
-        and (row[3] or '').lower() == 'active'
+        and (row[3] or '').lower() == 'active'   # AccountStatus
     )
 
     stored = {
@@ -260,12 +220,9 @@ def _lookup_existing_for_registration(
 
     mismatches = []
 
-    # ------------------------------------------------------------------
-    # Critical signal: this Scholar/ORCID is already a fully-activated
-    # account in the system. Almost always indicates a typo in the form
-    # OR an identity-claim attempt. Surfaced as a HIGH-severity item
-    # the UI can render in red instead of amber.
-    # ------------------------------------------------------------------
+    # This Scholar/ORCID is already a fully-activated account — almost
+    # always a form typo or an identity-claim attempt. High severity so the
+    # UI can render it red instead of amber.
     if is_active_user and matched_by in ('scholar_id', 'orcid_id'):
         mismatches.append({
             'field':      'identity_already_claimed',
@@ -275,19 +232,12 @@ def _lookup_existing_for_registration(
             'our_value':  stored['email'],
         })
 
-    # ------------------------------------------------------------------
-    # Department mismatch.
-    #
-    # Three sub-cases:
-    #   (a) Both sides have a value, and they differ → hard mismatch.
-    #   (b) Stored side has a value, form side is empty → not a mismatch
-    #       per se (user just hasn't picked yet); skip silently.
-    #   (c) Stored side is empty BUT we have a Scholar_ID match with
-    #       existing scraped papers → notify so the user knows we
-    #       already track them; the admin will confirm department on
-    #       approval. This is the "data-integrity hint" the SaaS spec
-    #       requires for prior-scraped researchers.
-    # ------------------------------------------------------------------
+    # Department mismatch, three cases:
+    #   (a) both sides set and differ → hard mismatch;
+    #   (b) stored set, form empty → user just hasn't picked yet, skip;
+    #   (c) stored empty but we matched a Scholar/ORCID with scraped papers →
+    #       info hint so the user knows we already track them and the admin
+    #       confirms the department on approval.
     if department_id and stored['department_id'] and \
        int(department_id) != int(stored['department_id']):
         mismatches.append({
@@ -301,8 +251,8 @@ def _lookup_existing_for_registration(
     elif (not stored['department_id']
           and stored['papers_count'] > 0
           and matched_by in ('scholar_id', 'orcid_id')):
-        # Case (c): we have papers from prior scraping but no recorded
-        # department. The user's chosen department needs admin review.
+        # Case (c): scraped papers but no department on file — the chosen
+        # department needs admin review.
         mismatches.append({
             'field':      'department_unverified',
             'label':      'Department needs verification',
@@ -317,7 +267,7 @@ def _lookup_existing_for_registration(
             ),
         })
 
-    # Academic rank mismatch — case-insensitive, trimmed compare.
+    # Academic rank — case-insensitive, trimmed compare.
     if _normalize(academic_rank) and _normalize(stored['academic_rank']):
         if _normalize(academic_rank).lower() != \
            _normalize(stored['academic_rank']).lower():
@@ -328,8 +278,8 @@ def _lookup_existing_for_registration(
                 'our_value':  stored['academic_rank'],
             })
 
-    # Name mismatch — exact (after trim). Names get normalized
-    # differently across systems; only flag a HARD mismatch.
+    # Name — exact compare after trim. Names normalize differently across
+    # systems, so only flag a hard mismatch.
     if _normalize(full_name_ar) and _normalize(stored['full_name_ar']):
         if _normalize(full_name_ar) != _normalize(stored['full_name_ar']):
             mismatches.append({
@@ -351,13 +301,10 @@ def _lookup_existing_for_registration(
 @permission_classes([permissions.AllowAny])
 @throttle_classes([AuthAnonThrottle])
 def registration_match(request):
-    """
-    Real-time check used by the registration form.
-    Public on purpose — but we never leak a password hash, just enough
-    profile info to reconcile against form values.
-
-    Throttled because this endpoint is a tempting reconnaissance vector
-    (it confirms whether a given Scholar_ID / ORCID is in the system).
+    """Real-time check the registration form calls. Public on purpose, but it
+    never leaks a password hash — only enough profile info to reconcile
+    against the form. Throttled because it confirms whether a given
+    Scholar_ID / ORCID is in the system (a reconnaissance vector).
     """
     d = request.data or {}
     result = _lookup_existing_for_registration(
@@ -402,11 +349,8 @@ def public_departments(request):
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def public_stats(request):
-    """
-    Headline counts for the public landing page. No auth required, no
-    PII surfaced - only aggregates. Cached intent: cheap to compute,
-    safe to expose, refreshed on every page load.
-    """
+    """Headline counts for the public landing page — aggregates only, no auth,
+    no PII. Cheap to compute, so it just recomputes on every load."""
     with connection.cursor() as cur:
         cur.execute("""
             SELECT
@@ -440,17 +384,11 @@ def register(request):
     d = s.validated_data
     email = d['email'].lower()
 
-    # ------------------------------------------------------------------
-    # Optional invitation flow.
-    #
-    # If the request carries an `invite` token, we run the role-scoped
-    # registration path:
-    #   • token must exist, not be used, not be expired, not revoked
-    #   • email must match the address the admin invited
-    # On success, the resulting User is provisioned with the intended
-    # role + UserType + (optional) department, and the regular admin-
-    # approval queue is bypassed — the invite IS the approval.
-    # ------------------------------------------------------------------
+    # Optional invitation flow. An `invite` token runs the role-scoped path:
+    # the token must be valid (unused, unexpired, unrevoked) and its email
+    # must match. On success the User is provisioned with the intended role +
+    # UserType + (optional) department and skips the admin-approval queue —
+    # the invite IS the approval.
     invite_token = (request.data.get('invite') or '').strip()
     invite_payload = None
     if invite_token:
@@ -462,24 +400,13 @@ def register(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-    # ------------------------------------------------------------------
-    # Server-side identity verification gate.
-    #
-    # The frontend already runs the same lookup as the user types, but
-    # that's a UX nicety, not a security boundary. A user can:
-    #   • submit before the debounce fires
-    #   • disable JS / hit the API directly
-    #   • ignore the warning banner
-    # We re-run the check here and HARD-BLOCK any high-severity issue:
-    #   • The Scholar/ORCID is already linked to an active account.
-    #   • The chosen department clearly disagrees with the stored one.
-    # Lower-severity hints (rank/name/info) only warn; they don't block,
-    # because legitimate updates (transfers, promotions) need a path
-    # through. Admins still see them at approval time.
-    #
-    # Invitations skip this gate — the admin already vetted the
-    # invitee when issuing the token.
-    # ------------------------------------------------------------------
+    # Server-side identity gate. The frontend runs the same lookup as the
+    # user types, but that's UX, not security — a user can submit early,
+    # hit the API directly, or ignore the banner. Re-run here and hard-block
+    # high-severity issues (Scholar/ORCID already on an active account, or a
+    # clear department conflict). Lower-severity hints (rank/name/info) only
+    # warn, so legitimate transfers/promotions still get through; admins see
+    # them at approval. Invitations skip this — the admin already vetted them.
     if not invite_payload:
         verification = _lookup_existing_for_registration(
             scholar_id    = d.get('scholar_id'),
@@ -511,8 +438,8 @@ def register(request):
     metadata = {
         'full_name_ar': d.get('full_name_ar') or '',
         'full_name_en': d.get('full_name_en') or '',
-        # Explicit three-part English name from the form (preferred over
-        # splitting full_name_en, which can't tell middle from last).
+        # Explicit three-part English name from the form — beats splitting
+        # full_name_en, which can't tell middle from last.
         'first_name':   d.get('first_name') or '',
         'middle_name':  d.get('middle_name') or '',
         'last_name':    d.get('last_name') or '',
@@ -524,18 +451,13 @@ def register(request):
         'password_hash': pwd_hash,
     }
 
-    # ------------------------------------------------------------------
-    # Invitation fast path: provision the User directly, skip the
-    # awaiting-email-verification queue, and skip the admin-approval
-    # step. The invite IS the approval (admin issued it explicitly).
-    #
-    # SECURITY GATE: even with a valid invitation, the researcher
-    # cannot claim a profile under a different department than the
-    # one already recorded. We re-run the mismatch check here and
-    # reject HIGH-severity department mismatches before any account
-    # is created. (The invite vetting only covers email + role, not
-    # the identity claim against existing scraped data.)
-    # ------------------------------------------------------------------
+    # Invitation fast path: provision the User directly, skipping both the
+    # email-verification queue and admin approval (the invite is the approval).
+    # Even so, the researcher can't claim a profile under a different
+    # department than the one on record — the invite vetting only covered
+    # email + role, not the identity claim against scraped data — so re-run
+    # the mismatch check and reject high-severity department conflicts before
+    # creating anything.
     if invite_payload:
         inv_verification = _lookup_existing_for_registration(
             scholar_id    = d.get('scholar_id'),
@@ -569,10 +491,9 @@ def register(request):
         )
 
     with connection.cursor() as cur:
-        # Coerce empty strings to NULL on the way into the DB so the
-        # academic-ID UNIQUEs and FullName_Ar UNIQUE don't trip on
-        # multiple "registered without scholar/orcid" rows. Approve
-        # logic does the same — done at *both* ends of the pipeline.
+        # Empty string → NULL so the academic-ID and FullName_Ar UNIQUEs
+        # don't trip on multiple "registered without scholar/orcid" rows.
+        # Approve does the same — both ends of the pipeline.
         sid_val    = (metadata['scholar_id']  or '').strip() or None
         oid_val    = (metadata['orcid_id']    or '').strip() or None
         scopus_val = (metadata['scopus_id']   or '').strip() or None
@@ -594,9 +515,8 @@ def register(request):
         req_id = cur.fetchone()[0]
 
     token = create_verification(email, purpose='registration')
-    # Surface the delivery result so the client can warn + offer a resend
-    # instead of silently parking the user on "we sent a code" when the
-    # email never actually went out.
+    # Return the delivery result so the client can warn and offer a resend
+    # instead of parking the user on "we sent a code" when it never left.
     sent = send_verification_email(email, token)
 
     return Response({
@@ -609,15 +529,11 @@ def register(request):
 
 
 def _provision_invited_user(request, d, metadata, pwd_hash, email, invite):
-    """
-    Direct provisioning path for invitation-based registration.
-
-    Creates the Users + Researcher + Works_In rows in one atomic block
-    using the role + department baked into the invitation, marks the
-    invitation used, and kicks off the initial scrape if academic IDs
-    are present. The caller still receives a 201 with the brand-new
-    user_id.
-    """
+    """Direct provisioning path for invitation-based registration. Creates the
+    Users + Researcher + Works_In rows in one atomic block using the role +
+    department baked into the invite, marks the invite used, and kicks off the
+    initial scrape if academic IDs are present. Returns a 201 with the new
+    user_id."""
     sid    = (metadata['scholar_id']  or '').strip() or None
     oid    = (metadata['orcid_id']    or '').strip() or None
     scopus = (metadata['scopus_id']   or '').strip() or None
@@ -630,9 +546,9 @@ def _provision_invited_user(request, d, metadata, pwd_hash, email, invite):
     middle_name = (metadata.get('middle_name') or '').strip() or None
     last_name   = (metadata.get('last_name')   or '').strip() or None
 
-    # "Users"."FirstName"/"LastName" are NOT NULL. If the explicit parts are
+    # Users.FirstName/LastName are NOT NULL. When the explicit parts are
     # missing (older clients, Arabic-only signups, a single token), derive
-    # non-empty values so we never send NULLs and 500 the registration:
+    # non-empty values so we don't send NULL and 500 the registration:
     # English full name -> Arabic name -> email local part.
     if not (first_name and last_name):
         display = name_en or name_ar or email.split('@')[0]
@@ -641,8 +557,8 @@ def _provision_invited_user(request, d, metadata, pwd_hash, email, invite):
         if not last_name:
             last_name = ' '.join(parts[1:]) if len(parts) > 1 else first_name
 
-    # The invitation already pinned tenant + role + user_type + (optional)
-    # department; the invitee can't override them via the form.
+    # The invite pinned tenant + role + user_type + (optional) department;
+    # the invitee can't override them via the form.
     tenant_id   = invite['tenant_id']
     role_id     = invite['role_id']
     user_type   = invite['user_type']
@@ -651,18 +567,15 @@ def _provision_invited_user(request, d, metadata, pwd_hash, email, invite):
 
     with transaction.atomic():
         with connection.cursor() as cur:
-            # ----------------------------------------------------------
-            # ATOMIC INVITATION CLAIM (race guard)
-            # consume_invitation() validated the token earlier but did NOT
-            # mark it used, so two concurrent registrations with the same
-            # token could both reach here and provision two accounts. Claim
-            # it FIRST with a conditional UPDATE: the `WHERE "UsedAt" IS NULL`
-            # + row lock makes this the single serialization point — the
-            # second request matches 0 rows and is rejected before anything
-            # is created. UsedByUserID is filled in once we have the UserID;
-            # if any later step fails, the whole atomic block rolls back and
-            # the token reverts to unused.
-            # ----------------------------------------------------------
+            # Atomic invitation claim (race guard). consume_invitation()
+            # validated the token but did NOT mark it used, so two concurrent
+            # registrations with the same token could both provision accounts.
+            # Claim it FIRST via a conditional UPDATE: WHERE "UsedAt" IS NULL
+            # plus the row lock makes this the single serialization point — the
+            # loser matches 0 rows and is rejected before anything is created.
+            # UsedByUserID is filled in below once we have the UserID; if any
+            # later step fails the atomic block rolls back and the token
+            # reverts to unused.
             cur.execute(
                 'UPDATE "Invitation" SET "UsedAt" = NOW() '
                 'WHERE "InvitationID" = %s '
@@ -676,16 +589,11 @@ def _provision_invited_user(request, d, metadata, pwd_hash, email, invite):
                     status=status.HTTP_409_CONFLICT,
                 )
 
-            # ----------------------------------------------------------
-            # CLAIM-PROFILE FLOW
-            # Before INSERT-ing a brand-new Users row, check if there's
-            # already a 'Pending' row with the same Scholar_ID or ORCID.
-            # That row was created earlier by an admin import / cleanup
-            # and is waiting for the real owner to register. We UPDATE
-            # it in-place so the existing Authors links + Researcher
-            # row keep their UserID - the new user inherits all their
-            # papers automatically.
-            # ----------------------------------------------------------
+            # Claim-profile flow. Before INSERT-ing a new Users row, look for
+            # an existing 'Pending' row with the same Scholar_ID or ORCID — one
+            # an admin import/cleanup created, waiting for its real owner. UPDATE
+            # it in place so the existing Authors links + Researcher row keep
+            # their UserID and the new user inherits every paper.
             claimed_user_id = None
             if sid:
                 cur.execute(
@@ -709,7 +617,7 @@ def _provision_invited_user(request, d, metadata, pwd_hash, email, invite):
                     claimed_user_id = row[0]
 
             if claimed_user_id is not None:
-                # Claim path: update the existing Pending row.
+                # Claim path: update the existing Pending row in place.
                 cur.execute('''
                     UPDATE "Users"
                     SET "Email"         = %s,
@@ -734,7 +642,7 @@ def _provision_invited_user(request, d, metadata, pwd_hash, email, invite):
                 ])
                 new_user_id = cur.fetchone()[0]
             else:
-                # Fresh INSERT path: no matching profile to claim.
+                # No matching profile — fresh INSERT.
                 cur.execute('''
                     INSERT INTO "Users"
                       ("Email", "PasswordHash", "FullName_Ar", "FirstName", "MiddleName", "LastName",
@@ -751,8 +659,8 @@ def _provision_invited_user(request, d, metadata, pwd_hash, email, invite):
                 ])
                 new_user_id = cur.fetchone()[0]
 
-            # Researcher row exists for everyone — even Dean/HoD may
-            # eventually have publications; the row is the join anchor.
+            # Every user gets a Researcher row — even Dean/HoD may publish,
+            # and the row is the join anchor.
             cur.execute('''
                 INSERT INTO "Researcher" ("UserID", "AcademicRank", "LastSyncedAt")
                 VALUES (%s, %s, NULL)
@@ -768,10 +676,10 @@ def _provision_invited_user(request, d, metadata, pwd_hash, email, invite):
                     ON CONFLICT DO NOTHING
                 ''', [new_user_id, final_dept])
 
-                # A HoD heads exactly one department — record the canonical
-                # Department.HeadID link so role-scoped views (and exports)
-                # can resolve "this user's department" without leaning on
-                # Works_In. The invite explicitly designated them as head.
+                # A HoD heads exactly one department. Set Department.HeadID so
+                # role-scoped views and exports resolve "this user's
+                # department" without leaning on Works_In — the invite
+                # designated them head.
                 if user_type == 'HoD':
                     cur.execute(
                         'UPDATE "Department" SET "HeadID" = %s '
@@ -779,16 +687,16 @@ def _provision_invited_user(request, d, metadata, pwd_hash, email, invite):
                         [new_user_id, final_dept],
                     )
 
-            # The invitation was already claimed (UsedAt set) at the top of
-            # this transaction; now that we have the UserID, record who used
-            # it. Same atomic block, so it commits/rolls back together.
+            # UsedAt was set at the top of this transaction; now that we have
+            # the UserID, record who used it. Same atomic block, so it
+            # commits/rolls back together.
             cur.execute(
                 'UPDATE "Invitation" SET "UsedByUserID" = %s '
                 'WHERE "InvitationID" = %s',
                 [new_user_id, invite['invitation_id']],
             )
 
-            # Welcome notification (English — matches the rest of the UI).
+            # Welcome notification (English, like the rest of the UI).
             cur.execute('''
                 INSERT INTO "Notification"
                   ("TenantID", "UserID", "Type", "Title", "Message")
@@ -798,8 +706,8 @@ def _provision_invited_user(request, d, metadata, pwd_hash, email, invite):
                 f'Your account has been created as {user_type}. You can now log in.',
             ])
 
-    # Kick off initial publication sync if we have an academic ID. Same
-    # helper used by the manual-approval path — keeps behavior unified.
+    # Kick off the initial publication sync if we have an academic ID — same
+    # helper the manual-approval path uses.
     sync_job_id = None
     try:
         sync_job_id = _kickoff_initial_sync(
@@ -866,15 +774,13 @@ def verify_email(request):
 @permission_classes([permissions.AllowAny])
 @throttle_classes([AuthAnonThrottle])
 def resend_verification(request):
-    """
-    POST /api/auth/resend-verification/  { "email": "..." }
+    """POST /api/auth/resend-verification/  { "email": "..." }
 
-    Re-mint and re-send the registration verification code for an email
-    that is still awaiting verification. Used when the first email never
-    arrived (delivery failure, spam, lost). Returns the same opaque shape
-    whether or not a matching pending request exists, so the endpoint
-    can't be used to enumerate which emails have registered — except we
-    do report `email_sent` so a legitimate user knows to retry.
+    Re-mint and re-send the registration code for an email still awaiting
+    verification (first one lost to delivery failure / spam). The response
+    is the same whether or not a pending request exists, so it can't
+    enumerate registered emails — we still report email_sent so a real user
+    knows to retry.
     """
     email = (request.data.get('email') or '').strip().lower()
     if not email:
@@ -895,8 +801,8 @@ def resend_verification(request):
         token = create_verification(email, purpose='registration')
         sent = send_verification_email(email, token)
 
-    # Opaque message (don't confirm/deny the email exists); still surface
-    # whether the send succeeded so a real user can react.
+    # Don't confirm/deny the email exists, but still report whether the send
+    # succeeded so a real user can react.
     return Response({
         'message': 'If an unverified registration exists for this email, '
                    'a new code has been sent.',
@@ -908,17 +814,12 @@ def resend_verification(request):
 @permission_classes([permissions.AllowAny])
 @throttle_classes([AuthAnonThrottle])
 def login(request):
-    """
-    Authenticate a user and return a JWT pair.
+    """Authenticate and return a JWT pair.
 
-    Why does every failure return the SAME error?
-        Returning distinct messages ("Invalid credentials" vs. "Email
-        not verified" vs. "Account is inactive") is a username
-        enumeration vector — an attacker scripts the endpoint with
-        random emails and learns which ones are registered. We collapse
-        all four failure modes into one generic 401. The audit log
-        still records the specific reason internally so admins can
-        debug, but the wire response is opaque.
+    Every failure returns the same generic 401. Distinct messages ("not
+    verified" vs "inactive" vs "bad password") would let an attacker
+    enumerate registered emails. The specific reason is logged for admins;
+    the wire response stays opaque.
     """
     s = LoginSerializer(data=request.data)
     s.is_valid(raise_exception=True)
@@ -1049,9 +950,8 @@ def list_pending_registrations(request):
     where = '"Status" = %s'
     params = ['pending']
     if not request.user.has_litrix_perm('manage_users') and request.user.has_litrix_perm('approve_registrations'):
-        # Scope HoD to the department they HEAD, not the one they work in.
-        # A HoD can work in one department but be the head of another;
-        # registration approval authority follows Department.HeadID.
+        # Scope a HoD to the department they HEAD, not the one they work in —
+        # those can differ, and approval authority follows Department.HeadID.
         with connection.cursor() as cur:
             cur.execute(
                 'SELECT "DepartmentID" FROM "Department" '
@@ -1064,10 +964,8 @@ def list_pending_registrations(request):
                 params.append(r[0])
 
     with connection.cursor() as cur:
-        # LEFT JOIN with Department so admins see the requested
-        # department by name, not just an opaque ID. Done at the SQL
-        # boundary instead of a frontend lookup so the list arrives
-        # ready-to-render in a single round trip.
+        # LEFT JOIN Department so the list arrives with the department name,
+        # not just an ID — ready to render in one round trip.
         cur.execute(f'''
             SELECT rr."RequestID", rr."Email",
                    rr."FullName_Ar", rr."FullName_En",
@@ -1083,9 +981,8 @@ def list_pending_registrations(request):
         cols = [c[0] for c in cur.description]
         rows = [dict(zip(cols, r)) for r in cur.fetchall()]
 
-    # Per-row identity verification snapshot. Recomputed each call so the
-    # admin sees the latest state (if Users were updated between submit
-    # and approval, those changes are reflected).
+    # Per-row identity snapshot, recomputed each call so the admin sees the
+    # latest state if Users changed between submit and approval.
     for r in rows:
         match = _lookup_existing_for_registration(
             scholar_id    = r.get('Scholar_ID'),
@@ -1129,13 +1026,10 @@ def approve_registration(request, request_id):
                 return Response({'error': f'Cannot approve from status: {st}'},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-            # Empty-string → NULL coercion. The Users table carries UNIQUE
-            # constraints on the academic-ID columns AND on FullName_Ar.
-            # Postgres treats '' as a real value (only NULL is exempt
-            # from UNIQUE), so two users with no Scholar_ID / no Arabic
-            # name would both get '' and the second insert collides.
-            # Normalising at the boundary keeps the DB clean and the
-            # constraints useful.
+            # Empty string → NULL. Users has UNIQUEs on the academic-ID
+            # columns and on FullName_Ar, and Postgres treats '' as a real
+            # value (only NULL is exempt) — so two users with no Scholar_ID /
+            # no Arabic name would both get '' and the second insert collides.
             sid     = (sid     or '').strip() or None
             oid     = (oid     or '').strip() or None
             scopus  = (scopus  or '').strip() or None
@@ -1143,12 +1037,10 @@ def approve_registration(request, request_id):
             name_en = (name_en or '').strip() or None
             rank    = (rank    or '').strip() or None
 
-            # Pre-split the English name into three parts. Done up here (not
-            # inline in the INSERT) so we control the NULL-vs-'' behaviour on
-            # each piece — empty string would still fight any FirstName /
-            # LastName UNIQUE that gets added later. A three-part name maps
-            # to First / Middle / Last; everything between first and last is
-            # the middle name.
+            # Split the English name here (not inline in the INSERT) so we
+            # control NULL vs '' per piece — '' would fight any FirstName /
+            # LastName UNIQUE added later. First / Middle / Last, with
+            # everything between first and last folded into the middle name.
             if name_en:
                 parts       = name_en.split()
                 first_name  = parts[0]
@@ -1248,14 +1140,10 @@ def approve_registration(request, request_id):
     audit(request.user.user_id, request.user.tenant_id,
           'registration.approve', 'RegistrationRequest', request_id, request=request)
 
-    # Auto-kickoff the initial publication sync. Runs OUTSIDE the
-    # transaction (we don't want a scraper failure to roll back the
-    # approval itself) and only when the researcher provided an academic
-    # ID we can actually scrape.
-    #
-    # Wrapped in try/except so any failure here logs a warning but
-    # doesn't 500 the approve endpoint — the user is already approved
-    # at this point (transaction committed). Admin can sync manually.
+    # Kick off the initial sync OUTSIDE the transaction so a scraper failure
+    # can't roll back the approval, and only when there's an academic ID to
+    # scrape. The try/except keeps a failure from 500-ing the endpoint — the
+    # user is already approved (committed); the admin can sync manually.
     sync_job_id = None
     sync_error   = None
     try:
@@ -1268,7 +1156,7 @@ def approve_registration(request, request_id):
         )
     except Exception as e:
         import traceback
-        traceback.print_exc()           # surface in Django console
+        traceback.print_exc()           # show it in the Django console
         sync_error = str(e)
 
     return Response({
@@ -1298,10 +1186,9 @@ def list_users(request):
         params.append(role_filter)
 
     with connection.cursor() as cur:
-        # Pull the current Department alongside the user so admins can
-        # see "this person heads/works in <X>" before promoting them
-        # to HoD. LATERAL prefers IsCurrentPosition but falls back to
-        # any Works_In row, mirroring the registration-match lookup.
+        # Pull the current Department so admins see where someone works
+        # before promoting them to HoD. LATERAL prefers IsCurrentPosition
+        # but falls back to any Works_In row, like the registration lookup.
         cur.execute(f'''
             SELECT u."UserID", u."Email",
                    u."FullName_Ar", u."FirstName", u."MiddleName", u."LastName",
@@ -1339,13 +1226,9 @@ def update_user(request, user_id):
     if request.method == 'DELETE':
         return _delete_user(request, user_id)
 
-    # ------------------------------------------------------------
-    # Whitelist of editable Users columns. Anything outside this list
-    # is silently ignored — protects sensitive cols (UserID, TenantID,
-    # PasswordHash, Litrix_ID, Scholar_ID, CreatedAt) from being
-    # mutated via this endpoint. To change those, build a dedicated
-    # endpoint with stricter checks.
-    # ------------------------------------------------------------
+    # Whitelist of editable Users columns; anything else is ignored. Keeps
+    # sensitive cols (UserID, TenantID, PasswordHash, Litrix_ID, Scholar_ID,
+    # CreatedAt) out of reach — those need a dedicated, stricter endpoint.
     EDITABLE = {
         # admin/role
         'role_id':         ('RoleID',         lambda v: v),
@@ -1385,31 +1268,24 @@ def update_user(request, user_id):
 
 
 def _delete_user(request, user_id: int):
-    """
-    Hard-delete a researcher and everything that's *only* about them.
-    Audit trail and shared content are preserved:
-      • Their author->paper LINKS are deleted, but papers themselves
-        stay (they may carry other authors).
-      • Department headship, registration reviewers, audit log entries,
-        and sync-job triggers are nulled out so history remains
-        readable but no FK points at a vanished UserID.
-      • Their own Notifications and SyncJobs are deleted outright.
+    """Hard-delete a researcher and everything that's only about them, while
+    preserving shared content and the audit trail: author→paper links go but
+    the papers stay (they may carry other authors); headship, registration
+    reviewers, audit entries, and sync-job triggers are nulled so history
+    stays readable with no FK pointing at a vanished UserID; their own
+    Notifications and SyncJobs are deleted.
 
-    Two guards:
-      1. Self-delete is blocked — admins can't accidentally lock
-         themselves out.
-      2. The whole cascade runs in `transaction.atomic()` so either
-         every step lands or nothing does.
+    Self-delete is blocked, and the whole cascade runs in transaction.atomic()
+    so it's all-or-nothing.
     """
-    # Self-protection — admins shouldn't be able to delete themselves.
+    # Don't let an admin delete their own account.
     if int(user_id) == int(request.user.user_id):
         return Response(
             {'error': 'You cannot delete your own account.'},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Snapshot the user before deletion — needed for the audit row and
-    # for a meaningful 200 response.
+    # Snapshot the user before deletion — for the audit row and the response.
     with connection.cursor() as cur:
         cur.execute(
             '''
@@ -1434,11 +1310,11 @@ def _delete_user(request, user_id: int):
             'papers':       row[5] or 0,
         }
 
-    # If this account has papers, a hard delete would orphan them (its
-    # Authors links get removed). Instead we UN-REGISTER: strip the login +
-    # registration artifacts but keep the researcher profile, their author
-    # links, department, and every paper. Only truly footprint-less accounts
-    # (no papers) are hard-deleted below.
+    # If this account has papers, a hard delete would orphan them (its Authors
+    # links get removed). So we UN-REGISTER instead: strip the login +
+    # registration artifacts but keep the researcher profile, author links,
+    # department, and papers. Only footprint-less accounts are hard-deleted
+    # below.
     if snapshot['papers'] > 0:
         return _unregister_user(request, user_id, snapshot)
 
@@ -1452,8 +1328,7 @@ def _delete_user(request, user_id: int):
 
     with transaction.atomic():
         with connection.cursor() as cur:
-            # ---- Phase 1: null out cross-table references --------------
-            # Use the safe SET NULL pattern to keep history readable.
+            # Null out cross-table references (SET NULL keeps history readable).
             cur.execute(
                 'UPDATE "Department" SET "HeadID" = NULL WHERE "HeadID" = %s',
                 [user_id],
@@ -1485,11 +1360,10 @@ def _delete_user(request, user_id: int):
                     [user_id],
                 )
 
-            # SimpleJWT outstanding refresh tokens hold a FK to Users.
-            # Postgres won't drop the User while these rows exist. We
-            # also have to delete the blacklist rows first because they
-            # reference outstanding by id, not by user_id, so they
-            # don't cascade automatically.
+            # SimpleJWT outstanding refresh tokens FK to Users, so Postgres
+            # won't drop the User while they exist. Delete the blacklist rows
+            # first — they reference outstanding by id, not user_id, so they
+            # don't cascade on their own.
             if _table_exists(cur, 'token_blacklist_blacklistedtoken') \
                     and _table_exists(cur, 'token_blacklist_outstandingtoken'):
                 cur.execute('''
@@ -1506,14 +1380,14 @@ def _delete_user(request, user_id: int):
                     [user_id],
                 )
 
-            # ---- Phase 2: delete user-owned rows -----------------------
+            # Delete user-owned rows.
             cur.execute('DELETE FROM "SyncJob"      WHERE "UserID" = %s', [user_id])
             cur.execute('DELETE FROM "Notification" WHERE "UserID" = %s', [user_id])
             cur.execute('DELETE FROM "Authors"      WHERE "UserID" = %s', [user_id])
             cur.execute('DELETE FROM "Works_In"     WHERE "UserID" = %s', [user_id])
             cur.execute('DELETE FROM "Researcher"   WHERE "UserID" = %s', [user_id])
 
-            # ---- Phase 3: the user row itself --------------------------
+            # Finally the user row itself.
             cur.execute(
                 'DELETE FROM "Users" WHERE "UserID" = %s AND "TenantID" = %s',
                 [user_id, request.user.tenant_id],
@@ -1532,17 +1406,16 @@ def _delete_user(request, user_id: int):
 
 
 def _unregister_user(request, user_id: int, snapshot: dict):
-    """
-    Soft-remove an account that HAS papers: strip the login + everything the
-    registration created, but keep the scraped researcher profile, its author
-    links, department membership, and every paper. A hard delete would drop
-    the Authors links and orphan those papers, so this is used instead.
+    """Soft-remove an account that HAS papers: strip the login and everything
+    registration created, but keep the scraped researcher profile, author
+    links, department, and papers — a hard delete would drop the Authors links
+    and orphan the papers.
 
     Reverts the Users row to the unregistered scraped-researcher state
-    (AccountStatus='Pending', no password, no email, UserType='Researcher')
-    and clears registration side-effects: welcome notifications, the initial
-    sync job, registration requests, consumed/issued invitations, any
-    headship, and active JWT sessions. Idempotent and atomic.
+    (AccountStatus='Pending', no password/email, UserType='Researcher') and
+    clears the registration side-effects: welcome notifications, initial sync
+    job, registration requests, consumed/issued invitations, headship, and
+    active JWT sessions. Idempotent and atomic.
     """
     tenant_id = request.user.tenant_id
     with transaction.atomic():
@@ -1551,15 +1424,14 @@ def _unregister_user(request, user_id: int, snapshot: dict):
             r = cur.fetchone()
             email = r[0] if r else None
 
-            # Registration records tied to this email + invitations.
+            # Registration records for this email, plus its invitations.
             #
-            # We RE-OPEN the invitation (RevokedAt/UsedAt/UsedByUserID → NULL)
-            # instead of revoking it, so the SAME invitation link works again
-            # to register this researcher anew. Re-registration then reclaims
-            # this very Users row through the Scholar_ID/ORCID claim-profile
-            # path (keeping every paper). Revoking it — the old behaviour —
-            # left the original link dead ("invalid_invitation · revoked")
-            # whenever an un-registered account tried to sign up again.
+            # RE-OPEN the invitation (RevokedAt/UsedAt/UsedByUserID → NULL)
+            # rather than revoke it, so the same link works again and
+            # re-registration reclaims this very Users row via the
+            # Scholar_ID/ORCID claim-profile path (keeping every paper).
+            # Revoking it — the old behaviour — left the link dead
+            # ("invalid_invitation · revoked") on any re-signup.
             if email:
                 cur.execute(
                     'DELETE FROM "RegistrationRequest" WHERE LOWER("Email") = LOWER(%s)',
@@ -1576,7 +1448,7 @@ def _unregister_user(request, user_id: int, snapshot: dict):
                 [user_id],
             )
 
-            # Welcome notifications + the registration-triggered sync job.
+            # Welcome notifications and the registration-triggered sync job.
             cur.execute(
                 'DELETE FROM "Notification" WHERE "UserID" = %s '
                 "AND \"Type\" IN ('registration_approved', 'invitation_accepted')",
@@ -1584,14 +1456,14 @@ def _unregister_user(request, user_id: int, snapshot: dict):
             )
             cur.execute('DELETE FROM "SyncJob" WHERE "UserID" = %s', [user_id])
 
-            # Defensive: drop any headship the (possibly promoted) account held.
+            # Drop any headship the (possibly promoted) account held.
             cur.execute(
                 'UPDATE "Department" SET "HeadID" = NULL WHERE "HeadID" = %s',
                 [user_id],
             )
 
-            # Invalidate active JWT sessions so the removed login can't keep
-            # working until token expiry (mirrors the hard-delete cleanup).
+            # Kill active JWT sessions so the removed login can't keep working
+            # until token expiry (same as the hard-delete cleanup).
             cur.execute(
                 'SELECT 1 FROM information_schema.tables '
                 'WHERE table_name = %s', ['token_blacklist_outstandingtoken'])
@@ -1604,7 +1476,7 @@ def _unregister_user(request, user_id: int, snapshot: dict):
                     'DELETE FROM token_blacklist_outstandingtoken WHERE user_id = %s',
                     [user_id])
 
-            # Revert the Users row to the unregistered scraped-researcher state.
+            # Back to the unregistered scraped-researcher state.
             cur.execute(
                 '''UPDATE "Users" SET
                        "PasswordHash"  = NULL,
