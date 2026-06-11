@@ -69,15 +69,17 @@ export class LitrixApiService {
   // Universal search across profiles + papers. The backend gates paper
   // visibility by role (researchers only see papers they're on; admins see
   // all) and filters profiles to Researcher type for restricted users.
-  search(q: string): Observable<{
+  search(q: string, limit = 10): Observable<{
     profiles: SearchProfileResult[];
     papers:   SearchPaperResult[];
+    papers_has_more: boolean;
     has_full_access: boolean;
   }> {
-    const params = new HttpParams().set('q', q);
+    const params = new HttpParams().set('q', q).set('limit', String(limit));
     return this.http.get<{
       profiles: SearchProfileResult[];
       papers:   SearchPaperResult[];
+      papers_has_more: boolean;
       has_full_access: boolean;
     }>(`${this.baseUrl}/search/`, { params });
   }

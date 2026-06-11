@@ -185,6 +185,17 @@
             }
           </ul>
         </div>
+
+        @if (papersHasMore()) {
+          <div class="text-center pt-4">
+            <button (click)="loadMorePapers()" [disabled]="loadingMore()"
+                    class="text-sm text-accent hover:text-accent-hover font-medium
+                           px-5 py-2 rounded-full hover:bg-accent-light transition-colors
+                           disabled:opacity-50">
+              {{ loadingMore() ? 'Loading…' : 'Load More' }}
+            </button>
+          </div>
+        }
       </section>
     }
   }

@@ -33,10 +33,15 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
 
+  readonly PAGE = 10;
+
   readonly query    = signal<string>('');
   readonly loading  = signal<boolean>(false);
+  readonly loadingMore = signal<boolean>(false);
   readonly profiles = signal<SearchProfileResult[]>([]);
   readonly papers   = signal<SearchPaperResult[]>([]);
+  readonly papersHasMore = signal<boolean>(false);
+  readonly paperLimit    = signal<number>(this.PAGE);
   readonly hasFullAccess = signal<boolean>(false);
   readonly hasSearched   = signal<boolean>(false);
   readonly error    = signal<string | null>(null);
@@ -63,7 +68,9 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
           this.loading.set(true);
           this.hasSearched.set(true);
           this.error.set(null);
-          return this.api.search(q).pipe(
+          // Every fresh query restarts paging from the first page.
+          this.paperLimit.set(this.PAGE);
+          return this.api.search(q, this.PAGE).pipe(
             catchError(err => {
               this.error.set(
                 err?.error?.error ||
@@ -82,6 +89,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
         if (!res) return;
         this.profiles.set(res.profiles ?? []);
         this.papers.set(res.papers ?? []);
+        this.papersHasMore.set(!!res.papers_has_more);
         this.hasFullAccess.set(!!res.has_full_access);
       });
 
@@ -117,9 +125,29 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     this.query.set('');
     this.profiles.set([]);
     this.papers.set([]);
+    this.papersHasMore.set(false);
+    this.paperLimit.set(this.PAGE);
     this.hasSearched.set(false);
     this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
     this.searchInput?.nativeElement.focus();
+  }
+
+  // Re-fetch the same query with a larger page size. The backend returns
+  // results from the top, so we just replace the list with the bigger page.
+  loadMorePapers() {
+    const q = this.query().trim();
+    if (q.length < 2 || this.loadingMore()) return;
+    const next = this.paperLimit() + this.PAGE;
+    this.paperLimit.set(next);
+    this.loadingMore.set(true);
+    this.api.search(q, next).pipe(
+      catchError(() => of(null)),
+    ).subscribe(res => {
+      this.loadingMore.set(false);
+      if (!res) return;
+      this.papers.set(res.papers ?? []);
+      this.papersHasMore.set(!!res.papers_has_more);
+    });
   }
 
   openProfile(p: SearchProfileResult) {

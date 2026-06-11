@@ -719,7 +719,13 @@ def universal_search(request):
     like = f'%{q}%'
 
     PROFILE_LIMIT = 8
-    PAPER_LIMIT   = 10
+    # Papers paginate via ?limit= (the "Load More" button bumps it). Clamped so
+    # a hand-edited URL can't ask for an unbounded scan.
+    try:
+        PAPER_LIMIT = int(request.query_params.get('limit') or 10)
+    except (TypeError, ValueError):
+        PAPER_LIMIT = 10
+    PAPER_LIMIT = max(10, min(PAPER_LIMIT, 100))
 
     # All roles now see every UserType — the search is intentionally
     # unrestricted (it used to limit Researchers to Researcher-type profiles).
@@ -840,26 +846,30 @@ def universal_search(request):
             -- instead of the newest two years monopolising a LIMIT-ed result.
             ORDER BY citations DESC NULLS LAST, rp."PubYear" DESC NULLS LAST
             LIMIT %s
-        ''', [like, like, like, PAPER_LIMIT])
+        ''', [like, like, like, PAPER_LIMIT + 1])
+        # Fetch one extra row to know whether a "Load More" would return anything,
+        # then trim back to the requested page size.
+        rows = cur.fetchall()
+        papers_has_more = len(rows) > PAPER_LIMIT
         papers = [
             {
                 'paper_id':        r[0],
                 'title':           r[1],
                 'title_en':        r[2],
                 'pub_year':        r[3],
-                'doi':
-           r[4],
+                'doi':             r[4],
                 'indexing':        r[5],
                 'journal_name':    r[6],
                 'quartile':        r[7],
                 'citations':       r[8],
                 'authors_summary': r[9],
             }
-            for r in cur.fetchall()
+            for r in rows[:PAPER_LIMIT]
         ]
 
     return response.Response({
         'profiles':         profiles,
         'papers':           papers,
+        'papers_has_more':  papers_has_more,
         'has_full_access':  has_full_access,
     })

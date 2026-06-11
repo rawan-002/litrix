@@ -37,7 +37,7 @@ const CHART_MIN_YEAR = 2019;
         <header class="max-w-5xl mx-auto px-6 mt-6">
           <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
             <div class="h-1.5 bg-indigo-600"></div>
-            <div class="p-6 sm:p-8 flex flex-col lg:flex-row gap-6 lg:items-center relative">
+            <div class="p-6 sm:p-8 flex flex-col lg:flex-row gap-6 lg:items-start relative">
               <img src="litrix-logo.png" alt="Litrix"
                    class="absolute top-6 right-6 h-9 md:h-11 w-auto select-none hidden sm:block lg:hidden"
                    draggable="false" />
@@ -82,60 +82,54 @@ const CHART_MIN_YEAR = 2019;
                 </div>
               </div>
 
-              <!-- Metrics (right, same card) -->
-              <div class="grid grid-cols-2 gap-x-8 gap-y-5 shrink-0 pt-5 border-t border-gray-100
+              <!-- Metrics panel (right, same card): secondary stats + chart -->
+              <div class="shrink-0 lg:w-80 pt-5 border-t border-gray-100
                           lg:pt-0 lg:border-t-0 lg:border-l lg:pl-8">
-                <div>
-                  <div class="text-2xl font-semibold text-gray-900">{{ p.stats.total_papers | number }}</div>
-                  <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-0.5">Publications</div>
+                <div class="flex gap-8">
+                  <div>
+                    <div class="text-2xl font-semibold text-gray-900">{{ avgCitations() }}</div>
+                    <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-0.5">Avg. / paper</div>
+                  </div>
+                  <div>
+                    <div class="text-2xl font-semibold text-gray-900">
+                      {{ p.stats.first_year || '—' }}–{{ p.stats.last_year || '—' }}
+                    </div>
+                    <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-0.5">Active years</div>
+                  </div>
                 </div>
-                <div>
-                  <div class="text-2xl font-semibold text-gray-900">{{ p.stats.total_citations | number }}</div>
-                  <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-0.5">Times Cited</div>
+                <div *ngIf="hasChartData()" class="mt-4">
+                  <h3 class="text-xs font-semibold text-gray-700 mb-2">
+                    Citations by year <span class="text-gray-400 font-normal">{{ CHART_MIN_YEAR }}+</span>
+                  </h3>
+                  <canvas #citationsCanvas></canvas>
                 </div>
-                <div>
-                  <div class="text-2xl font-semibold text-gray-900">{{ hIndex() }}</div>
-                  <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-0.5">H-Index</div>
-                </div>
-                <div>
-                  <div class="text-2xl font-semibold text-indigo-600">{{ p.stats.q1_papers | number }}</div>
-                  <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-0.5">Q1 Papers</div>
-                </div>
+              </div>
+            </div>
+
+            <!-- Metrics strip (4 headline KPIs, full width) -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 border-t border-gray-100 divide-x divide-gray-100">
+              <div class="p-5">
+                <div class="text-3xl font-semibold text-gray-900">{{ p.stats.total_papers | number }}</div>
+                <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-1">Publications</div>
+              </div>
+              <div class="p-5">
+                <div class="text-3xl font-semibold text-gray-900">{{ p.stats.total_citations | number }}</div>
+                <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-1">Times Cited</div>
+              </div>
+              <div class="p-5 border-t lg:border-t-0 border-gray-100">
+                <div class="text-3xl font-semibold text-gray-900">{{ hIndex() }}</div>
+                <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-1">H-Index</div>
+              </div>
+              <div class="p-5 border-t lg:border-t-0 border-gray-100">
+                <div class="text-3xl font-semibold text-indigo-600">{{ p.stats.q1_papers | number }}</div>
+                <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-1">Q1 Papers</div>
               </div>
             </div>
           </div>
         </header>
 
-        <!-- Two-column: metrics rail + publications -->
-        <div class="max-w-5xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <!-- Metrics rail (right on desktop) -->
-          <aside class="lg:col-span-1 lg:order-last space-y-6">
-            <div class="rounded-2xl border border-gray-100 p-5 lg:sticky lg:top-4">
-              <h2 class="text-sm font-semibold text-gray-900 mb-4">Metrics</h2>
-              <dl class="space-y-3">
-                <div class="flex items-baseline justify-between">
-                  <dt class="text-xs text-gray-500">Avg. citations / paper</dt>
-                  <dd class="text-sm font-semibold text-gray-900">{{ avgCitations() }}</dd>
-                </div>
-                <div class="flex items-baseline justify-between">
-                  <dt class="text-xs text-gray-500">Active years</dt>
-                  <dd class="text-sm font-semibold text-gray-900">
-                    {{ p.stats.first_year || '—' }}–{{ p.stats.last_year || '—' }}
-                  </dd>
-                </div>
-              </dl>
-
-              <div *ngIf="hasChartData()" class="border-t border-gray-100 mt-5 pt-4">
-                <h3 class="text-xs font-semibold text-gray-700 mb-3">
-                  Citations by year <span class="text-gray-400 font-normal">{{ CHART_MIN_YEAR }}+</span>
-                </h3>
-                <canvas #citationsCanvas></canvas>
-              </div>
-            </div>
-          </aside>
-
-          <!-- Publications -->
-          <section class="lg:col-span-2">
+        <!-- Publications -->
+        <section class="max-w-5xl mx-auto px-6 py-8">
             <h2 class="text-lg font-semibold text-gray-900 mb-4">
               Publications
               <span class="text-gray-400 font-normal">({{ p.papers.length | number }})</span>
@@ -175,7 +169,6 @@ const CHART_MIN_YEAR = 2019;
               </div>
             </div>
           </section>
-        </div>
       </ng-container>
 
       <!-- Loading state -->
