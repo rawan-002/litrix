@@ -89,6 +89,48 @@ export class ResearcherProfileComponent implements OnInit {
   // Clip the citations chart before this year, matching the admin dashboard.
   private readonly CHART_YEAR_FLOOR = 2019;
 
+  // Web-of-Science-style derived metrics. The profile is lifetime by design,
+  // so these run off the per-paper lifetime citation counts.
+  readonly hIndex = computed(() => {
+    const cites = (this.data()?.papers ?? [])
+      .map(p => p.citations ?? 0)
+      .sort((a, b) => b - a);
+    let h = 0;
+    for (let i = 0; i < cites.length; i++) {
+      if (cites[i] >= i + 1) h = i + 1; else break;
+    }
+    return h;
+  });
+
+  readonly avgCitations = computed(() => {
+    const papers = this.data()?.papers ?? [];
+    if (!papers.length) return 0;
+    const total = papers.reduce((s, p) => s + (p.citations ?? 0), 0);
+    return Math.round((total / papers.length) * 10) / 10;
+  });
+
+  // Display name + initials for the identity banner.
+  readonly displayName = computed(() => {
+    const id = this.data()?.identity;
+    if (!id) return '';
+    const en = [id.first_name, id.last_name].filter(Boolean).join(' ').trim();
+    return id.full_name_ar || en || id.last_name || 'Researcher';
+  });
+
+  readonly secondaryName = computed(() => {
+    const id = this.data()?.identity;
+    if (!id) return '';
+    const en = [id.first_name, id.last_name].filter(Boolean).join(' ').trim();
+    // Only show the EN line when it differs from the primary (Arabic) name.
+    return id.full_name_ar && en ? en : '';
+  });
+
+  readonly initials = computed(() => {
+    const name = this.displayName();
+    const parts = name.split(/\s+/).filter(Boolean).slice(0, 2);
+    return parts.map(p => p[0] || '').join('').toUpperCase() || '?';
+  });
+
   setSort(field: 'year' | 'citations') {
     if (this.sortField() === field) {
       this.sortDir.update(d => d === 'desc' ? 'asc' : 'desc');

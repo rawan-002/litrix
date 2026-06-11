@@ -2,7 +2,7 @@
 // cards, a citations chart (2019+), and a papers list. Click a title for
 // the detail modal.
 import {
-  Component, OnInit, signal, inject, ViewChild,
+  Component, OnInit, signal, computed, inject, ViewChild,
   ElementRef, AfterViewInit,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -33,129 +33,153 @@ const CHART_MIN_YEAR = 2019;
       </div>
 
       <ng-container *ngIf="profile() as p">
-        <!-- Bio header -->
-        <header class="max-w-5xl mx-auto px-6 py-12 border-b border-gray-100 relative">
-          <!-- Logo, top-right -->
-          <img src="litrix-logo.png"
-               alt="Litrix"
-               class="absolute top-12 right-6 h-12 md:h-14 w-auto select-none"
-               draggable="false" />
-          <p class="text-sm uppercase tracking-widest text-indigo-600 font-medium">
-            {{ p.department_name || 'College of Computing & IT' }}
-          </p>
-          <h1 class="mt-3 text-4xl md:text-5xl font-semibold text-gray-900 tracking-tight">
-            {{ p.full_name_ar }}
-          </h1>
-          <p *ngIf="p.full_name_en && p.full_name_en !== p.full_name_ar"
-             class="mt-2 text-lg text-gray-500">
-            {{ p.full_name_en }}
-          </p>
+        <!-- Identity banner (Web of Science-style author record) -->
+        <header class="max-w-5xl mx-auto px-6 mt-6">
+          <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+            <div class="h-1.5 bg-indigo-600"></div>
+            <div class="p-6 sm:p-8 flex flex-col sm:flex-row gap-5 relative">
+              <img src="litrix-logo.png" alt="Litrix"
+                   class="absolute top-6 right-6 h-9 md:h-11 w-auto select-none hidden sm:block"
+                   draggable="false" />
+              <div class="w-20 h-20 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center
+                          justify-center text-2xl font-bold shrink-0">
+                {{ initials() }}
+              </div>
+              <div class="min-w-0 flex-1 sm:pr-16">
+                <h1 class="text-2xl sm:text-3xl font-semibold text-gray-900 tracking-tight leading-tight">
+                  {{ p.full_name_ar }}
+                </h1>
+                <p *ngIf="p.full_name_en && p.full_name_en !== p.full_name_ar"
+                   class="text-base text-gray-500 mt-0.5">
+                  {{ p.full_name_en }}
+                </p>
+                <p class="text-sm text-gray-600 mt-2">
+                  <span *ngIf="p.academic_rank">{{ p.academic_rank }} · </span>
+                  {{ p.department_name || 'College of Computing & IT' }}
+                  <span class="text-gray-300">·</span> Al-Baha University
+                </p>
 
-          <div class="mt-6 flex flex-wrap gap-3">
-            <span *ngIf="p.academic_rank"
-                  class="inline-flex items-center px-3 py-1 rounded-full bg-gray-100 text-sm text-gray-700">
-              {{ p.academic_rank }}
-            </span>
-            <span *ngIf="p.specialization"
-                  class="inline-flex items-center px-3 py-1 rounded-full bg-gray-100 text-sm text-gray-700">
-              {{ p.specialization }}
-            </span>
-            <span class="inline-flex items-center px-3 py-1 rounded-full bg-indigo-50 text-sm text-indigo-700 font-mono">
-              {{ p.litrix_id }}
-            </span>
-          </div>
+                <div class="flex flex-wrap items-center gap-2 mt-4">
+                  <span class="text-[11px] px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 font-mono">
+                    {{ p.litrix_id }}
+                  </span>
+                  <span *ngIf="p.specialization"
+                        class="text-[11px] px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">
+                    {{ p.specialization }}
+                  </span>
+                  <a *ngIf="p.orcid_id" [href]="'https://orcid.org/' + p.orcid_id" target="_blank"
+                     class="text-[11px] px-2.5 py-1 rounded-full border border-gray-200 text-gray-700
+                            hover:border-indigo-400 hover:text-indigo-600 transition inline-flex items-center gap-1">
+                    ORCID <span class="opacity-60">↗</span>
+                  </a>
+                  <span *ngIf="p.scopus_id"
+                        class="text-[11px] px-2.5 py-1 rounded-full border border-gray-200 text-gray-700">
+                    Scopus {{ p.scopus_id }}
+                  </span>
+                </div>
+              </div>
+            </div>
 
-          <div *ngIf="p.scopus_id || p.orcid_id" class="mt-4 flex flex-wrap gap-4 text-sm text-gray-500">
-            <span *ngIf="p.scopus_id">
-              <span class="text-gray-400">Scopus ID:</span>
-              <span class="ml-1 font-mono text-gray-700">{{ p.scopus_id }}</span>
-            </span>
-            <span *ngIf="p.orcid_id">
-              <span class="text-gray-400">ORCID:</span>
-              <a [href]="'https://orcid.org/' + p.orcid_id" target="_blank"
-                 class="ml-1 font-mono text-indigo-600 hover:underline">
-                {{ p.orcid_id }}
-              </a>
-            </span>
+            <!-- Metrics strip -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 border-t border-gray-100 divide-x divide-gray-100">
+              <div class="p-5">
+                <div class="text-3xl font-semibold text-gray-900">{{ p.stats.total_papers | number }}</div>
+                <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-1">Publications</div>
+              </div>
+              <div class="p-5">
+                <div class="text-3xl font-semibold text-gray-900">{{ p.stats.total_citations | number }}</div>
+                <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-1">Times Cited</div>
+              </div>
+              <div class="p-5 border-t lg:border-t-0 border-gray-100">
+                <div class="text-3xl font-semibold text-gray-900">{{ hIndex() }}</div>
+                <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-1">H-Index</div>
+              </div>
+              <div class="p-5 border-t lg:border-t-0 border-gray-100">
+                <div class="text-3xl font-semibold text-indigo-600">{{ p.stats.q1_papers | number }}</div>
+                <div class="text-[11px] uppercase tracking-wide text-gray-500 mt-1">Q1 Papers</div>
+              </div>
+            </div>
           </div>
         </header>
 
-        <!-- KPI cards -->
-        <section class="max-w-5xl mx-auto px-6 py-12">
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-            <div class="rounded-2xl bg-gray-50 p-6">
-              <p class="text-xs text-gray-500 uppercase tracking-wider font-medium">Papers</p>
-              <p class="mt-3 text-4xl font-semibold text-gray-900 tracking-tight">{{ p.stats.total_papers | number }}</p>
-            </div>
-            <div class="rounded-2xl bg-gray-50 p-6">
-              <p class="text-xs text-gray-500 uppercase tracking-wider font-medium">Citations</p>
-              <p class="mt-3 text-4xl font-semibold text-gray-900 tracking-tight">{{ p.stats.total_citations | number }}</p>
-            </div>
-            <div class="rounded-2xl bg-gray-50 p-6">
-              <p class="text-xs text-gray-500 uppercase tracking-wider font-medium">Q1 Papers</p>
-              <p class="mt-3 text-4xl font-semibold text-indigo-600 tracking-tight">{{ p.stats.q1_papers | number }}</p>
-            </div>
-            <div class="rounded-2xl bg-gray-50 p-6">
-              <p class="text-xs text-gray-500 uppercase tracking-wider font-medium">Active Years</p>
-              <p class="mt-3 text-2xl md:text-3xl font-semibold text-gray-900 tracking-tight">
-                {{ p.stats.first_year || '—' }}–{{ p.stats.last_year || '—' }}
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <!-- Citations chart (2019+) -->
-        <section *ngIf="hasChartData()" class="max-w-5xl mx-auto px-6 py-4">
-          <h2 class="text-xl font-semibold text-gray-900 mb-4">
-            Citations by Year
-            <span class="ml-2 text-sm font-normal text-gray-400">{{ CHART_MIN_YEAR }}+</span>
-          </h2>
-          <div class="rounded-2xl border border-gray-100 p-5 max-w-2xl">
-            <canvas #citationsCanvas></canvas>
-          </div>
-        </section>
-
-        <!-- Papers list -->
-        <section class="max-w-5xl mx-auto px-6 py-12">
-          <h2 class="text-2xl font-semibold text-gray-900 mb-6">
-            Publications
-            <span class="ml-2 text-base font-normal text-gray-400">
-              ({{ p.papers.length | number }})
-            </span>
-          </h2>
-
-          <div class="space-y-3">
-            <article *ngFor="let paper of p.papers"
-                     class="rounded-2xl border border-gray-100 p-6 hover:shadow-md hover:border-indigo-100 transition-all">
-              <div class="flex items-start justify-between gap-4">
-                <div class="flex-1 min-w-0">
-                  <h3 (click)="openPaperDetail(paper)"
-                      class="font-medium text-gray-900 leading-snug cursor-pointer hover:text-indigo-600 transition-colors">
-                    {{ paper.title }}
-                  </h3>
-                  <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-500">
-                    <span *ngIf="paper.pub_year" class="font-medium">{{ paper.pub_year }}</span>
-                    <span *ngIf="paper.journal_name" class="text-gray-400">·</span>
-                    <span *ngIf="paper.journal_name">{{ paper.journal_name }}</span>
-                    <span *ngIf="paper.quartile"
-                          class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold"
-                          [ngClass]="quartileClass(paper.quartile)">
-                      {{ paper.quartile }}
-                    </span>
-                  </div>
+        <!-- Two-column: metrics rail + publications -->
+        <div class="max-w-5xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <!-- Metrics rail -->
+          <aside class="lg:col-span-1 space-y-6">
+            <div class="rounded-2xl border border-gray-100 p-5 lg:sticky lg:top-4">
+              <h2 class="text-sm font-semibold text-gray-900 mb-4">Metrics</h2>
+              <dl class="space-y-3">
+                <div class="flex items-baseline justify-between">
+                  <dt class="text-xs text-gray-500">Times Cited</dt>
+                  <dd class="text-sm font-semibold text-gray-900">{{ p.stats.total_citations | number }}</dd>
                 </div>
-                <div class="text-right flex-shrink-0">
-                  <p class="text-3xl font-semibold text-gray-900 tracking-tight">{{ paper.citations | number }}</p>
-                  <p class="text-xs text-gray-400 uppercase tracking-wider">Citations</p>
+                <div class="flex items-baseline justify-between">
+                  <dt class="text-xs text-gray-500">H-Index</dt>
+                  <dd class="text-sm font-semibold text-gray-900">{{ hIndex() }}</dd>
                 </div>
+                <div class="flex items-baseline justify-between">
+                  <dt class="text-xs text-gray-500">Avg. citations / paper</dt>
+                  <dd class="text-sm font-semibold text-gray-900">{{ avgCitations() }}</dd>
+                </div>
+                <div class="flex items-baseline justify-between">
+                  <dt class="text-xs text-gray-500">Active years</dt>
+                  <dd class="text-sm font-semibold text-gray-900">
+                    {{ p.stats.first_year || '—' }}–{{ p.stats.last_year || '—' }}
+                  </dd>
+                </div>
+              </dl>
+
+              <div *ngIf="hasChartData()" class="border-t border-gray-100 mt-5 pt-4">
+                <h3 class="text-xs font-semibold text-gray-700 mb-3">
+                  Citations by year <span class="text-gray-400 font-normal">{{ CHART_MIN_YEAR }}+</span>
+                </h3>
+                <canvas #citationsCanvas></canvas>
               </div>
-            </article>
-          </div>
+            </div>
+          </aside>
 
-          <div *ngIf="p.papers.length === 0" class="text-center py-12 text-gray-400">
-            No publications found.
-          </div>
-        </section>
+          <!-- Publications -->
+          <section class="lg:col-span-2">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">
+              Publications
+              <span class="text-gray-400 font-normal">({{ p.papers.length | number }})</span>
+            </h2>
+
+            <div class="rounded-2xl border border-gray-100 overflow-hidden bg-white">
+              <ul class="divide-y divide-gray-100">
+                <li *ngFor="let paper of p.papers"
+                    class="px-5 py-4 hover:bg-gray-50 transition-colors">
+                  <div class="flex items-start justify-between gap-4">
+                    <div class="flex-1 min-w-0">
+                      <button (click)="openPaperDetail(paper)"
+                              class="text-sm font-semibold text-gray-900 leading-snug text-left
+                                     hover:text-indigo-600 transition-colors">
+                        {{ paper.title }}
+                      </button>
+                      <div class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500">
+                        <span *ngIf="paper.journal_name" class="italic">{{ paper.journal_name }}</span>
+                        <span *ngIf="paper.pub_year" class="text-gray-300">·</span>
+                        <span *ngIf="paper.pub_year" class="font-medium text-gray-700">{{ paper.pub_year }}</span>
+                        <span *ngIf="paper.quartile"
+                              class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold"
+                              [ngClass]="quartileClass(paper.quartile)">
+                          {{ paper.quartile }}
+                        </span>
+                      </div>
+                    </div>
+                    <div class="text-right flex-shrink-0">
+                      <p class="text-xl font-bold text-gray-900">{{ paper.citations | number }}</p>
+                      <p class="text-[10px] text-gray-400 uppercase tracking-wide">cited</p>
+                    </div>
+                  </div>
+                </li>
+              </ul>
+              <div *ngIf="p.papers.length === 0" class="text-center py-12 text-gray-400 text-sm">
+                No publications found.
+              </div>
+            </div>
+          </section>
+        </div>
       </ng-container>
 
       <!-- Loading state -->
@@ -312,6 +336,33 @@ export class PublicProfileComponent implements OnInit, AfterViewInit {
   readonly profile = signal<ResearcherProfile | null>(null);
   readonly errorMsg = signal<string | null>(null);
   readonly selectedPaper = signal<PaperDetailResponse | null>(null);
+
+  // Web-of-Science-style derived metrics (the public profile is lifetime by
+  // design, so these run off the per-paper lifetime citation counts).
+  readonly hIndex = computed(() => {
+    const cites = (this.profile()?.papers ?? [])
+      .map(p => p.citations ?? 0)
+      .sort((a, b) => b - a);
+    let h = 0;
+    for (let i = 0; i < cites.length; i++) {
+      if (cites[i] >= i + 1) h = i + 1; else break;
+    }
+    return h;
+  });
+
+  readonly avgCitations = computed(() => {
+    const papers = this.profile()?.papers ?? [];
+    if (!papers.length) return 0;
+    const total = papers.reduce((s, p) => s + (p.citations ?? 0), 0);
+    return Math.round((total / papers.length) * 10) / 10;
+  });
+
+  readonly initials = computed(() => {
+    const p = this.profile();
+    const name = p?.full_name_ar || p?.full_name_en || '';
+    const parts = name.split(/\s+/).filter(Boolean).slice(0, 2);
+    return parts.map(x => x[0] || '').join('').toUpperCase() || '?';
+  });
 
   @ViewChild('citationsCanvas') citationsCanvas!: ElementRef<HTMLCanvasElement>;
   private citationsChart: Chart | null = null;
