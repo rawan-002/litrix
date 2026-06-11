@@ -93,8 +93,8 @@
     </header>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <!-- Metrics rail -->
-      <aside class="lg:col-span-1 space-y-6">
+      <!-- Metrics rail (right on desktop) -->
+      <aside class="lg:col-span-1 lg:order-last space-y-6">
         <div class="bg-white rounded-2xl border border-ink-100 p-5 lg:sticky lg:top-4">
           <h2 class="text-sm font-semibold text-ink-900 mb-4">Metrics</h2>
           <dl class="space-y-3">
@@ -105,10 +105,6 @@
             <div class="flex items-baseline justify-between">
               <dt class="text-xs text-ink-500">Scopus indexed</dt>
               <dd class="text-sm font-semibold text-ink-900">{{ fmt(d.stats.scopus_papers) }}</dd>
-            </div>
-            <div class="flex items-baseline justify-between">
-              <dt class="text-xs text-ink-500">ISI indexed</dt>
-              <dd class="text-sm font-semibold text-ink-900">{{ fmt(d.stats.isi_papers) }}</dd>
             </div>
           </dl>
 

@@ -786,19 +786,18 @@ def universal_search(request):
             for r in cur.fetchall()
         ]
 
-        # Title match with the permission gate baked in: the EXISTS subquery
-        # enforces "at least one system author" for restricted users, while the
-        # full-access path skips it.
-        if has_full_access:
-            paper_filter = ''
-        else:
-            paper_filter = '''
-                AND EXISTS (
-                    SELECT 1 FROM "Authors" a
-                    WHERE a."PaperID" = rp."PaperID"
-                      AND a."UserID" IS NOT NULL
-                )
-            '''
+        # A paper only belongs in search when at least one of its authors is a
+        # platform user. Without this, orphan / external-only papers (every
+        # Authors row has a NULL UserID) leak into results — they aren't tied to
+        # any researcher on the platform. This holds for every role, admins
+        # included; full access widens which profiles you see, not which papers.
+        paper_filter = '''
+            AND EXISTS (
+                SELECT 1 FROM "Authors" a
+                WHERE a."PaperID" = rp."PaperID"
+                  AND a."UserID" IS NOT NULL
+            )
+        '''
 
 
         cur.execute(f'''
@@ -837,7 +836,9 @@ def universal_search(request):
                 OR rp."DOI"      ILIKE %s
             )
               {paper_filter}
-            ORDER BY rp."PubYear" DESC NULLS LAST, citations DESC
+            -- Most-cited first so notable work surfaces across all years,
+            -- instead of the newest two years monopolising a LIMIT-ed result.
+            ORDER BY citations DESC NULLS LAST, rp."PubYear" DESC NULLS LAST
             LIMIT %s
         ''', [like, like, like, PAPER_LIMIT])
         papers = [

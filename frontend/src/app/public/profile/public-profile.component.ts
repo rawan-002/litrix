@@ -108,8 +108,8 @@ const CHART_MIN_YEAR = 2019;
 
         <!-- Two-column: metrics rail + publications -->
         <div class="max-w-5xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <!-- Metrics rail -->
-          <aside class="lg:col-span-1 space-y-6">
+          <!-- Metrics rail (right on desktop) -->
+          <aside class="lg:col-span-1 lg:order-last space-y-6">
             <div class="rounded-2xl border border-gray-100 p-5 lg:sticky lg:top-4">
               <h2 class="text-sm font-semibold text-gray-900 mb-4">Metrics</h2>
               <dl class="space-y-3">
