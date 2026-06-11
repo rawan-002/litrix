@@ -42,7 +42,11 @@ const CHART_MIN_YEAR = 2019;
                    class="absolute top-6 right-6 h-9 md:h-11 w-auto select-none hidden sm:block"
                    draggable="false" />
               <div class="flex gap-5">
-                <div class="w-20 h-20 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center
+                <img *ngIf="p.photo_url && !avatarError()" [src]="p.photo_url" alt=""
+                     referrerpolicy="no-referrer" (error)="avatarError.set(true)"
+                     class="w-20 h-20 rounded-2xl object-cover shrink-0 bg-gray-100" />
+                <div *ngIf="!(p.photo_url && !avatarError())"
+                     class="w-20 h-20 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center
                             justify-center text-2xl font-bold shrink-0">
                   {{ initials() }}
                 </div>
@@ -172,10 +176,15 @@ const CHART_MIN_YEAR = 2019;
                 <ng-container *ngFor="let c of visibleCoauthors()">
                   <a *ngIf="c.is_albaha && c.litrix_id"
                      [routerLink]="['/public/researcher', c.litrix_id]"
-                     class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm
+                     class="inline-flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-full text-sm
                             bg-indigo-50 text-indigo-700 ring-1 ring-indigo-300
                             hover:ring-indigo-500 hover:bg-indigo-100 transition">
-                    {{ c.name }}
+                    <img *ngIf="c.photo_url" [src]="c.photo_url" alt="" referrerpolicy="no-referrer"
+                         class="w-6 h-6 rounded-full object-cover bg-white shrink-0" />
+                    <span *ngIf="!c.photo_url"
+                          class="w-6 h-6 rounded-full bg-indigo-200 text-indigo-700 text-[10px]
+                                 font-semibold flex items-center justify-center shrink-0">{{ c.name[0] }}</span>
+                    <span dir="auto" class="pl-0.5">{{ c.name }}</span>
                     <span class="text-[10px] opacity-70">· {{ c.shared_papers }}</span>
                   </a>
                   <span *ngIf="!(c.is_albaha && c.litrix_id)"
@@ -380,6 +389,9 @@ export class PublicProfileComponent implements OnInit, AfterViewInit {
     return parts.map(x => x[0] || '').join('').toUpperCase() || '?';
   });
 
+  // Falls back to initials if the Scholar photo fails to load.
+  readonly avatarError = signal<boolean>(false);
+
   // Co-authors: show a first batch, reveal the rest on demand.
   readonly COAUTHOR_BATCH = 6;
   readonly coauthorsShown = signal<number>(6);
@@ -402,6 +414,7 @@ export class PublicProfileComponent implements OnInit, AfterViewInit {
     this.api.researcherProfile(litrixId).subscribe({
       next: (p) => {
         this.profile.set(p);
+        this.avatarError.set(false);
         setTimeout(() => this.renderCitationsChart(), 0);
       },
       error: (err) => {

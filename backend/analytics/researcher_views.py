@@ -190,7 +190,7 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                     u."Scholar_ID", u."ORCID",
                     r."OpenAlex_AuthorID", r."LastSyncedAt",
                     d."DepartmentID", d."DepartmentName",
-                    u."Litrix_ID"
+                    u."Litrix_ID", u."PhotoURL"
                 FROM "Users" u
                 LEFT JOIN "Researcher" r ON r."UserID" = u."UserID"
                 LEFT JOIN "Works_In" w ON w."UserID" = u."UserID"
@@ -216,6 +216,7 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                 'department_id':     row[9],
                 'department_name':   row[10],
                 'litrix_id':         row[11],
+                'photo_url':         row[12],
             }
 
             # For citations, sum the per-paper Scholar cited_by.value (the most
@@ -374,12 +375,13 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
             # their profile; external names come through with is_albaha = false.
             # Sorted Al-Baha-first, then by how many papers they share.
             cur.execute('''
-                SELECT user_id, litrix_id, name,
+                SELECT user_id, litrix_id, name, photo_url,
                        COUNT(DISTINCT paper_id) AS shared_papers
                 FROM (
                     SELECT
                         co."UserID"    AS user_id,
                         cu."Litrix_ID" AS litrix_id,
+                        cu."PhotoURL"  AS photo_url,
                         COALESCE(
                             cu."FullName_Ar",
                             NULLIF(TRIM(CONCAT_WS(' ', cu."FirstName", cu."LastName")), ''),
@@ -393,7 +395,7 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                     WHERE me."UserID" = %s
                       AND COALESCE(cu."FullName_Ar", co."AuthorNameRaw") IS NOT NULL
                 ) sub
-                GROUP BY user_id, litrix_id, name
+                GROUP BY user_id, litrix_id, name, photo_url
                 ORDER BY (user_id IS NOT NULL) DESC, shared_papers DESC, name
                 LIMIT 200
             ''', [resolved_user_id])
@@ -402,7 +404,8 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                     'user_id':       r[0],
                     'litrix_id':     r[1],
                     'name':          r[2],
-                    'shared_papers': r[3],
+                    'photo_url':     r[3],
+                    'shared_papers': r[4],
                     'is_albaha':     r[0] is not None,
                 }
                 for r in cur.fetchall()

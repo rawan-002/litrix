@@ -149,6 +149,9 @@ export class ResearcherProfileComponent implements OnInit {
     return parts.map(p => p[0] || '').join('').toUpperCase() || '?';
   });
 
+  // Flips to true if the Scholar photo fails to load, so we fall back to initials.
+  readonly avatarError = signal<boolean>(false);
+
   // Co-authors: show a first batch, reveal the rest on demand.
   readonly COAUTHOR_BATCH = 6;
   readonly coauthorsShown = signal<number>(6);
@@ -312,6 +315,7 @@ export class ResearcherProfileComponent implements OnInit {
         }
         this.data.set(payload);
         this.coauthorsShown.set(this.COAUTHOR_BATCH);
+        this.avatarError.set(false);
         this.loading.set(false);
 
         // The backend lookup is case/padding-insensitive, so the user may

@@ -357,7 +357,8 @@ def researcher_profile(request, litrix_id: str):
                 COALESCE(hi.h_index, 0)                     AS h_index,
                 r."Scopus_ID",
                 r."ORCID_ID",
-                r."CitationsByYear"
+                r."CitationsByYear",
+                u."PhotoURL"
             FROM "Users" u
             LEFT JOIN "Researcher" r       ON r."UserID" = u."UserID"
             LEFT JOIN "Works_In" w
@@ -426,12 +427,13 @@ def researcher_profile(request, litrix_id: str):
         # so the card can link to their profile; external names come through
         # with is_albaha = false. Al-Baha first, then by shared-paper count.
         cur.execute('''
-            SELECT user_id, litrix_id, name,
+            SELECT user_id, litrix_id, name, photo_url,
                    COUNT(DISTINCT paper_id) AS shared_papers
             FROM (
                 SELECT
                     co."UserID"    AS user_id,
                     cu."Litrix_ID" AS litrix_id,
+                    cu."PhotoURL"  AS photo_url,
                     COALESCE(
                         cu."FullName_Ar",
                         NULLIF(TRIM(CONCAT_WS(' ', cu."FirstName", cu."LastName")), ''),
@@ -445,7 +447,7 @@ def researcher_profile(request, litrix_id: str):
                 WHERE me."UserID" = %s
                   AND COALESCE(cu."FullName_Ar", co."AuthorNameRaw") IS NOT NULL
             ) sub
-            GROUP BY user_id, litrix_id, name
+            GROUP BY user_id, litrix_id, name, photo_url
             ORDER BY (user_id IS NOT NULL) DESC, shared_papers DESC, name
             LIMIT 200
         ''', [user_id])
@@ -454,7 +456,8 @@ def researcher_profile(request, litrix_id: str):
                 'user_id':       r[0],
                 'litrix_id':     r[1],
                 'name':          r[2],
-                'shared_papers': r[3],
+                'photo_url':     r[3],
+                'shared_papers': r[4],
                 'is_albaha':     r[0] is not None,
             }
             for r in cur.fetchall()
@@ -489,6 +492,7 @@ def researcher_profile(request, litrix_id: str):
         'h_index':         bio[8] if bio else 0,
         'scopus_id':       bio[9] if bio else None,
         'orcid_id':        bio[10] if bio else None,
+        'photo_url':       bio[12] if bio else None,
         'stats': {
             'total_papers':     stats_row[0] or 0,
             'total_citations':  stats_row[1] or 0,

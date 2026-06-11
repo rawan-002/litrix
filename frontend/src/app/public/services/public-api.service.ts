@@ -55,6 +55,7 @@ export interface PaperSummary {
 export interface ResearcherProfile extends ResearcherSummary {
   scopus_id: string | null;
   orcid_id: string | null;
+  photo_url: string | null;
   stats: {
     total_papers: number;
     total_citations: number;
@@ -71,6 +72,7 @@ export interface CoAuthor {
   user_id: number | null;
   litrix_id: string | null;
   name: string;
+  photo_url: string | null;
   shared_papers: number;
   is_albaha: boolean;
 }

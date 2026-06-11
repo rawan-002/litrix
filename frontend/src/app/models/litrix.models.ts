@@ -135,6 +135,8 @@ export interface ResearcherIdentity {
   last_synced_at: string | null;
   department_id: number | null;
   department_name: string | null;
+  /** Google Scholar profile photo, or null → fall back to initials. */
+  photo_url: string | null;
 }
 
 export interface ResearcherStatsAgg {
@@ -174,6 +176,7 @@ export interface CoAuthor {
   /** Present only for platform (Al-Baha) members — drives the profile link. */
   litrix_id: string | null;
   name: string;
+  photo_url: string | null;
   shared_papers: number;
   is_albaha: boolean;
 }

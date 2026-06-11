@@ -15,10 +15,16 @@
         <div class="p-6 sm:p-8 flex flex-col lg:flex-row gap-8 lg:items-center">
           <div class="flex-1 min-w-0">
           <div class="flex gap-5">
-            <div class="w-20 h-20 rounded-2xl bg-accent/10 text-accent flex items-center
-                        justify-center text-2xl font-semibold leading-none shrink-0">
-              {{ initials() }}
-            </div>
+            @if (d.identity.photo_url && !avatarError()) {
+              <img [src]="d.identity.photo_url" alt="" referrerpolicy="no-referrer"
+                   (error)="avatarError.set(true)"
+                   class="w-20 h-20 rounded-2xl object-cover shrink-0 bg-ink-100" />
+            } @else {
+              <div class="w-20 h-20 rounded-2xl bg-accent/10 text-accent flex items-center
+                          justify-center text-2xl font-semibold leading-none shrink-0">
+                {{ initials() }}
+              </div>
+            }
             <div class="min-w-0">
               <h1 class="text-xl sm:text-2xl font-semibold text-ink-900 leading-snug">
                 {{ displayName() }}
@@ -245,10 +251,17 @@
               @for (c of visibleCoauthors(); track c.name) {
                 @if (c.is_albaha && c.litrix_id) {
                   <a [routerLink]="['/profile', c.litrix_id]"
-                     class="inline-flex items-center gap-2 pl-3 pr-1.5 py-1 rounded-full text-sm
+                     class="inline-flex items-center gap-1.5 pl-1 pr-1.5 py-1 rounded-full text-sm
                             bg-accent-light text-accent ring-1 ring-accent/40
                             hover:ring-accent hover:bg-accent/10 transition">
-                    <span dir="auto">{{ c.name }}</span>
+                    @if (c.photo_url) {
+                      <img [src]="c.photo_url" alt="" referrerpolicy="no-referrer"
+                           class="w-6 h-6 rounded-full object-cover bg-white shrink-0" />
+                    } @else {
+                      <span class="w-6 h-6 rounded-full bg-accent/20 text-accent text-[10px]
+                                   font-semibold flex items-center justify-center shrink-0">{{ c.name[0] }}</span>
+                    }
+                    <span dir="auto" class="pl-1">{{ c.name }}</span>
                     <span class="shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-white
                                  text-[10px] font-semibold flex items-center justify-center"
                           title="shared papers">{{ c.shared_papers }}</span>

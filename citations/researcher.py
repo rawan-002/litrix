@@ -22,6 +22,11 @@ from litrix_db import db
 
 
 def fetch_cited_by_graph(scholar_id):
+    """Returns (citations_by_year, photo_url). The Scholar author response
+    carries the profile thumbnail for free, so we grab it here. Google's
+    default gray avatar is skipped — only real uploaded photos
+    (view_op=...photo) are returned, otherwise the UI keeps the initials.
+    On any error returns (None, None)."""
     try:
         params = {
             "engine": "google_scholar_author",
@@ -31,13 +36,16 @@ def fetch_cited_by_graph(scholar_id):
         }
         result = GoogleSearch(params).get_dict()
         cb = result.get("cited_by") or {}
-        graph = cb.get("graph") or []
-        return {
+        graph = {
             str(g.get("year")): int(g.get("citations") or 0)
-            for g in graph if g.get("year") is not None
+            for g in (cb.get("graph") or []) if g.get("year") is not None
         }
+        thumb = ((result.get("author") or {}).get("thumbnail") or "").strip()
+        if "avatar_scholar" in thumb or "/citations/images/" in thumb:
+            thumb = ""   # Google's default placeholder, not a real photo
+        return graph, (thumb or None)
     except Exception:
-        return None
+        return None, None
 
 
 def main():
@@ -101,20 +109,28 @@ def main():
     for i, (uid, name, scholar_id) in enumerate(researchers, 1):
         time.sleep(0.4)
         try:
-            graph = fetch_cited_by_graph(scholar_id)
+            graph, photo = fetch_cited_by_graph(scholar_id)
             if graph is None:
                 n_failed += 1
-            elif not graph:
-                n_empty += 1
             else:
-                cur.execute('''
-                    INSERT INTO "Researcher" ("UserID", "CitationsByYear", "LastSyncedAt")
-                    VALUES (%s, %s, NOW())
-                    ON CONFLICT ("UserID")
-                    DO UPDATE SET "CitationsByYear" = EXCLUDED."CitationsByYear",
-                                  "LastSyncedAt"   = NOW()
-                ''', (uid, Json(graph)))
-                n_filled += 1
+                if graph:
+                    cur.execute('''
+                        INSERT INTO "Researcher" ("UserID", "CitationsByYear", "LastSyncedAt")
+                        VALUES (%s, %s, NOW())
+                        ON CONFLICT ("UserID")
+                        DO UPDATE SET "CitationsByYear" = EXCLUDED."CitationsByYear",
+                                      "LastSyncedAt"   = NOW()
+                    ''', (uid, Json(graph)))
+                    n_filled += 1
+                else:
+                    n_empty += 1
+                # Photo comes from the same call — store it whether or not the
+                # citation graph had data.
+                if photo:
+                    cur.execute(
+                        'UPDATE "Users" SET "PhotoURL" = %s WHERE "UserID" = %s',
+                        (photo, uid),
+                    )
         except Exception:
             n_failed += 1
 
