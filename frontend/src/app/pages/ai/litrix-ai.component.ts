@@ -84,7 +84,7 @@ export class LitrixAiComponent {
   readonly messages = signal<ChatMessage[]>([
     {
       role: 'assistant',
-      text: 'Hi 👋 I\'m Litrix AI. Soon I\'ll be able to answer your '
+      text: 'I\'m Litrix AI. Soon I\'ll be able to answer your '
           + 'questions about papers, researchers, and stats across the '
           + 'platform. The interface is experimental for now.',
     },

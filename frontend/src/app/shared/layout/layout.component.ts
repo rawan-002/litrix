@@ -79,12 +79,12 @@ export class LayoutComponent implements OnInit {
     if (this.auth.hasPermission('view_all_researchers') ||
         this.auth.hasPermission('view_dept_researchers') ||
         this.auth.hasPermission('manage_departments')) {
-      items.push({ label: 'Departments', icon: '◫', route: '/departments' });
+      items.push({ label: 'Departments', icon: '▦', route: '/departments' });
     }
 
     // Open to everyone; route stays /network even though the label is
     // now "Collaboration" (renaming the route wasn't worth the churn).
-    items.push({ label: 'Collaboration', icon: '◉', route: '/network' });
+    items.push({ label: 'Collaboration', icon: '⚭', route: '/network' });
 
     // Up top so it reads as a first-class feature (RAG wiring lands later).
     items.push({ label: 'Litrix AI', icon: '✦', route: '/ai' });
@@ -94,19 +94,19 @@ export class LayoutComponent implements OnInit {
     }
 
     if (this.auth.hasPermission('manage_users')) {
-      items.push({ label: 'Users', icon: '◐', route: '/admin/users' });
+      items.push({ label: 'Users', icon: '☻', route: '/admin/users' });
       items.push({ label: 'Invitations', icon: '✉', route: '/admin/invitations' });
     }
 
     if (this.auth.hasPermission('manage_roles')) {
-      items.push({ label: 'Roles & Permissions', icon: '◈', route: '/admin/roles' });
+      items.push({ label: 'Roles & Permissions', icon: '⚿', route: '/admin/roles' });
     }
 
     // For campaign managers and HoD-style read access. Route stays
     // /admin/campaigns; only the label needed to read as "official".
     if (this.auth.hasPermission('manage_campaigns') ||
         this.auth.hasPermission('view_campaign_reports')) {
-      items.push({ label: 'Research Reports', icon: '▦', route: '/admin/campaigns' });
+      items.push({ label: 'Research Reports', icon: '❒', route: '/admin/campaigns' });
     }
 
     if (this.auth.hasPermission('trigger_sync')) {
@@ -117,8 +117,8 @@ export class LayoutComponent implements OnInit {
       items.push({ label: 'Audit Log', icon: '☰', route: '/admin/audit' });
     }
 
-    items.push({ label: 'My Profile',     icon: '◔', route: '/me' });
-    items.push({ label: 'Notifications',  icon: '◇', route: '/notifications' });
+    items.push({ label: 'My Profile',     icon: '☺', route: '/me' });
+    items.push({ label: 'Notifications',  icon: '⚑', route: '/notifications' });
 
     return items;
   });
