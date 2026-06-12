@@ -107,6 +107,30 @@ export class ResearcherProfileComponent implements OnInit {
   // Clip the citations chart before this year, matching the admin dashboard.
   private readonly CHART_YEAR_FLOOR = 2019;
 
+  // The citations-over-time series the chart actually draws. When the Al-Baha
+  // filter is OFF, use Scholar's authoritative author-level graph (matches the
+  // Scholar profile). When it's ON, that graph can't be split by affiliation,
+  // so rebuild the series by summing the per-year citation counts of the
+  // Al-Baha-only papers — so the chart reacts to the toggle like the KPIs do.
+  readonly chartCitations = computed(() => {
+    if (this.affiliationFilter() === 'all') {
+      return this.data()?.citations_by_year ?? [];
+    }
+    const byYear = new Map<number, number>();
+    for (const p of this.statsPapers()) {
+      const cby = p.citations_by_year;
+      if (!cby) continue;
+      for (const [y, c] of Object.entries(cby)) {
+        const yr = parseInt(y, 10);
+        if (!Number.isFinite(yr) || yr < this.CHART_YEAR_FLOOR) continue;
+        byYear.set(yr, (byYear.get(yr) ?? 0) + (Number(c) || 0));
+      }
+    }
+    return [...byYear.entries()]
+      .map(([year, citations]) => ({ year, citations }))
+      .sort((a, b) => a.year - b.year);
+  });
+
   // Web-of-Science-style derived metrics. The profile is lifetime by design,
   // so these run off the per-paper lifetime citation counts.
   readonly hIndex = computed(() => {
@@ -156,8 +180,17 @@ export class ResearcherProfileComponent implements OnInit {
   readonly COAUTHOR_BATCH = 6;
   readonly coauthorsShown = signal<number>(6);
 
+  // Co-authors also follow the Al-Baha switch: ON shows only Al-Baha
+  // co-authors, OFF shows everyone (including the external Scholar names).
+  readonly filteredCoauthors = computed(() => {
+    const all = this.data()?.coauthors ?? [];
+    return this.affiliationFilter() === 'albaha'
+      ? all.filter(c => c.is_albaha)
+      : all;
+  });
+
   readonly visibleCoauthors = computed(() =>
-    (this.data()?.coauthors ?? []).slice(0, this.coauthorsShown())
+    this.filteredCoauthors().slice(0, this.coauthorsShown())
   );
 
   showMoreCoauthors() {

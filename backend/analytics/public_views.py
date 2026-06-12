@@ -19,6 +19,8 @@ from django.db import connection
 from rest_framework import decorators, response
 from rest_framework.permissions import AllowAny
 
+from .researcher_views import _normalize_interests
+
 
 # Dashboard scope: the current biennium. Every PubYear aggregation is
 # constrained to these so the supervisor sees current output, not the
@@ -360,7 +362,8 @@ def researcher_profile(request, litrix_id: str):
                 r."Scopus_ID",
                 r."ORCID_ID",
                 r."CitationsByYear",
-                u."PhotoURL"
+                u."PhotoURL",
+                r."ResearchInterests"
             FROM "Users" u
             LEFT JOIN "Researcher" r       ON r."UserID" = u."UserID"
             LEFT JOIN "Works_In" w
@@ -495,6 +498,7 @@ def researcher_profile(request, litrix_id: str):
         'scopus_id':       bio[9] if bio else None,
         'orcid_id':        bio[10] if bio else None,
         'photo_url':       bio[12] if bio else None,
+        'research_interests': _normalize_interests(bio[13]) if bio else [],
         'stats': {
             'total_papers':     stats_row[0] or 0,
             'total_citations':  stats_row[1] or 0,

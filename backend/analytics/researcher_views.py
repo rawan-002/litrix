@@ -25,6 +25,33 @@ def normalize_litrix_id(raw):
     return f'Lit-{int(m.group(1)):06d}'
 
 
+def _normalize_interests(raw):
+    """Normalize Researcher.ResearchInterests (Scholar's areas of interest) into
+    a clean list of strings. The column is jsonb but historically holds either a
+    JSON array (['AI', 'NLP']) or a single comma-separated string (sometimes with
+    the Arabic comma '،'). Returns [] when empty."""
+    if not raw:
+        return []
+    if isinstance(raw, str):
+        import json as _json
+        try:
+            raw = _json.loads(raw)
+        except Exception:
+            raw = [raw]
+    if isinstance(raw, str):
+        raw = [raw]
+    out = []
+    for item in (raw or []):
+        if not isinstance(item, str):
+            continue
+        # Split the legacy single-string-with-commas rows into separate tags.
+        for part in re.split(r'[،,]', item):
+            tag = part.strip()
+            if tag and tag not in out:
+                out.append(tag)
+    return out
+
+
 class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
     """
     GET /api/researchers/             → list of all researchers
@@ -190,7 +217,7 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                     u."Scholar_ID", u."ORCID",
                     r."OpenAlex_AuthorID", r."LastSyncedAt",
                     d."DepartmentID", d."DepartmentName",
-                    u."Litrix_ID", u."PhotoURL"
+                    u."Litrix_ID", u."PhotoURL", r."ResearchInterests"
                 FROM "Users" u
                 LEFT JOIN "Researcher" r ON r."UserID" = u."UserID"
                 LEFT JOIN "Works_In" w ON w."UserID" = u."UserID"
@@ -217,6 +244,7 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                 'department_name':   row[10],
                 'litrix_id':         row[11],
                 'photo_url':         row[12],
+                'research_interests': _normalize_interests(row[13]),
             }
 
             # For citations, sum the per-paper Scholar cited_by.value (the most

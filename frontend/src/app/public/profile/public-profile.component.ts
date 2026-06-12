@@ -64,6 +64,15 @@ const CHART_MIN_YEAR = 2019;
                     <span class="text-gray-300">·</span> Al-Baha University
                   </p>
 
+                  <!-- Research interests (Scholar's areas of interest) -->
+                  <div *ngIf="p.research_interests?.length" class="flex flex-wrap gap-1.5 mt-3">
+                    <span *ngFor="let tag of p.research_interests" dir="auto"
+                          class="text-[11px] px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700
+                                 ring-1 ring-indigo-100 font-medium">
+                      {{ tag }}
+                    </span>
+                  </div>
+
                   <div class="flex flex-wrap items-center gap-2 mt-4">
                     <span class="text-[11px] px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 font-mono">
                       {{ p.litrix_id }}

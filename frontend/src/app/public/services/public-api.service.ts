@@ -57,6 +57,7 @@ export interface ResearcherProfile extends ResearcherSummary {
   scopus_id: string | null;
   orcid_id: string | null;
   photo_url: string | null;
+  research_interests: string[];
   stats: {
     total_papers: number;
     total_citations: number;

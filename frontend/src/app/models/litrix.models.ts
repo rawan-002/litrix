@@ -137,6 +137,8 @@ export interface ResearcherIdentity {
   department_name: string | null;
   /** Google Scholar profile photo, or null → fall back to initials. */
   photo_url: string | null;
+  /** Scholar's "areas of interest" tags, [] when none scraped yet. */
+  research_interests: string[];
 }
 
 export interface ResearcherStatsAgg {
