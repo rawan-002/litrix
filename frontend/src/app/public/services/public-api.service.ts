@@ -37,6 +37,7 @@ export interface ResearcherSummary {
   h_index: number;
   total_papers: number;
   total_citations: number;
+  photo_url: string | null;
 }
 
 export interface PaperSummary {

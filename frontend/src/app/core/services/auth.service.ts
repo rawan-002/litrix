@@ -22,6 +22,7 @@ export interface AuthUser {
   scholar_id: string | null;
   orcid_id: string | null;
   scopus_id: string | null;
+  photo_url: string | null;
 }
 
 interface LoginResponse {

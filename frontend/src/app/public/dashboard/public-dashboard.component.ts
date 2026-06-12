@@ -258,10 +258,22 @@ Chart.register(...registerables);
                   [routerLink]="['/public/researcher', r.litrix_id]"
                   class="hover:bg-indigo-50/30 cursor-pointer transition-colors group">
                 <td class="px-6 py-4">
-                  <p class="font-medium text-gray-900 group-hover:text-indigo-700 transition-colors">
-                    {{ r.full_name_ar }}
-                  </p>
-                  <p class="text-xs text-gray-400 font-mono mt-0.5">{{ r.litrix_id }}</p>
+                  <div class="flex items-center gap-3">
+                    <img *ngIf="r.photo_url" [src]="r.photo_url" alt=""
+                         referrerpolicy="no-referrer"
+                         class="w-9 h-9 rounded-full object-cover flex-shrink-0 ring-1 ring-gray-100" />
+                    <div *ngIf="!r.photo_url"
+                         class="w-9 h-9 rounded-full bg-gray-900 text-white text-xs font-semibold
+                                flex items-center justify-center flex-shrink-0">
+                      {{ initials(r.full_name_ar || r.full_name_en) }}
+                    </div>
+                    <div class="min-w-0">
+                      <p class="font-medium text-gray-900 group-hover:text-indigo-700 transition-colors truncate">
+                        {{ r.full_name_ar }}
+                      </p>
+                      <p class="text-xs text-gray-400 font-mono mt-0.5">{{ r.litrix_id }}</p>
+                    </div>
+                  </div>
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-700">
                   {{ r.department_name || '—' }}
@@ -459,6 +471,12 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
     const all = this.researchers();
     return did == null ? all : all.filter((r) => r.department_id === did);
   });
+
+  // Avatar fallback when a researcher has no Scholar photo.
+  initials(name: string | null | undefined): string {
+    return (name || '').split(/\s+/).slice(0, 2)
+      .map((s) => s[0] || '').join('').toUpperCase() || '?';
+  }
 
   // --- lifecycle ------------------------------------------------------
   ngOnInit(): void {

@@ -758,7 +758,8 @@ def universal_search(request):
                 TRIM(CONCAT_WS(' ', u."FirstName", u."LastName")) AS full_name_en,
                 u."UserType",
                 d."DepartmentName",
-                (SELECT COUNT(*) FROM "Authors" a WHERE a."UserID" = u."UserID") AS papers
+                (SELECT COUNT(*) FROM "Authors" a WHERE a."UserID" = u."UserID") AS papers,
+                u."PhotoURL"
             FROM "Users" u
             -- Pick ONE current Works_In per user. If the user is HoD
             -- of a department, that row is deprioritized so the
@@ -801,6 +802,7 @@ def universal_search(request):
                 'user_type':       r[4],
                 'department_name': r[5],
                 'papers':          r[6],
+                'photo_url':       r[7],
             }
             for r in cur.fetchall()
         ]

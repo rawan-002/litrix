@@ -48,6 +48,10 @@ export class LayoutComponent implements OnInit {
   ngOnInit() {
     this.notifs.load(true).subscribe({ error: () => {} });
     this.reloadPendingReports();
+    // Refresh the cached user so fields added after their last login (e.g.
+    // photo_url) populate without forcing a re-login. Silent on failure —
+    // the stored session stays valid.
+    this.auth.fetchMe().subscribe({ error: () => {} });
   }
 
   reloadPendingReports() {

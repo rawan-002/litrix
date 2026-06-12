@@ -59,10 +59,16 @@
       <button (click)="toggleUserMenu()"
               class="w-full flex items-center gap-3 px-3 py-2 rounded-lg
                      hover:bg-ink-50 transition text-left">
-        <div class="w-8 h-8 rounded-full bg-ink-900 text-white text-xs
-                    font-semibold flex items-center justify-center flex-shrink-0">
-          {{ initials() }}
-        </div>
+        @if (auth.user()?.photo_url) {
+          <img [src]="auth.user()?.photo_url" alt="" referrerpolicy="no-referrer"
+               class="w-8 h-8 rounded-full object-cover flex-shrink-0
+                      ring-1 ring-ink-100" />
+        } @else {
+          <div class="w-8 h-8 rounded-full bg-ink-900 text-white text-xs
+                      font-semibold flex items-center justify-center flex-shrink-0">
+            {{ initials() }}
+          </div>
+        }
         <div class="flex-1 min-w-0">
           <div class="text-sm text-ink-700 font-medium truncate">
             {{ auth.user()?.full_name || auth.user()?.email }}

@@ -91,12 +91,19 @@
                     class="group bg-white rounded-2xl border border-ink-100
                            hover:border-accent hover:shadow-card transition
                            p-6 text-left flex items-center gap-4">
-              <div class="w-16 h-16 rounded-full bg-ink-900 text-white
-                          text-xl font-semibold flex items-center
-                          justify-center flex-shrink-0
-                          group-hover:bg-accent transition-colors">
-                {{ initials(p) }}
-              </div>
+              @if (p.photo_url) {
+                <img [src]="p.photo_url" [alt]="p.full_name_ar || p.full_name_en || ''"
+                     referrerpolicy="no-referrer"
+                     class="w-16 h-16 rounded-full object-cover flex-shrink-0
+                            ring-1 ring-ink-100" />
+              } @else {
+                <div class="w-16 h-16 rounded-full bg-ink-900 text-white
+                            text-xl font-semibold flex items-center
+                            justify-center flex-shrink-0
+                            group-hover:bg-accent transition-colors">
+                  {{ initials(p) }}
+                </div>
+              }
               <div class="flex-1 min-w-0">
                 <div class="text-base font-semibold text-ink-900 truncate
                             group-hover:text-accent transition-colors">

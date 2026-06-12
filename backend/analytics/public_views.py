@@ -295,7 +295,8 @@ def researchers_list(request):
                       AND rp."PubYear" = ANY(%s)
                       AND {NOT_RETRACTED_SQL}
                       AND {AFFILIATION_VERIFIED_SQL}
-                ), 0)                                           AS total_citations
+                ), 0)                                           AS total_citations,
+                u."PhotoURL"
             FROM "Users" u
             LEFT JOIN "Researcher" r       ON r."UserID" = u."UserID"
             LEFT JOIN "Works_In" w
@@ -320,6 +321,7 @@ def researchers_list(request):
                 'h_index':         r[8] or 0,
                 'total_papers':    r[9] or 0,
                 'total_citations': r[10] or 0,
+                'photo_url':       r[11],
             }
             for r in rows
         ]

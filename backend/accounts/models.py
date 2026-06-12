@@ -69,6 +69,7 @@ class User(AbstractBaseUser):
     orcid_id       = models.CharField(max_length=64, null=True, blank=True, db_column='Orcid_ID')
     scopus_id      = models.CharField(max_length=64, null=True, blank=True, db_column='Scopus_ID')
     litrix_id      = models.CharField(max_length=50, null=True, blank=True, db_column='Litrix_ID')
+    photo_url      = models.TextField(null=True, blank=True, db_column='PhotoURL')
 
     created_at     = models.DateTimeField(db_column='CreatedAt', auto_now_add=True)
 

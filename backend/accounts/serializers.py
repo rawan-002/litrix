@@ -60,6 +60,7 @@ class UserSerializer(serializers.ModelSerializer):
             'user_id', 'litrix_id', 'email', 'full_name', 'full_name_ar',
             'user_type', 'tenant_id', 'role_id', 'role', 'permissions',
             'email_verified', 'scholar_id', 'orcid_id', 'scopus_id',
+            'photo_url',
         ]
 
     def get_role(self, obj):

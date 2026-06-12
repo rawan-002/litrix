@@ -201,6 +201,7 @@ export interface SearchProfileResult {
   user_type: string;
   department_name: string | null;
   papers: number;
+  photo_url: string | null;
 }
 
 export interface SearchPaperResult {
