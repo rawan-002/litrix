@@ -77,6 +77,12 @@ html { scroll-behavior: smooth; }
   letter-spacing: -0.01em;
 }
 
+.brand-logo {
+  height: 30px;
+  width: auto;
+  display: block;
+}
+
 .nav-actions {
   display: flex;
   align-items: center;
@@ -360,6 +366,12 @@ html { scroll-behavior: smooth; }
   font-family: $display-stack;
   font-weight: 600;
   color: $color-ink-muted;
+}
+
+.footer__brand-logo {
+  height: 24px;
+  width: auto;
+  display: block;
 }
 
 // ----------------------------------------------------------------------------
