@@ -291,8 +291,8 @@ def parse_scopus_author_ids(ids_str: str) -> list[str]:
 # DATABASE INSPECTION (READ-ONLY)
 # =============================================================================
 
-# Shared DB helper (single source — see litrix_db.py at repo root).
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Shared DB helper (single source — litrix_db.py lives in backend/).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from litrix_db import db as db_connect
 
 

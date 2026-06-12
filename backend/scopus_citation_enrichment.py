@@ -97,8 +97,8 @@ EXPECTED_USER_IDS = [6, 8, 81, 89, 92, 93, 106]
 # DATABASE
 # =============================================================================
 
-# Shared DB helper (single source — see litrix_db.py at repo root).
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Shared DB helper (single source — litrix_db.py lives in backend/).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from litrix_db import db as db_connect
 
 

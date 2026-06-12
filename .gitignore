@@ -76,3 +76,11 @@ Scopus_Migration_2026-06/
 
 # Claude Code working memory — local assistant notes, not app source.
 memory/
+
+# CLAUDE.md — local Claude Code guidance + work log. Kept on the developer's
+# machine only (the project's public doc is README.md); NOT pushed to GitHub.
+CLAUDE.md
+
+# Stray local artifacts (diagnostic outputs / reference binaries).
+orphan_papers_report.xlsx
+*.pdf

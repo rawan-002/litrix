@@ -53,8 +53,8 @@ YEAR_TOLERANCE = 1      # allow print/online year drift
 API_DELAY      = 0.15
 
 
-# Shared DB helper (single source — see litrix_db.py at repo root).
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Shared DB helper (single source — litrix_db.py lives in backend/).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from litrix_db import db  # noqa: E402
 
 
