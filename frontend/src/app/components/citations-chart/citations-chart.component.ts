@@ -45,7 +45,7 @@ interface ChartPoint { x: number; y: number; year: number; value: number; }
               fill="none" stroke="#1c1917" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round" />
         @if (c.dashedPath) {
-          <!-- Current (partial) year drawn dashed — data still updating. -->
+          <!-- Current (partial) year drawn dashed - data still updating. -->
           <path [attr.d]="c.dashedPath"
                 fill="none" stroke="#1c1917" stroke-width="2" opacity="0.5"
                 stroke-linecap="round" stroke-dasharray="3 4" />

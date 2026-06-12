@@ -4,7 +4,7 @@
     <p class="text-sm text-ink-500 mt-1">
       Trigger publication sync from Scholar or ORCID. Researchers synced
       in the last <span class="font-semibold">{{ cooldownDays() }} days</span>
-      are in cooldown — use Force to override.
+      are in cooldown - use Force to override.
     </p>
   </div>
 
@@ -15,7 +15,7 @@
         <h2 class="text-sm font-semibold text-ink-900">Citation Refresh</h2>
         <p class="text-xs text-ink-500 mt-1 max-w-xl">
           Updates citation <span class="font-semibold">numbers only</span> on existing
-          papers (OpenAlex first — free; optional SerpAPI fallback).
+          papers (OpenAlex first - free; optional SerpAPI fallback).
           Never adds papers, never edits titles, never changes researcher links.
         </p>
       </div>
@@ -57,7 +57,7 @@
     </div>
     @if (citRunning()) {
       <div class="mt-3 text-[11px] text-blue-700 bg-blue-50 rounded-lg px-3 py-2">
-        A citation refresh is in progress — track it under Recent Jobs below.
+        A citation refresh is in progress - track it under Recent Jobs below.
         Only one refresh can run at a time.
       </div>
     }
@@ -71,12 +71,12 @@
         <p class="text-xs text-ink-500 mt-1 max-w-xl">
           For every researcher: checks the year of their
           <span class="font-semibold">latest stored paper</span>, then fetches
-          Scholar newest-first and stops as soon as an older paper appears —
+          Scholar newest-first and stops as soon as an older paper appears -
           so only <span class="font-semibold">genuinely new papers</span> are
           added. Existing papers are never re-downloaded or modified.
           Afterwards, every new paper goes through the
           <span class="font-semibold">Al-Baha affiliation verifier</span>
-          (OpenAlex → Crossref → PDF) — papers confirmed NOT Al-Baha are
+          (OpenAlex → Crossref → PDF) - papers confirmed NOT Al-Baha are
           flagged and excluded from the dashboards.
         </p>
       </div>
@@ -107,7 +107,7 @@
     </div>
     @if (newRunning()) {
       <div class="mt-3 text-[11px] text-blue-700 bg-blue-50 rounded-lg px-3 py-2">
-        A new-papers scrape is in progress — track it under Recent Jobs below.
+        A new-papers scrape is in progress - track it under Recent Jobs below.
         Only one scrape can run at a time.
       </div>
     }
@@ -190,7 +190,7 @@
                     @if (r.Scholar_ID) {
                       <button (click)="forceSync(r.UserID, 'scholar', r.papers)"
                               [disabled]="triggering() !== null"
-                              title="Force re-sync — bypasses the cooldown"
+                              title="Force re-sync - bypasses the cooldown"
                               class="text-xs px-3 py-1 rounded-lg border border-amber-300
                                      text-amber-700 hover:bg-amber-50 disabled:opacity-50">
                         Force Scholar
@@ -199,7 +199,7 @@
                     @if (r.Orcid_ID) {
                       <button (click)="forceSync(r.UserID, 'orcid', r.papers)"
                               [disabled]="triggering() !== null"
-                              title="Force re-sync — bypasses the cooldown"
+                              title="Force re-sync - bypasses the cooldown"
                               class="text-xs px-3 py-1 rounded-lg border border-amber-300
                                      text-amber-700 hover:bg-amber-50 disabled:opacity-50">
                         Force ORCID

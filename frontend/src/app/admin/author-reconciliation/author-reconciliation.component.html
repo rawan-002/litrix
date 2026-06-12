@@ -1,11 +1,11 @@
 <!--
-  Author Reconciliation — single-decision view.
+  Author Reconciliation - single-decision view.
   Layout philosophy: one focused card, everything else fades back.
 -->
 
 <section class="reconciliation">
 
-  <!-- Header — quiet, informational -->
+  <!-- Header - quiet, informational -->
   <header class="reconciliation__header">
     <h1 class="reconciliation__title">Author Reconciliation</h1>
     <p class="reconciliation__subtitle" *ngIf="remaining() > 0">
@@ -18,7 +18,7 @@
     Loading queue&hellip;
   </div>
 
-  <!-- Empty state — celebrate the inbox-zero moment -->
+  <!-- Empty state - celebrate the inbox-zero moment -->
   <div class="reconciliation__empty" *ngIf="!isLoading() && remaining() === 0">
     <div class="reconciliation__empty-mark">✓</div>
     <h2>All caught up</h2>
@@ -54,7 +54,7 @@
           {{ item.suggestedDepartment }}
         </p>
 
-        <!-- Confidence — soft bar, not a number jockey -->
+        <!-- Confidence - soft bar, not a number jockey -->
         <div class="confidence" [attr.data-tone]="confidenceTone(item)">
           <div class="confidence__track">
             <div class="confidence__fill" [style.width.%]="confidencePct(item)"></div>

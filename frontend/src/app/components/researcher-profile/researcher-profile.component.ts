@@ -34,7 +34,7 @@ export class ResearcherProfileComponent implements OnInit {
   readonly loading = signal<boolean>(true);
   readonly error   = signal<string | null>(null);
 
-  // Paper detail modal — store paper_id; the shared modal fetches full data
+  // Paper detail modal - store paper_id; the shared modal fetches full data
   readonly selectedPaperId = signal<number | null>(null);
 
   // Pagination
@@ -45,7 +45,7 @@ export class ResearcherProfileComponent implements OnInit {
   readonly sortField = signal<'year' | 'citations'>('year');
   readonly sortDir   = signal<'asc' | 'desc'>('desc');
 
-  // Quartile filter — multi-select. Empty Set = no filter (show all).
+  // Quartile filter - multi-select. Empty Set = no filter (show all).
   readonly activeQuartiles = signal<Set<string>>(new Set());
 
   // Journals vs Conferences. Same rule as the dashboard/export: a venue
@@ -85,7 +85,7 @@ export class ResearcherProfileComponent implements OnInit {
     this.affiliation.albahaOnly() ? 'albaha' : 'all'
   );
 
-  // The papers the KPIs are computed over — same Al-Baha filter as the list.
+  // The papers the KPIs are computed over - same Al-Baha filter as the list.
   readonly statsPapers = computed(() => {
     const all = this.data()?.papers ?? [];
     return this.affiliationFilter() === 'albaha'
@@ -114,7 +114,7 @@ export class ResearcherProfileComponent implements OnInit {
   // filter is OFF, use Scholar's authoritative author-level graph (matches the
   // Scholar profile). When it's ON, that graph can't be split by affiliation,
   // so rebuild the series by summing the per-year citation counts of the
-  // Al-Baha-only papers — so the chart reacts to the toggle like the KPIs do.
+  // Al-Baha-only papers - so the chart reacts to the toggle like the KPIs do.
   readonly chartCitations = computed(() => {
     if (this.affiliationFilter() === 'all') {
       return this.data()?.citations_by_year ?? [];
@@ -168,7 +168,7 @@ export class ResearcherProfileComponent implements OnInit {
     const en = [id.first_name, id.last_name].filter(Boolean).join(' ').trim();
     // Show the secondary line only when it's a genuine Latin-script English
     // name that differs from the Arabic name. first/last sometimes hold an
-    // Arabic short form (e.g. "سعد القثامي") — that's not an English name, hide it.
+    // Arabic short form (e.g. "سعد القثامي") - that's not an English name, hide it.
     const isAscii = [...en].every(ch => ch.charCodeAt(0) < 128);
     const isLatin = /[A-Za-z]/.test(en) && isAscii;
     return id.full_name_ar && en && isLatin ? en : '';
@@ -342,7 +342,7 @@ export class ResearcherProfileComponent implements OnInit {
     this.api.getResearcherProfile(id).subscribe({
       next: payload => {
         // Some views return CitationsByYear as a JSON string rather than an
-        // object — parse it defensively so the keyvalue pipe never crashes.
+        // object - parse it defensively so the keyvalue pipe never crashes.
         if (payload?.papers) {
           payload.papers = payload.papers.map(p => {
             let cby: any = p.citations_by_year;
@@ -383,7 +383,7 @@ export class ResearcherProfileComponent implements OnInit {
   }
 
   fmt(n: number | null | undefined): string {
-    if (n == null) return '—';
+    if (n == null) return '-';
     return n.toLocaleString('en-US');
   }
 

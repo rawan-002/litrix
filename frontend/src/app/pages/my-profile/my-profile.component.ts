@@ -1,5 +1,5 @@
 /**
- * My Profile page — publication-only view.
+ * My Profile page - publication-only view.
  *
  * All data-update concerns (personal info, academic IDs, password) live
  * in SettingsComponent. This page is intentionally read-only so the

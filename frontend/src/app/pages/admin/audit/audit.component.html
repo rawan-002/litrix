@@ -42,7 +42,7 @@
                 {{ formatDate(log.CreatedAt) }}
               </td>
               <td class="px-4 py-3">
-                <div class="text-xs text-ink-900" dir="rtl">{{ log.FullName_Ar || '—' }}</div>
+                <div class="text-xs text-ink-900" dir="rtl">{{ log.FullName_Ar || '-' }}</div>
                 <div class="text-[10px] text-ink-400">{{ log.Email || 'system' }}</div>
               </td>
               <td class="px-4 py-3">
@@ -54,7 +54,7 @@
                 @if (log.TargetType) {
                   <span class="font-mono">{{ log.TargetType }}#{{ log.TargetID }}</span>
                 } @else {
-                  —
+                  -
                 }
                 @if (formatMeta(log.Metadata)) {
                   <div class="text-[10px] text-ink-400 mt-1 font-mono truncate max-w-xs">
@@ -63,7 +63,7 @@
                 }
               </td>
               <td class="px-4 py-3 text-[10px] text-ink-400 font-mono">
-                {{ log.IpAddress || '—' }}
+                {{ log.IpAddress || '-' }}
               </td>
             </tr>
           }

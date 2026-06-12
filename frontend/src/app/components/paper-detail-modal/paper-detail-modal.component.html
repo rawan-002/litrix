@@ -127,19 +127,19 @@
               <dt class="text-ink-500">Year:</dt>
               <dd class="font-medium"
                   [class.text-ink-900]="!!p.pub_year" [class.text-ink-300]="!p.pub_year">
-                {{ p.pub_year || '—' }}
+                {{ p.pub_year || '-' }}
               </dd>
 
               <dt class="text-ink-500">Journal:</dt>
               <dd class="font-medium"
                   [class.text-ink-900]="!!p.journal_name" [class.text-ink-300]="!p.journal_name">
-                {{ p.journal_name || p.publication || '—' }}
+                {{ p.journal_name || p.publication || '-' }}
               </dd>
 
               <dt class="text-ink-500">Venue:</dt>
               <dd class="font-medium"
                   [class.text-ink-900]="!!p.venue_type" [class.text-ink-300]="!p.venue_type">
-                {{ p.venue_type || '—' }}
+                {{ p.venue_type || '-' }}
               </dd>
 
               <dt class="text-ink-500">Quartile:</dt>
@@ -149,26 +149,26 @@
                     {{ p.quartile }}
                   </span>
                 } @else {
-                  <span class="text-ink-300">—</span>
+                  <span class="text-ink-300">-</span>
                 }
               </dd>
 
               <dt class="text-ink-500">Impact Factor:</dt>
               <dd class="font-medium"
                   [class.text-ink-900]="!!p.impact_factor" [class.text-ink-300]="!p.impact_factor">
-                {{ p.impact_factor || '—' }}
+                {{ p.impact_factor || '-' }}
               </dd>
 
               <dt class="text-ink-500">Indexing:</dt>
               <dd class="font-medium"
                   [class.text-ink-900]="!!p.indexing" [class.text-ink-300]="!p.indexing">
-                {{ p.indexing || '—' }}
+                {{ p.indexing || '-' }}
               </dd>
 
               <dt class="text-ink-500">Source:</dt>
               <dd class="font-medium"
                   [class.text-ink-900]="!!p.source" [class.text-ink-300]="!p.source">
-                {{ p.source || '—' }}
+                {{ p.source || '-' }}
               </dd>
 
               <dt class="text-ink-500">Total Citations:</dt>
@@ -247,7 +247,7 @@
                   <span class="block mt-1">
                     Total citations: <span class="font-medium text-ink-700">{{ fmt(p.total_citations) }}</span>
                     <span class="text-ink-400">
-                      (per-year data is missing — typically because this paper has no DOI)
+                      (per-year data is missing - typically because this paper has no DOI)
                     </span>
                   </span>
                 }

@@ -28,7 +28,7 @@ export const jwtInterceptor: HttpInterceptorFn = (req, next) => {
         return auth.refreshToken().pipe(
           switchMap(res => {
             if (!res.access) {
-              // Refresh failed for good — send to /welcome instead of
+              // Refresh failed for good - send to /welcome instead of
               // dropping the user onto a bare login form.
               router.navigate(['/welcome']);
               return throwError(() => err);

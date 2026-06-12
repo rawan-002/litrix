@@ -107,7 +107,7 @@ export class PaperDetailModalComponent implements OnChanges {
   }
 
   fmt(n: number | null | undefined): string {
-    if (n == null) return '—';
+    if (n == null) return '-';
     return Number(n).toLocaleString('en-US');
   }
 

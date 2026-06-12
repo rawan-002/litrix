@@ -1,4 +1,4 @@
-// Chatbot UI shell only — no backend yet. send() returns a canned reply so we
+// Chatbot UI shell only - no backend yet. send() returns a canned reply so we
 // can design the layout, scrolling, and input now; later swap that for the RAG
 // HTTP call and the rest of the component stays as-is.
 import {
@@ -25,7 +25,7 @@ interface ChatMessage {
         <div>
           <h1 class="text-2xl font-semibold text-ink-900 tracking-tight leading-tight">Litrix AI</h1>
           <p class="text-xs text-ink-400">
-            Smart research assistant — soon connected to platform data (RAG)
+            Smart research assistant - soon connected to platform data (RAG)
           </p>
         </div>
       </div>
@@ -72,7 +72,7 @@ interface ChatMessage {
           </button>
         </div>
         <p class="text-[11px] text-ink-300 text-center mt-2">
-          Litrix AI is under development — replies are experimental.
+          Litrix AI is under development - replies are experimental.
         </p>
       </div>
     </div>

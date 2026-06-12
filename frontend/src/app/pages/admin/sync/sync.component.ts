@@ -54,7 +54,7 @@ export class SyncComponent implements OnDestroy {
   readonly triggering = signal<number | null>(null);
   readonly cooldownDays = signal<number>(7);
 
-  // Citation refresh — numbers only, never adds or edits papers.
+  // Citation refresh - numbers only, never adds or edits papers.
   readonly citScope = signal<'missing' | 'all'>('missing');
   readonly citBudget = signal(0);
   readonly citTriggering = signal(false);
@@ -65,7 +65,7 @@ export class SyncComponent implements OnDestroy {
       (j.Status === 'queued' || j.Status === 'running')),
   );
 
-  // Incremental scrape — new papers only, never re-downloads existing ones.
+  // Incremental scrape - new papers only, never re-downloads existing ones.
   readonly newBudget = signal(100);
   readonly newTriggering = signal(false);
   readonly newRunning = computed(() =>
@@ -154,7 +154,7 @@ export class SyncComponent implements OnDestroy {
     if (ok) this.trigger(userId, source, true);
   }
 
-  // Institution-wide citation refresh. Numbers only — the backend updates
+  // Institution-wide citation refresh. Numbers only - the backend updates
   // CitationsByYear and the displayed totals on existing papers; it never
   // inserts papers, edits metadata, or touches researcher links.
   triggerCitations() {
@@ -231,7 +231,7 @@ export class SyncComponent implements OnDestroy {
     return `User #${j.UserID}`;
   }
 
-  // Arabic names render RTL, everything else LTR — avoids the mixed-bidi mess.
+  // Arabic names render RTL, everything else LTR - avoids the mixed-bidi mess.
   jobLabelDir(j: SyncJob): 'rtl' | 'ltr' {
     return j.FullName_Ar ? 'rtl' : 'ltr';
   }
@@ -244,7 +244,7 @@ export class SyncComponent implements OnDestroy {
   }
 
   formatDateTime(s: string | null): string {
-    if (!s) return '—';
+    if (!s) return '-';
     return new Date(s).toLocaleString('en-US', {
       month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
     });

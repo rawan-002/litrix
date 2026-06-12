@@ -1,7 +1,7 @@
 // The verification surface: paper cards with Confirm / Not-mine toggles, a
 // missing-papers section, and a submit that locks the report. The backend's
 // submission.is_editable flag is the source of truth for whether anything is
-// editable — we never second-guess it on the client.
+// editable - we never second-guess it on the client.
 import { Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -119,7 +119,7 @@ export class MyReportDetailComponent {
     }).subscribe({
       next: r => {
         this.busyPaperId.set(null);
-        // Patch the card in place instead of re-fetching — the response's
+        // Patch the card in place instead of re-fetching - the response's
         // decision_id is enough to mark it decided.
         this.papers.update(list => list.map(p =>
           p.paper_id === paper.paper_id

@@ -57,12 +57,12 @@ export class CampaignsComponent {
   readonly error     = signal<string | null>(null);
   readonly busyId    = signal<number | null>(null);
 
-  // Expanded campaign — shows its submissions inline below the card.
+  // Expanded campaign - shows its submissions inline below the card.
   readonly expandedId  = signal<number | null>(null);
   readonly submissions = signal<SubmissionRow[]>([]);
   readonly subsLoading = signal(false);
 
-  // Modal — single researcher's papers
+  // Modal - single researcher's papers
   readonly showDetailFor = signal<any | null>(null);
   readonly detailLoading = signal(false);
 
@@ -217,7 +217,7 @@ export class CampaignsComponent {
   }
 
   // Download the xlsx: read it as a Blob, make an object URL, and click a
-  // synthetic <a download> — the usual save-as-file-from-XHR dance.
+  // synthetic <a download> - the usual save-as-file-from-XHR dance.
   exportToExcel(c: Campaign) {
     this.busyId.set(c.campaign_id);
     this.api.exportCampaign(c.campaign_id).subscribe({

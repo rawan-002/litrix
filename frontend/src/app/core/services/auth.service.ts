@@ -131,7 +131,7 @@ export class AuthService {
       });
     }
     this.clearSession();
-    // Land on /welcome rather than a bare /login form — "Sign in" is
+    // Land on /welcome rather than a bare /login form - "Sign in" is
     // still right there in the nav for anyone who wants it.
     this.router.navigate(['/welcome']);
   }

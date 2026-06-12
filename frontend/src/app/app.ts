@@ -1,5 +1,5 @@
 /**
- * Root App Shell — minimal pass-through.
+ * Root App Shell - minimal pass-through.
  *
  * The full layout (sidebar nav, header, content) lives in
  * `shared/layout/layout.component.ts` and is mounted as a parent route.

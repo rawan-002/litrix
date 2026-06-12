@@ -28,7 +28,7 @@
 
       <div class="flex items-center gap-3 flex-wrap">
 
-        <!-- Updating spinner — only while re-fetching, so the page never blanks. -->
+        <!-- Updating spinner - only while re-fetching, so the page never blanks. -->
         @if (refreshing()) {
           <svg class="w-4 h-4 text-ink-300 animate-spin" viewBox="0 0 24 24" fill="none">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
@@ -87,7 +87,7 @@
                         bg-white rounded-xl shadow-hover border border-ink-100
                         w-44 py-2">
 
-              <!-- "All Years" toggle — clears the selection. -->
+              <!-- "All Years" toggle - clears the selection. -->
               <button (click)="clearYears()"
                       class="w-full flex items-center gap-3 px-4 py-2 text-sm
                              hover:bg-ink-50 transition text-left"
@@ -147,7 +147,7 @@
       </div>
     </header>
 
-    <!-- KPI cards — values reflect the active department filter. -->
+    <!-- KPI cards - values reflect the active department filter. -->
     <section class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
       <div class="bg-white rounded-apple shadow-card p-6">
         <div class="text-ink-400 text-xs uppercase tracking-wider mb-2">Researchers</div>
@@ -172,7 +172,7 @@
          and a single-department summary otherwise. -->
     <section class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-12">
 
-      <!-- Publications per Year — hover-only (clicks disabled per UX request). -->
+      <!-- Publications per Year - hover-only (clicks disabled per UX request). -->
       <div class="bg-white rounded-apple shadow-card p-6">
         <div class="flex items-baseline justify-between mb-4">
           <h2 class="text-sm font-semibold text-ink-700">Publications per Year</h2>
@@ -544,7 +544,7 @@
                                 <div class="text-xs text-ink-500 mt-1" dir="rtl">{{ p.authors_ar }}</div>
                               }
                               <div class="text-xs text-ink-400 mt-2 flex items-center flex-wrap gap-2">
-                                <span>{{ p.journal_name || '—' }}</span>
+                                <span>{{ p.journal_name || '-' }}</span>
                                 @if (p.quartile) {
                                   <span class="px-2 py-0.5 bg-accent-light text-accent rounded text-[10px] font-medium">{{ p.quartile }}</span>
                                 }
@@ -582,7 +582,7 @@
                                 <div class="text-xs text-ink-500 mt-1" dir="rtl">{{ p.authors_ar }}</div>
                               }
                               <div class="text-xs text-ink-400 mt-2 flex items-center flex-wrap gap-2">
-                                <span>{{ p.journal_name || '—' }}</span>
+                                <span>{{ p.journal_name || '-' }}</span>
                                 <span class="ml-auto text-ink-500">{{ fmt(p.citations) }} citations</span>
                               </div>
                             </li>
@@ -622,7 +622,7 @@
                         class="text-sm font-medium text-ink-700 line-clamp-2
                                text-left hover:text-accent transition-colors cursor-pointer">{{ p.title }}</button>
                 <div class="text-xs text-ink-400 mt-1 flex items-center flex-wrap gap-2">
-                  <span>{{ p.journal_name || '—' }} · {{ p.pub_year }}</span>
+                  <span>{{ p.journal_name || '-' }} · {{ p.pub_year }}</span>
                   @if (p.quartile) {
                     <span class="px-2 py-0.5 bg-accent-light text-accent rounded text-[10px] font-medium">{{ p.quartile }}</span>
                   }
@@ -752,7 +752,7 @@
   </div>
 }
 
-<!-- Shared Paper Detail Modal — fetches full paper info on demand -->
+<!-- Shared Paper Detail Modal - fetches full paper info on demand -->
 <app-paper-detail-modal
   [paperId]="selectedPaperId()"
   (closed)="closePaper()" />

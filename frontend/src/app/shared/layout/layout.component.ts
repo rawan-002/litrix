@@ -15,7 +15,7 @@ interface NavItem {
   icon: string;
   route: string;
   permission?: string;
-  // Optional badge count (e.g. pending reports) — a signal getter so the
+  // Optional badge count (e.g. pending reports) - a signal getter so the
   // template re-reads it without rebuilding the whole nav.
   badge?: () => number;
 }
@@ -49,7 +49,7 @@ export class LayoutComponent implements OnInit {
     this.notifs.load(true).subscribe({ error: () => {} });
     this.reloadPendingReports();
     // Refresh the cached user so fields added after their last login (e.g.
-    // photo_url) populate without forcing a re-login. Silent on failure —
+    // photo_url) populate without forcing a re-login. Silent on failure -
     // the stored session stays valid.
     this.auth.fetchMe().subscribe({ error: () => {} });
   }
@@ -61,7 +61,7 @@ export class LayoutComponent implements OnInit {
     });
   }
 
-  // Cmd/Ctrl+K jumps to search — the familiar Spotlight/Slack shortcut.
+  // Cmd/Ctrl+K jumps to search - the familiar Spotlight/Slack shortcut.
   @HostListener('document:keydown', ['$event'])
   handleKeydown(ev: KeyboardEvent) {
     if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 'k') {

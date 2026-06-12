@@ -1,5 +1,5 @@
 // Departments page. Cards expand inline into a researcher list instead of
-// navigating to a detail route — deans compare departments at a glance and
+// navigating to a detail route - deans compare departments at a glance and
 // inline expand keeps the context while jumping between cards.
 import {
   Component, computed, inject, signal, effect, untracked,
@@ -192,7 +192,7 @@ export class DepartmentsComponent {
   };
 
   rankLabel(rank: string | null | undefined): string {
-    if (!rank) return '—';
+    if (!rank) return '-';
     const key = rank.trim().toLowerCase().replace(/\s+/g, '');
     return DepartmentsComponent.RANK_EN[key] ?? rank.trim();
   }

@@ -50,8 +50,8 @@
     </button>
     <p class="mode-toggle__hint">
       @if (mode() === 'coauthors') { Connections based on co-authored papers. }
-      @else if (mode() === 'interests') { Connections based on shared research topics — even when no paper was written together. }
-      @else { Both kinds of links — solid = co-authored, dashed = shared interests. }
+      @else if (mode() === 'interests') { Connections based on shared research topics - even when no paper was written together. }
+      @else { Both kinds of links - solid = co-authored, dashed = shared interests. }
     </p>
   </div>
 
@@ -151,7 +151,7 @@
             </div>
           </div>
 
-          <!-- Top interests — the researcher's thematic fingerprint -->
+          <!-- Top interests - the researcher's thematic fingerprint -->
           @if (d.insights.top_interests?.length) {
             <div class="insight-row">
               <span class="insight-row__icon">◎</span>
@@ -221,7 +221,7 @@
           }
         </div>
 
-        <!-- Hidden gems — high topic overlap, never co-authored -->
+        <!-- Hidden gems - high topic overlap, never co-authored -->
         @if (d.insights.hidden_gems?.length) {
           <div class="rail__card">
             <h2 class="rail__title">

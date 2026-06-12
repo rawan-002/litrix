@@ -1,4 +1,4 @@
-// @ts-nocheck — D3's chained generics don't survive Angular's strict prod TS
+// @ts-nocheck - D3's chained generics don't survive Angular's strict prod TS
 // pass (every callback lands as implicit `any`). Annotating each chain is
 // fragile, so this one file opts out; run `ng serve` after edits to catch
 // logic errors. The template type-checker still covers the HTML side.
@@ -34,7 +34,7 @@ interface NetNode extends d3.SimulationNodeDatum {
   shared_interests?: string[];
   shared_interests_count?: number;
 
-  // Restate the SimulationNodeDatum fields — some Vercel build configs don't
+  // Restate the SimulationNodeDatum fields - some Vercel build configs don't
   // resolve d3's inherited x/y/fx/fy, which trips strict mode.
   x?:  number;
   y?:  number;
@@ -119,7 +119,7 @@ export class NetworkComponent implements OnInit, AfterViewInit, OnDestroy {
   // Whoever the graph is currently centred on
   readonly centreLitrixId = signal<string | null>(null);
 
-  // Node selected by single-click — drives the detail strip
+  // Node selected by single-click - drives the detail strip
   readonly selectedNode = signal<NetNode | null>(null);
 
   private simulation?: d3.Simulation<NetNode, NetEdge>;
@@ -171,7 +171,7 @@ export class NetworkComponent implements OnInit, AfterViewInit, OnDestroy {
     });
   }
 
-  // Poll until @ViewChild('svgRoot') resolves — @if needs a CD pass after
+  // Poll until @ViewChild('svgRoot') resolves - @if needs a CD pass after
   // data() flips before the <svg> exists.
   private renderWhenReady(payload: NetworkPayload, attempt: number): void {
     if (this.svgRoot?.nativeElement) {
@@ -204,7 +204,7 @@ export class NetworkComponent implements OnInit, AfterViewInit, OnDestroy {
       .on('zoom', (ev: any) => g.attr('transform', ev.transform.toString()));
     svg.call(zoomBehaviour as any);
 
-    // Edges — coauthor vs interest get different styling.
+    // Edges - coauthor vs interest get different styling.
     const link = g.append('g')
       .attr('class', 'links')
       .selectAll('line')
@@ -273,7 +273,7 @@ export class NetworkComponent implements OnInit, AfterViewInit, OnDestroy {
         parts.push(`${d.shared} shared paper${d.shared === 1 ? '' : 's'}`);
       }
       if (d.interests?.length) {
-        parts.push('— ' + d.interests.slice(0, 3).join(' · '));
+        parts.push('- ' + d.interests.slice(0, 3).join(' · '));
       }
       return parts.filter(Boolean).join('\n');
     });
@@ -327,7 +327,7 @@ export class NetworkComponent implements OnInit, AfterViewInit, OnDestroy {
         nodeG.attr('transform', d => `translate(${d.x},${d.y})`);
       });
 
-    // Explicit `any` on the drag callbacks — d3's overloads leave an implicit
+    // Explicit `any` on the drag callbacks - d3's overloads leave an implicit
     // `any` that strict prod TS rejects.
     const drag = d3.drag<SVGGElement, NetNode>()
       .on('start', (event: any, d: NetNode) => {

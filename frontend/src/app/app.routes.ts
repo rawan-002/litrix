@@ -39,7 +39,7 @@ export const routes: Routes = [
   { path: 'register',         component: RegisterComponent,       canActivate: [guestGuard] },
   { path: 'forgot-password',  component: ForgotPasswordComponent, canActivate: [guestGuard] },
 
-  // Public dashboard — no login. Lazy standalone components deliberately
+  // Public dashboard - no login. Lazy standalone components deliberately
   // outside LayoutComponent so they skip the authenticated shell/sidebar.
   // Backed by the AllowAny /api/public/* endpoints.
   {
@@ -63,7 +63,7 @@ export const routes: Routes = [
       { path: '',                component: DashboardRouterComponent },
       // Canonical profile URL, keyed on the public Lit-NNNNNN id.
       { path: 'profile/:litrixId', component: ResearcherProfileComponent },
-      // Legacy alias so old links don't 404 — the component reads either param.
+      // Legacy alias so old links don't 404 - the component reads either param.
       { path: 'researcher/:id',    component: ResearcherProfileComponent },
       {
         path: 'admin/registrations',
@@ -112,7 +112,7 @@ export const routes: Routes = [
           'view_all_researchers', 'view_dept_researchers', 'manage_departments',
         )],
       },
-      // Collaboration graph, open to all authenticated users — centred
+      // Collaboration graph, open to all authenticated users - centred
       // on whoever's viewing by default.
       { path: 'network', component: NetworkComponent },
 

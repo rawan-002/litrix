@@ -1,4 +1,4 @@
-// Single point of contact with the Django backend — keeps the base URL
+// Single point of contact with the Django backend - keeps the base URL
 // and HTTP wiring in one place so components just inject and call.
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
@@ -45,7 +45,7 @@ export class LitrixApiService {
     );
   }
 
-  // Accepts either a Litrix-ID (Lit-NNNNNN) or a numeric UserID — the
+  // Accepts either a Litrix-ID (Lit-NNNNNN) or a numeric UserID - the
   // backend resolves it, and accepting both keeps legacy callers working.
   getResearcherProfile(id: string | number): Observable<ResearcherProfilePayload> {
     return this.http.get<ResearcherProfilePayload>(
@@ -131,7 +131,7 @@ export class LitrixApiService {
   }
 
   // Dashboard overview. `years` can be undefined (backend FOCUS_YEARS),
-  // a single year, or several — multiple years go on the wire as CSV.
+  // a single year, or several - multiple years go on the wire as CSV.
   getOverview(
     years?: number | number[],
     albahaOnly = false,

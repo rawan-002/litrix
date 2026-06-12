@@ -114,12 +114,12 @@ Chart.register(...registerables);
         </div>
       </section>
 
-      <!-- Performance metrics — hidden for now; flip [hidden]="true" to show. -->
+      <!-- Performance metrics - hidden for now; flip [hidden]="true" to show. -->
       <section [hidden]="true" class="max-w-7xl mx-auto px-6 py-12">
         <div class="mb-8">
           <h2 class="text-2xl font-semibold text-gray-900">Performance Metrics</h2>
           <p class="mt-1 text-sm text-gray-500">
-            Academic KPIs (NCAAA-style) — scoped by the year filter above.
+            Academic KPIs (NCAAA-style) - scoped by the year filter above.
           </p>
         </div>
 
@@ -167,14 +167,14 @@ Chart.register(...registerables);
             </p>
           </div>
 
-          <!-- Avg citations per publication — lifetime (NCAAA standard) -->
+          <!-- Avg citations per publication - lifetime (NCAAA standard) -->
           <div *ngIf="kpis() as k" class="rounded-2xl border border-gray-100 p-6 md:p-8">
             <div class="flex items-center justify-between">
               <p class="text-sm font-medium text-gray-500 uppercase tracking-wider">
                 {{ k.kpi_15_avg_citations_per_publication.label }}
               </p>
               <span class="text-xs font-mono text-gray-300"
-                    title="Lifetime metric — citations accumulate over years, so we measure across all publication years for a realistic average.">
+                    title="Lifetime metric - citations accumulate over years, so we measure across all publication years for a realistic average.">
                 KPI-I-15 · Lifetime
               </span>
             </div>
@@ -276,10 +276,10 @@ Chart.register(...registerables);
                   </div>
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-700">
-                  {{ r.department_name || '—' }}
+                  {{ r.department_name || '-' }}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-500">
-                  {{ r.academic_rank || '—' }}
+                  {{ r.academic_rank || '-' }}
                 </td>
                 <td class="px-6 py-4 text-right font-semibold text-gray-900">
                   {{ r.total_papers | number }}
@@ -397,10 +397,10 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
   ];
   readonly activeYearLabel = computed(() => {
     const y = this.globalYear();
-    return y === 'all' ? '2025 – 2026 Biennium' : `${y} Snapshot`;
+    return y === 'all' ? '2025 - 2026 Biennium' : `${y} Snapshot`;
   });
 
-  // KPIs follow globalYear, but need a concrete anchor — they fall back
+  // KPIs follow globalYear, but need a concrete anchor - they fall back
   // to 2026 when the filter is 'all'.
   readonly kpis = signal<KpisResponse | null>(null);
   // Stops the KPI shimmer and shows a "couldn't load" note on fetch failure.
@@ -418,7 +418,7 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
     {
       id: 'overview',
       label: 'Overview',
-      description: 'KPI snapshot — researchers, publications, citations, h-index',
+      description: 'KPI snapshot - researchers, publications, citations, h-index',
     },
     {
       id: 'summary',
@@ -481,7 +481,7 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
   // --- lifecycle ------------------------------------------------------
   ngOnInit(): void {
     this.refreshScopedData();
-    // The trend chart always shows both years — it's a comparison.
+    // The trend chart always shows both years - it's a comparison.
     this.api.trends().subscribe({
       next: (d) => { this.trendData.set(d.results); this.renderTrendChart(); },
       error: () => this.loadFailed.set(true),
@@ -489,7 +489,7 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
   }
 
   // Reloads Overview/Departments/Researchers/KPIs for the current
-  // globalYear — on init and on every year-pill click.
+  // globalYear - on init and on every year-pill click.
   private refreshScopedData(): void {
     const y = this.globalYear();
     // Clear first so the loading state shows.
@@ -516,7 +516,7 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
 
   // ---- Export modal handlers ---------------------------------------
   openExportModal(): void {
-    // Reset to all years/all sheets on open — remembering prior picks
+    // Reset to all years/all sheets on open - remembering prior picks
     // tends to confuse more than it helps.
     this.exportYears.set([...this.availableYears]);
     this.exportSheets.set(

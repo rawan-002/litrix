@@ -101,7 +101,7 @@
                     Close
                   </button>
                 }
-                <!-- Hide Export when there's no data — the endpoint works on
+                <!-- Hide Export when there's no data - the endpoint works on
                      drafts but would just download an empty workbook. -->
                 @if (c.status !== 'draft' && c.submissions_total > 0) {
                   <button (click)="exportToExcel(c)"
@@ -146,7 +146,7 @@
                 <div class="text-center text-ink-400 py-4 text-sm">Loading submissions...</div>
               } @else if (submissions().length === 0) {
                 <div class="text-center text-ink-400 py-4 text-sm">
-                  No submissions yet — campaign hasn't been opened or no researchers in scope.
+                  No submissions yet - campaign hasn't been opened or no researchers in scope.
                 </div>
               } @else {
                 <table class="w-full text-sm">
@@ -167,7 +167,7 @@
                           {{ s.FullName_Ar || s.Email }}
                         </td>
                         <td class="py-2 px-3 text-ink-600">
-                          {{ s.DepartmentName || '—' }}
+                          {{ s.DepartmentName || '-' }}
                         </td>
                         <td class="py-2 px-3">
                           <span class="text-[10px] uppercase tracking-wider font-semibold
@@ -190,7 +190,7 @@
                           + {{ s.missing_count }}
                         </td>
                         <td class="py-2 px-3 text-xs text-ink-400">
-                          {{ s.SubmittedAt ? (s.SubmittedAt | date:'short') : '—' }}
+                          {{ s.SubmittedAt ? (s.SubmittedAt | date:'short') : '-' }}
                         </td>
                         <td class="py-2 pl-3">
                           @if (s.Status === 'submitted' || s.confirmed_count > 0 || s.not_mine_count > 0 || s.missing_count > 0) {
@@ -232,7 +232,7 @@
           </label>
           <input type="text" [(ngModel)]="draft().title"
                  (ngModelChange)="draft.update(d => ({ ...d, title: $event }))"
-                 placeholder="e.g. Annual Reports 2024–2025"
+                 placeholder="e.g. Annual Reports 2024-2025"
                  class="w-full px-4 py-2.5 rounded-lg border border-ink-200
                         focus:border-accent focus:ring-2 focus:ring-accent/20
                         outline-none text-sm" />

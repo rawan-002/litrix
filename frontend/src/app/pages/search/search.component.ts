@@ -1,5 +1,5 @@
 // Full-page /search (replaced the old modal) so results have room and the
-// ?q= URL is shareable. The permission gate lives on the backend — this page
+// ?q= URL is shareable. The permission gate lives on the backend - this page
 // just renders what /api/search/ returns and labels the scope when the user
 // is limited to system-authored papers.
 import {
@@ -52,7 +52,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnInit() {
     // catchError lives inside switchMap so a backend error never kills the
-    // outer stream — the input keeps working on the next keystroke.
+    // outer stream - the input keeps working on the next keystroke.
     this.input$
       .pipe(
         debounceTime(250),

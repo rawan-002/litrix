@@ -46,7 +46,7 @@ export class OverviewDashboardComponent implements OnInit {
   constructor() {
     // Re-pull the overview whenever the platform-wide Al-Baha switch flips.
     // untracked() keeps the effect from also depending on the year/dept
-    // signals read inside loadOverview — those drive their own reloads.
+    // signals read inside loadOverview - those drive their own reloads.
     effect(() => {
       this.affiliation.albahaOnly();
       untracked(() => this.loadOverview());
@@ -75,7 +75,7 @@ export class OverviewDashboardComponent implements OnInit {
   }
 
   readonly data    = signal<OverviewPayload | null>(null);
-  /** First load only — shows the full-screen skeleton. */
+  /** First load only - shows the full-screen skeleton. */
   readonly loading = signal<boolean>(true);
   /** Re-fetch after a filter change. We keep the old data on screen and
    *  show a subtle spinner instead of blanking the dashboard. */
@@ -114,7 +114,7 @@ export class OverviewDashboardComponent implements OnInit {
   /** null = "All Departments". A specific department_id focuses the view. */
   readonly selectedDeptId = signal<number | null>(null);
 
-  /** The filtered department list — either all departments or just one. */
+  /** The filtered department list - either all departments or just one. */
   readonly visibleDepartments = computed<any[]>(() => {
     const all = this.data()?.departments ?? [];
     const id = this.selectedDeptId();
@@ -196,7 +196,7 @@ export class OverviewDashboardComponent implements OnInit {
     return this.buildBars(series.map(s => ({ label: s.year, value: s.papers })));
   });
 
-  /** Series for the shared <app-citations-chart> — that component owns the
+  /** Series for the shared <app-citations-chart> - that component owns the
    *  geometry + hover so the trend looks identical across pages. */
   readonly citationSeries = computed(() =>
     this.bucketByYear().map(s => ({ year: s.year, citations: s.citations })),
@@ -373,7 +373,7 @@ export class OverviewDashboardComponent implements OnInit {
     this.loadOverview();
   }
 
-  /** Clear the selection — equivalent to "All Years". */
+  /** Clear the selection - equivalent to "All Years". */
   clearYears() {
     this.selectedYears.set(new Set());
     this.closeYearMenu();
@@ -460,7 +460,7 @@ export class OverviewDashboardComponent implements OnInit {
   }
 
   fmt(n: number | null | undefined): string {
-    if (n == null) return '—';
+    if (n == null) return '-';
     return n.toLocaleString('en-US');
   }
 
@@ -547,7 +547,7 @@ export class OverviewDashboardComponent implements OnInit {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    // Revoke on the next tick — revoking synchronously cancels the
+    // Revoke on the next tick - revoking synchronously cancels the
     // download in some browsers.
     setTimeout(() => URL.revokeObjectURL(url), 0);
   }

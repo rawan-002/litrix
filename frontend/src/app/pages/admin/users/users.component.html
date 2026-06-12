@@ -39,7 +39,7 @@
                 </div>
                 <div class="text-xs text-ink-400">{{ u.Email }}</div>
                 <div class="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
-                  <!-- UserType pill — quick visual cue for the role tier -->
+                  <!-- UserType pill - quick visual cue for the role tier -->
                   <span class="text-[10px] px-1.5 py-0.5 rounded font-medium"
                         [class.bg-ink-900]="u.UserType === 'Admin'"
                         [class.text-white]="u.UserType === 'Admin'"
@@ -64,7 +64,7 @@
                 <select [value]="u.RoleID || ''"
                         (change)="changeRole(u, +$any($event.target).value)"
                         class="text-xs px-2 py-1 rounded border border-ink-200 bg-white">
-                  <option value="">— No role —</option>
+                  <option value="">- No role -</option>
                   @for (r of roles(); track r.RoleID) {
                     <option [value]="r.RoleID">{{ r.Name }}</option>
                   }
@@ -228,7 +228,7 @@
               <select [ngModel]="f.role_id"
                       (ngModelChange)="patchForm('role_id', $event ? +$event : null)"
                       class="w-full px-3 py-2 rounded-lg border border-ink-200 text-sm bg-white">
-                <option [ngValue]="null">— No role —</option>
+                <option [ngValue]="null">- No role -</option>
                 @for (r of roles(); track r.RoleID) {
                   <option [ngValue]="r.RoleID">{{ r.Name }}</option>
                 }
@@ -270,7 +270,7 @@
     }
   }
 
-  <!-- Confirm-delete modal — destructive action gets a deliberate stop. -->
+  <!-- Confirm-delete modal - destructive action gets a deliberate stop. -->
   @if (pendingDelete(); as target) {
     <div class="fixed inset-0 z-50 flex items-center justify-center px-4
                 bg-ink-900/40 backdrop-blur-sm"
@@ -293,7 +293,7 @@
               <span class="font-semibold text-ink-900" dir="rtl">
                 {{ target.FullName_Ar || target.Email }}
               </span>
-              — <span class="text-ink-400">{{ target.Email }}</span>
+              - <span class="text-ink-400">{{ target.Email }}</span>
             </p>
           </div>
         </div>
@@ -302,7 +302,7 @@
           This removes the login and everything the registration created
           (password, email, welcome notifications, sync job, invitations).
           <span class="font-semibold text-ink-900">If the researcher has
-          papers, their profile and all papers are kept</span> — the account
+          papers, their profile and all papers are kept</span> - the account
           simply becomes an unregistered scraped profile. Accounts with no
           papers are deleted permanently. The action cannot be undone.
         </div>

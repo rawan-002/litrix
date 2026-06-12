@@ -67,7 +67,7 @@ export class RegistrationsComponent {
         // they don't go fire it by hand from the Sync page.
         if (res.sync_kicked) {
           alert(
-            `Approved. Initial ${res.sync_source} sync queued — ` +
+            `Approved. Initial ${res.sync_source} sync queued - ` +
             `track progress in Sync Control.`,
           );
         }

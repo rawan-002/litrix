@@ -82,7 +82,7 @@ export interface OverviewPayload {
   departments: any[];
 }
 
-/** DRF pagination wrapper — returned by all list endpoints. */
+/** DRF pagination wrapper - returned by all list endpoints. */
 export interface Paginated<T> {
   count: number;
   next: string | null;
@@ -123,7 +123,7 @@ export interface YearlyBreakdownPayload {
 
 export interface ResearcherIdentity {
   user_id: number;
-  /** Public Lit-NNNNNN identifier — the canonical reference outside the DB. */
+  /** Public Lit-NNNNNN identifier - the canonical reference outside the DB. */
   litrix_id: string;
   full_name_ar: string | null;
   first_name: string | null;
@@ -175,7 +175,7 @@ export interface ProfilePaper {
 
 export interface CoAuthor {
   user_id: number | null;
-  /** Present only for platform (Al-Baha) members — drives the profile link. */
+  /** Present only for platform (Al-Baha) members - drives the profile link. */
   litrix_id: string | null;
   name: string;
   photo_url: string | null;

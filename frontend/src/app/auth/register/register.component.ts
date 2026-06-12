@@ -64,7 +64,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
   readonly error = signal<string | null>(null);
   readonly departments = signal<{ department_id: number; department_name: string }[]>([]);
 
-  /** Invitation state — populated when ?invite=<token> is in the URL. */
+  /** Invitation state - populated when ?invite=<token> is in the URL. */
   readonly inviteToken = signal<string | null>(null);
   readonly invite      = signal<InvitePayload | null>(null);
 
@@ -92,7 +92,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
   readonly profileForm = this.fb.nonNullable.group({
     email:           ['', [Validators.required, Validators.email]],
     password:        ['', [Validators.required, Validators.minLength(8)]],
-    // Required — the canonical name for citation lookups and reporting.
+    // Required - the canonical name for citation lookups and reporting.
     first_name_en:   ['', [Validators.required]],
     middle_name_en:  [''],
     last_name_en:    ['', [Validators.required]],
@@ -122,7 +122,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
     return m ? m[1].toUpperCase() : s;
   }
 
-  /** Concatenated full names — what the backend currently expects. */
+  /** Concatenated full names - what the backend currently expects. */
   private buildFullNames() {
     const v = this.profileForm.getRawValue();
     const fullAr = (v.full_name_ar || '').trim();
@@ -136,7 +136,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
   });
 
   readonly registeredEmail = signal<string>('');
-  // False means the verification email failed to send — we warn and
+  // False means the verification email failed to send - we warn and
   // offer a resend.
   readonly emailSent   = signal<boolean>(true);
   readonly resending   = signal<boolean>(false);
@@ -175,7 +175,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
             if (payload.invited_email) patch.email = payload.invited_email;
             if (payload.department_id) patch.department_id = payload.department_id;
             this.profileForm.patchValue(patch);
-            // Email is bound to the invite — lock it so it can't drift and
+            // Email is bound to the invite - lock it so it can't drift and
             // trigger a mismatch at submit.
             this.profileForm.get('email')?.disable();
             if (payload.department_id) {
@@ -187,7 +187,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
       });
     }
 
-    // Debounced identity check — re-runs on every relevant field change
+    // Debounced identity check - re-runs on every relevant field change
     // so the warning stays in sync with the form.
     this.matchPing$
       .pipe(
@@ -256,7 +256,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
       scholar_id:    scholar_id,
       orcid_id:      orcid_id,
     };
-    // Pass the invite token through — the backend uses it to skip the
+    // Pass the invite token through - the backend uses it to skip the
     // email-verification queue.
     if (this.inviteToken()) {
       payload.invite = this.inviteToken();
@@ -264,7 +264,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
     this.auth.register(payload).subscribe({
       next: (res: any) => {
         this.loading.set(false);
-        // Invite flow returns a user_id and skips email verification —
+        // Invite flow returns a user_id and skips email verification -
         // jump straight to the done step.
         if (this.inviteToken() && res?.user_id) {
           this.step.set('done');
@@ -276,7 +276,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
       },
       error: err => {
         this.loading.set(false);
-        // 409 from the identity gate — reuse the live-check banner and
+        // 409 from the identity gate - reuse the live-check banner and
         // keep the user on the profile step to fix it.
         if (err.status === 409 && err.error?.error === 'identity_verification_failed') {
           this.verification.set(err.error.verification);

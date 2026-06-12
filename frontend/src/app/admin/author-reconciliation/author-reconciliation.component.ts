@@ -9,7 +9,7 @@
  *  - One decision at a time. No bulk-action noise.
  *  - Generous white space. Minimal chrome.
  *  - Confidence shown as a soft horizontal bar, not a raw number.
- *  - Keyboard shortcuts: [C]onfirm, [R]eject, [S]kip — power-user friendly.
+ *  - Keyboard shortcuts: [C]onfirm, [R]eject, [S]kip - power-user friendly.
  *
  * PERMISSIONS:
  *  - This route is guarded by the AdminGuard. HoD/Dean cannot reach it.

@@ -1,5 +1,5 @@
 // Wraps the no-auth /api/public/* endpoints (analytics/public_views.py).
-// The single channel every public-dashboard component talks through —
+// The single channel every public-dashboard component talks through -
 // kept separate from the authenticated LitrixApiService on purpose.
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
@@ -85,7 +85,7 @@ export interface TrendPoint {
   citations: number;
 }
 
-// One KPI's payload — three come back per /kpis/ call.
+// One KPI's payload - three come back per /kpis/ call.
 export interface KpiValue {
   value: number;
   label: string;
@@ -199,7 +199,7 @@ export class PublicApiService {
   }
 }
 
-// Rich paper detail payload — used by the click-into-paper modal.
+// Rich paper detail payload - used by the click-into-paper modal.
 export interface PaperDetailResponse {
   paper_id: number;
   title: string;

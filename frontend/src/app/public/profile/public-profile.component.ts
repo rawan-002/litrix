@@ -14,7 +14,7 @@ import {
 
 Chart.register(...registerables);
 
-// Citations chart floor — pre-2019 years are near-zero here and just
+// Citations chart floor - pre-2019 years are near-zero here and just
 // clutter the line.
 const CHART_MIN_YEAR = 2021;
 
@@ -283,7 +283,7 @@ const CHART_MIN_YEAR = 2021;
               </div>
               <div class="rounded-xl bg-gray-50 p-4 text-center">
                 <p class="text-2xl font-semibold text-gray-900">
-                  {{ detail.impact_factor != null ? (detail.impact_factor | number:'1.1-2') : '—' }}
+                  {{ detail.impact_factor != null ? (detail.impact_factor | number:'1.1-2') : '-' }}
                 </p>
                 <p class="text-xs text-gray-500 uppercase tracking-wider mt-1">Impact Factor</p>
               </div>
@@ -295,13 +295,13 @@ const CHART_MIN_YEAR = 2021;
               </div>
             </div>
 
-            <!-- Real prose only — skip the Scopus-URL placeholder -->
+            <!-- Real prose only - skip the Scopus-URL placeholder -->
             <div *ngIf="hasRealAbstract(detail)" class="mt-8">
               <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Abstract</h3>
               <p class="text-gray-700 leading-relaxed">{{ detail.abstract }}</p>
             </div>
 
-            <!-- Conference papers with no abstract — link out to Scopus -->
+            <!-- Conference papers with no abstract - link out to Scopus -->
             <div *ngIf="!hasRealAbstract(detail) && abstractIsUrl(detail.abstract)" class="mt-8">
               <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Abstract</h3>
               <p class="text-gray-500 text-sm italic mb-2">

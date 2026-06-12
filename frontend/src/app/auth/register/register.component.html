@@ -26,7 +26,7 @@
       @if (step() === 'profile') {
         @if (invite(); as inv) {
           @if (inv.valid) {
-            <!-- Invitation banner — pinned role + dept on top of the form. -->
+            <!-- Invitation banner - pinned role + dept on top of the form. -->
             <div class="mb-6 rounded-xl border border-accent/30 bg-accent-light p-4">
               <div class="flex items-start gap-3">
                 <svg class="w-5 h-5 text-accent flex-shrink-0 mt-0.5"
@@ -74,7 +74,7 @@
           @if (invite()?.valid) {
             Complete your details below
           } @else {
-            Step 1 of 2 — Tell us about yourself
+            Step 1 of 2 - Tell us about yourself
           }
         </p>
 
@@ -185,7 +185,7 @@
             <p class="text-xs text-ink-400 mt-1">Minimum 8 characters</p>
           </div>
 
-          <!-- English name — three parts. First + Last REQUIRED, Middle optional. -->
+          <!-- English name - three parts. First + Last REQUIRED, Middle optional. -->
           <div class="grid grid-cols-3 gap-3">
             <div>
               <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide">
@@ -216,7 +216,7 @@
             </div>
           </div>
 
-          <!-- Arabic full name — OPTIONAL, single field. -->
+          <!-- Arabic full name - OPTIONAL, single field. -->
           <div>
             <label class="block text-xs font-medium text-ink-500 mb-1.5 uppercase tracking-wide">
               Full Name (Ar)
@@ -236,7 +236,7 @@
             <select formControlName="department_id"
                     class="w-full px-4 py-2.5 rounded-lg border border-ink-200
                            focus:border-accent outline-none text-sm bg-white">
-              <option [ngValue]="null">— Select department —</option>
+              <option [ngValue]="null">- Select department -</option>
               @for (d of departments(); track d.department_id) {
                 <option [ngValue]="d.department_id">{{ d.department_name }}</option>
               }
@@ -250,7 +250,7 @@
             <select formControlName="academic_rank"
                     class="w-full px-4 py-2.5 rounded-lg border border-ink-200
                            focus:border-accent outline-none text-sm bg-white">
-              <option value="">— Select rank —</option>
+              <option value="">- Select rank -</option>
               <option value="Lecturer">Lecturer</option>
               <option value="AssistantProfessor">Assistant Professor</option>
               <option value="AssociateProfessor">Associate Professor</option>
@@ -297,7 +297,7 @@
       @if (step() === 'verify') {
         <h2 class="text-xl font-semibold text-ink-900 mb-1">Verify your email</h2>
         <p class="text-sm text-ink-500 mb-4">
-          Step 2 of 2 — We sent a 6-digit code to
+          Step 2 of 2 - We sent a 6-digit code to
           <span class="text-ink-700 font-medium">{{ registeredEmail() }}</span>
         </p>
 

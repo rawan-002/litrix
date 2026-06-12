@@ -65,7 +65,7 @@ export class ResearcherDashboardComponent implements OnInit {
   }
 
   fmt(n: number | null | undefined): string {
-    if (n == null) return '—';
+    if (n == null) return '-';
     return n.toLocaleString('en-US');
   }
 
@@ -159,7 +159,7 @@ export class ResearcherDashboardComponent implements OnInit {
   });
 
   // Quartile distribution donut. One circle per slice, all sharing the same
-  // circumference, with stroke-dasharray + dashoffset doing the arc work —
+  // circumference, with stroke-dasharray + dashoffset doing the arc work -
   // cleaner than computing arc paths by hand.
   readonly quartileChart = computed(() => {
     const papers = this.data()?.papers ?? [];
@@ -175,7 +175,7 @@ export class ResearcherDashboardComponent implements OnInit {
 
     // Stable order for the donut, with quality-first reading.
     const order: { label: string; color: string }[] = [
-      { label: 'Q1', color: '#1c1917' },  // ink-900 — the prestige tier
+      { label: 'Q1', color: '#1c1917' },  // ink-900 - the prestige tier
       { label: 'Q2', color: '#57534e' },  // ink-600
       { label: 'Q3', color: '#a8a29e' },  // ink-400
       { label: 'Q4', color: '#d6d3d1' },  // ink-300

@@ -135,7 +135,7 @@
           </div>
           </div>
 
-          <!-- Citations over time — bare chart inside the card, no inner card/padding.
+          <!-- Citations over time - bare chart inside the card, no inner card/padding.
                A thin hairline divider separates it from the researcher info. -->
           <div class="shrink-0 w-full lg:w-96 pt-6 lg:pt-0 lg:pl-8
                       border-t lg:border-t-0 lg:border-l border-ink-900/15">
@@ -218,7 +218,7 @@
 
         @if (affiliationFilter() === 'albaha' && hiddenCount() > 0) {
           <p class="text-[11px] text-ink-400">
-            Al-Baha filter on — {{ hiddenCount() }} non-confirmed paper(s) hidden
+            Al-Baha filter on - {{ hiddenCount() }} non-confirmed paper(s) hidden
           </p>
         }
 
@@ -335,7 +335,7 @@
     </div>
   }
 
-  <!-- Shared paper detail modal — fetches full data on demand -->
+  <!-- Shared paper detail modal - fetches full data on demand -->
   <app-paper-detail-modal
     [paperId]="selectedPaperId()"
     (closed)="closePaper()" />

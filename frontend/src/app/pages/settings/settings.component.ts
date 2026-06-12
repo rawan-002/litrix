@@ -1,4 +1,4 @@
-// One settings page for every role — name, password, and academic IDs are the
+// One settings page for every role - name, password, and academic IDs are the
 // same primitives for everyone, so splitting per-role would just duplicate
 // logic. Non-researchers can leave the Academic IDs block blank.
 import { Component, inject, signal } from '@angular/core';

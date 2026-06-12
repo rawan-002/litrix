@@ -27,7 +27,7 @@ interface Particle {
             Welcome, {{ name() }}
           </h2>
           <p class="text-sm text-ink-600 leading-relaxed">
-            We're glad to have you on <span class="font-semibold text-ink-900">Litrix</span> —
+            We're glad to have you on <span class="font-semibold text-ink-900">Litrix</span> -
             thank you for your guidance and trust 💚
           </p>
           <button (click)="dismiss()"

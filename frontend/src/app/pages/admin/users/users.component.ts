@@ -23,13 +23,13 @@ interface User {
   CreatedAt: string;
   RoleID: number | null;
   role_name: string | null;
-  // From the LATERAL Works_In join — lets admins see a user's department at a
+  // From the LATERAL Works_In join - lets admins see a user's department at a
   // glance, which matters when promoting a Researcher to HoD of it.
   departmentname: string | null;
 }
 
 // Editable fields, mirroring the backend whitelist in update_user. UserID,
-// Litrix_ID, PasswordHash, and Scholar_ID are deliberately not here — they go
+// Litrix_ID, PasswordHash, and Scholar_ID are deliberately not here - they go
 // through different paths.
 interface EditForm {
   email:          string;
@@ -67,7 +67,7 @@ export class UsersComponent {
   readonly search = signal('');
   readonly editingId = signal<number | null>(null);
 
-  // Row currently being deleted — drives its spinner / disabled state.
+  // Row currently being deleted - drives its spinner / disabled state.
   readonly deletingId = signal<number | null>(null);
 
   // Delete-confirm target; null means the modal is closed.
@@ -124,7 +124,7 @@ export class UsersComponent {
   }
 
   formatDate(s: string | null): string {
-    if (!s) return '—';
+    if (!s) return '-';
     return new Date(s).toLocaleDateString('en-US', {
       year: 'numeric', month: 'short', day: 'numeric',
     });
@@ -216,7 +216,7 @@ export class UsersComponent {
     });
   }
 
-  // Set one field on the form signal — keeps the template's (ngModelChange)
+  // Set one field on the form signal - keeps the template's (ngModelChange)
   // one-liners tidy.
   patchForm<K extends keyof EditForm>(key: K, value: EditForm[K]) {
     const f = this.editForm();

@@ -2,7 +2,7 @@ import { Injectable, signal, effect } from '@angular/core';
 
 // Platform-wide "Al-Baha output only" switch. One header toggle drives every
 // dashboard: when on, requests carry ?affiliation=albaha and the pages re-fetch.
-// Persisted so the choice survives navigation and reload. Defaults to ON — the
+// Persisted so the choice survives navigation and reload. Defaults to ON - the
 // institution's own output is the primary view.
 const STORAGE_KEY = 'litrix.albahaOnly';
 
@@ -14,7 +14,7 @@ export class AffiliationService {
     effect(() => {
       try {
         localStorage.setItem(STORAGE_KEY, this.albahaOnly() ? '1' : '0');
-      } catch { /* storage unavailable (private mode) — ignore */ }
+      } catch { /* storage unavailable (private mode) - ignore */ }
     });
   }
 

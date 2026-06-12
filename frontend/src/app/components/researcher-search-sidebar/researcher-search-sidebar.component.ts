@@ -1,5 +1,5 @@
 /**
- * Right Sidebar — Researchers grouped by department, with search filter.
+ * Right Sidebar - Researchers grouped by department, with search filter.
  */
 import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
