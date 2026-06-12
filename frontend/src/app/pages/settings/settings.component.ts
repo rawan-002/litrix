@@ -24,6 +24,17 @@ export class SettingsComponent {
   readonly success = signal<string | null>(null);
   readonly error = signal<string | null>(null);
 
+  // --- Profile photo ---------------------------------------------------
+  // Live preview of the chosen photo (data URI) before/after save; null
+  // means "fall back to the stored photo or initials".
+  readonly photoPreview = signal<string | null>(null);
+  readonly photoSaving = signal(false);
+  readonly photoError = signal<string | null>(null);
+
+  // What the avatar should show: a freshly-picked preview wins, else the
+  // user's stored photo_url, else null (initials).
+  readonly currentPhoto = signal<string | null>(this.auth.user()?.photo_url ?? null);
+
   // Hides the first-run helper subtitle once any profile data exists.
   readonly everSaved = signal<boolean>(this.hasAnyProfileData());
 
@@ -72,6 +83,87 @@ export class SettingsComponent {
           this.saving.set(false);
         },
       });
+  }
+
+  get initials(): string {
+    const name = this.auth.user()?.full_name || this.auth.user()?.email || '';
+    return name.split(/\s+/).slice(0, 2).map(s => s[0] || '').join('').toUpperCase() || '?';
+  }
+
+  // Read the picked file, downscale it to a 256x256 square JPEG (center-crop)
+  // and keep it as a data URI. Resizing client-side keeps the stored string
+  // tiny (~30-50 KB) so it fits comfortably in the PhotoURL text column with
+  // no object storage. Rejects non-images up front.
+  onPhotoSelected(ev: Event) {
+    this.photoError.set(null);
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      this.photoError.set('Please choose an image file');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const SIZE = 256;
+        const canvas = document.createElement('canvas');
+        canvas.width = SIZE;
+        canvas.height = SIZE;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { this.photoError.set('Could not process image'); return; }
+        // Center-crop the shorter side, then scale to fill the square.
+        const side = Math.min(img.width, img.height);
+        const sx = (img.width - side) / 2;
+        const sy = (img.height - side) / 2;
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, SIZE, SIZE);
+        this.photoPreview.set(canvas.toDataURL('image/jpeg', 0.85));
+        input.value = '';   // allow re-picking the same file
+      };
+      img.onerror = () => this.photoError.set('Could not read image');
+      img.src = reader.result as string;
+    };
+    reader.onerror = () => this.photoError.set('Could not read file');
+    reader.readAsDataURL(file);
+  }
+
+  savePhoto() {
+    const photo = this.photoPreview();
+    if (!photo) return;
+    this.photoSaving.set(true);
+    this.photoError.set(null);
+    this.http.patch(`${environment.apiBaseUrl}/auth/me/`, { photo_url: photo })
+      .subscribe({
+        next: (user: any) => this.afterPhotoSaved(user, 'Photo updated'),
+        error: err => {
+          this.photoError.set(err.error?.error || 'Failed to update photo');
+          this.photoSaving.set(false);
+        },
+      });
+  }
+
+  removePhoto() {
+    this.photoSaving.set(true);
+    this.photoError.set(null);
+    this.http.patch(`${environment.apiBaseUrl}/auth/me/`, { photo_url: '' })
+      .subscribe({
+        next: (user: any) => this.afterPhotoSaved(user, 'Photo removed'),
+        error: err => {
+          this.photoError.set(err.error?.error || 'Failed to remove photo');
+          this.photoSaving.set(false);
+        },
+      });
+  }
+
+  private afterPhotoSaved(user: any, msg: string) {
+    localStorage.setItem('litrix_user', JSON.stringify(user));
+    this.auth.user.set(user);
+    this.currentPhoto.set(user.photo_url ?? null);
+    this.photoPreview.set(null);
+    this.success.set(msg);
+    this.photoSaving.set(false);
+    setTimeout(() => this.success.set(null), 3000);
   }
 
   changePassword() {

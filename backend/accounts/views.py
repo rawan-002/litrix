@@ -866,10 +866,35 @@ def me(request):
     user = request.user
     if request.method == 'PATCH':
         editable = {'full_name_ar', 'scholar_id', 'orcid_id', 'scopus_id'}
-        for field in editable:
-            if field in request.data:
-                setattr(user, field, request.data[field] or None)
-        user.save(update_fields=list(editable))
+
+        # photo_url is validated separately: the client uploads a small
+        # square JPEG resized to a data: URI (no object storage needed — the
+        # column is text). We accept either a data:image/* URI or an https
+        # URL, cap the size so a hand-crafted request can't bloat the row, and
+        # let an empty value clear the photo (revert to initials).
+        if 'photo_url' in request.data:
+            raw = (request.data.get('photo_url') or '').strip()
+            if not raw:
+                user.photo_url = None
+            elif raw.startswith('data:image/') or raw.startswith('https://'):
+                if len(raw) > 1_500_000:
+                    return Response(
+                        {'error': 'Image too large — please pick a smaller photo'},
+                        status=400,
+                    )
+                user.photo_url = raw
+            else:
+                return Response(
+                    {'error': 'Invalid image — must be an uploaded photo or an https URL'},
+                    status=400,
+                )
+            user.save(update_fields=['photo_url'])
+
+        touched = [f for f in editable if f in request.data]
+        for field in touched:
+            setattr(user, field, request.data[field] or None)
+        if touched:
+            user.save(update_fields=touched)
         audit(user.user_id, user.tenant_id, 'profile.update', request=request)
     return Response(UserSerializer(user).data)
 
