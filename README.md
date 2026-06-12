@@ -2,19 +2,19 @@
 
 Research analytics platform for **Al-Baha University · College of Computing & Information Technology**.
 Bilingual (Arabic/English). It ingests each researcher's publications from Google
-Scholar (and enrichment sources), classifies journals Q1–Q4, tracks citations, and
-serves dashboards + per-researcher profiles — plus a no-login public dashboard.
+Scholar (and enrichment sources), classifies journals Q1 to Q4, tracks citations, and
+serves dashboards + per-researcher profiles, plus a no-login public dashboard.
 
 - **Backend:** Django 5 + Django REST Framework, PostgreSQL
 - **Frontend:** Angular 21 (standalone components + signals), Tailwind, Chart.js + d3
 - **Hosting:** Vercel (frontend) · Render (backend) · Neon (PostgreSQL)
-- **Data pipeline:** standalone Python scripts (psycopg2) — scrapers, classification, citations, tools
+- **Data pipeline:** standalone Python scripts (psycopg2): scrapers, classification, citations, tools
 
 ---
 
 ## 1. Repository structure
 
-The repo is split into exactly two parts — **`frontend/`** and **`backend/`** — plus
+The repo is split into exactly two parts (**`frontend/`** and **`backend/`**), plus
 root-level configuration. All Python (Django **and** the data pipeline) lives under
 `backend/`.
 
@@ -35,9 +35,9 @@ litrix/
 │   ├── migrations/               Raw-SQL domain-schema migrations (NOT Django migrations)
 │   ├── scrapers/                 Data acquisition: scholar.py · orcid.py · manual.py
 │   ├── citations/                Citation backfill: researcher.py (author graph) · per_paper.py
-│   ├── classification/           Journal Q1–Q4: classify.py · scimago_import.py
+│   ├── classification/           Journal Q1 to Q4: classify.py · scimago_import.py
 │   ├── tools/                    Ops: integrity_check.py · verify_attributions.py · rescrape.py · run_migration.py · …
-│   ├── litrix_db.py              Shared psycopg2 connection helper — `from litrix_db import db`
+│   ├── litrix_db.py              Shared psycopg2 connection helper: `from litrix_db import db`
 │   ├── litrix_schema.dbml        Live ER diagram (paste into dbdiagram.io)
 │   ├── Dockerfile · build.sh     Render / Cloud Run build
 │   ├── affiliation_verifier.py   Al-Baha affiliation verification (own Django-aware db)
@@ -45,7 +45,7 @@ litrix/
 │
 ├── .github/workflows/            ci.yml (build + check on push) · integrity.yml (daily DB health)
 ├── deploy.ps1                    One-shot: local gate (build + check) → commit → push
-├── .env                          Local config — gitignored (DB creds, API keys)
+├── .env                          Local config, gitignored (DB creds, API keys)
 ├── .env.example                  Template (no secrets)
 └── README.md                     ← you are here
 ```
@@ -55,7 +55,7 @@ litrix/
 
 ---
 
-## 2. Architecture — two write paths, one database
+## 2. Architecture: two write paths, one database
 
 The defining design decision: **Django does NOT own the domain schema.**
 
@@ -75,7 +75,7 @@ All SQL identifiers are quoted **PascalCase**: `"ResearchPaper"."PaperID"`.
 
 **Environment switch:** `DATABASE_URL` in the root `.env` is the single switch.
 Set → production (Neon); empty → local Postgres via discrete `DB_*` vars. This
-applies to Django **and** every pipeline script — always know which database a
+applies to Django **and** every pipeline script; always know which database a
 script will hit before running it.
 
 ---
@@ -92,8 +92,8 @@ between researchers with similar names (full forensic history was in the legacy
 2. **Deterministic identifiers only** for matching: `Scholar_ID`, `DOI`, `ORCID`,
    OpenAlex Author ID. **Never** name-based fuzzy matching for cross-attribution.
 3. **`Researcher.CitationsByYear`** (Scholar's author-level graph) feeds the
-   dashboard — not per-paper sums.
-4. **Every script must be idempotent** — safe to re-run. Use
+   dashboard, not per-paper sums.
+4. **Every script must be idempotent** (safe to re-run). Use
    `INSERT … ON CONFLICT`, `SAVEPOINT` + `ROLLBACK`, `COALESCE` instead of
    overwrites. Destructive scripts require a `--confirm` flag.
 5. Journals dedupe via `NormalizedName` (strip vol/issue/year noise, expand
@@ -124,7 +124,7 @@ that detects and removes cross-author contamination.
 | **Reporting campaigns** | `ReportCampaign`, `ReportSubmission`, `ReportPaperDecision` |
 | **Ops** | `Notification`, `ScheduledNotification`, `SyncJob`, `AuditLog`, `AuthorReviewQueue` |
 
-### Canonical columns — use these, ignore the rest
+### Canonical columns (use these, ignore the rest)
 
 - **Paper↔researcher attribution:** ONLY via `Authors`, keyed on deterministic IDs
   (`Users."Scholar_ID"`, `"Orcid_ID"`). Never name-based fuzzy matching.
@@ -138,21 +138,21 @@ that detects and removes cross-author contamination.
 - **Profile photo:** `Users."PhotoURL"` (Scholar thumbnail, or a researcher-uploaded
   data-URI from Settings).
 - **Identity IDs:** `Users` holds the **matching** anchors (`Scholar_ID`, `Orcid_ID`,
-  `Scopus_ID` — UNIQUE, drive attribution). `Researcher` holds **display** copies.
+  `Scopus_ID`: UNIQUE, drive attribution). `Researcher` holds **display** copies.
 
 ### Dedup / natural keys
 
-- **`ResearchPaper."DOI"` — `uq_paper_doi`** (partial unique `WHERE DOI IS NOT NULL`):
+- **`ResearchPaper."DOI"`, `uq_paper_doi`** (partial unique `WHERE DOI IS NOT NULL`):
   strongest guard against duplicate papers; DOI-less papers fall back to title dedup.
-- **`ResearchPaper."NormalizedTitle"` — `uq_paper_normalized_title`** (partial unique):
+- **`ResearchPaper."NormalizedTitle"`, `uq_paper_normalized_title`** (partial unique):
   title-based fallback for DOI-less papers.
-- **`Authors (UserID, PaperID)` — `uq_authors_user_paper`** (unique): blocks
+- **`Authors (UserID, PaperID)`, `uq_authors_user_paper`** (unique): blocks
   double-linking one researcher to one paper. External authors carry `UserID = NULL`
   + `AuthorNameRaw` and never collide.
 
 ### Gotchas
 
-- Duplicate identity columns (`Users` vs `Researcher`) are deliberate — `Users`
+- Duplicate identity columns (`Users` vs `Researcher`) are deliberate; `Users`
   copies are load-bearing (unique constraints + matching). Don't "consolidate".
 - `Citations` / `CitationsHistory` tables are unused; the live source is
   `CitationsByYear`.
@@ -163,7 +163,7 @@ that detects and removes cross-author contamination.
 ## 5. Local setup
 
 ```powershell
-# 0. Config — copy the template and fill DATABASE_URL (or DB_* for local) + SERP_API_KEY
+# 0. Config: copy the template and fill DATABASE_URL (or DB_* for local) + SERP_API_KEY
 cp .env.example .env
 
 # 1. Backend  (Django dev server → http://localhost:8000)
@@ -177,7 +177,7 @@ npm install
 npm start
 ```
 
-`npm run build` (frontend) runs the **strict** TypeScript compiler — this is where
+`npm run build` (frontend) runs the **strict** TypeScript compiler; this is where
 type errors surface. Always build before pushing; `ng serve` is more lenient.
 
 ---
@@ -187,13 +187,13 @@ type errors surface. Always build before pushing; `ng serve` is more lenient.
 ```bash
 cd backend
 
-# Ingest a researcher's papers (Google Scholar — canonical attribution)
+# Ingest a researcher's papers (Google Scholar, canonical attribution)
 python scrapers/scholar.py <scholar_id> <user_id>
 
 # ORCID / OpenAlex fallback (no Scholar profile)
 python scrapers/orcid.py --orcid <ORCID> --user <user_id>
 
-# Classify journals Q1–Q4  (run after ANY import)
+# Classify journals Q1 to Q4  (run after ANY import)
 python classification/classify.py
 
 # Refresh Scholar citation graphs (+ profile photos, --missing-photos = cheap)
@@ -218,7 +218,7 @@ python tools/run_migration.py backend/migrations/<file>.sql
 | Google Scholar (SerpAPI) | Paper attribution + author graph + photo | 1 credit/researcher |
 | OpenAlex | DOI, ISSN, journal name, per-paper counts | Free |
 | ORCID Public API | Self-reported works fallback | Free |
-| Scimago | Q1–Q4 rankings (CSV) | Free |
+| Scimago | Q1 to Q4 rankings (CSV) | Free |
 
 ---
 
@@ -233,15 +233,15 @@ python tools/run_migration.py backend/migrations/<file>.sql
 Pipeline (auto on push to `main`):
 
 ```
-Vercel (Angular, root=frontend)  ──►  Render (Django, root=backend)  ──►  Neon (Postgres)
-   ng build → static CDN              build.sh → migrate → gunicorn        managed DB + SSL
+Vercel (Angular, root=frontend)  ->  Render (Django, root=backend)  ->  Neon (Postgres)
+   ng build → static CDN             build.sh → migrate → gunicorn       managed DB + SSL
 ```
 
 **Render** (root directory `backend`): build `./build.sh`, start
 `gunicorn litrix_backend.wsgi:application`. Env vars: `DATABASE_URL`,
 `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=false`, `DJANGO_ALLOWED_HOSTS`,
 `CORS_ALLOWED_ORIGINS`, `PYTHON_VERSION=3.12.3`.
-Free tier sleeps after 15 min idle (first request ~30–60 s); a Docker build can
+Free tier sleeps after 15 min idle (first request ~30 to 60 s); a Docker build can
 take ~30 min.
 
 **Vercel** (root directory `frontend`): build `npm run build`, output
@@ -260,7 +260,7 @@ but `ng serve` passed → run `npm run build` locally (strict mode, esp. d3 typi
 
 - **RBAC:** named permissions (`manage_users`, `trigger_sync`, …) checked by
   `backend/accounts/permissions.py` and `permissionGuard(...)` in
-  `frontend/.../app.routes.ts` — keep both sides in sync.
+  `frontend/.../app.routes.ts`; keep both sides in sync.
 - **Canonical profile URL:** `/profile/Lit-NNNNNN` (`litrix_id`); `/researcher/:id`
   is a legacy alias. Public profiles live at `/public/researcher/:litrix_id`.
 - **Global Al-Baha filter:** one header toggle (`AffiliationService`, default ON,
@@ -273,8 +273,8 @@ but `ng serve` passed → run `npm run build` locally (strict mode, esp. d3 typi
 
 ## 9. GCP migration (planned)
 
-A migration from Vercel/Render/Neon to **GCP `me-central2` (Dammam)** — Cloud Run +
-Cloud SQL + Firebase Hosting — is planned. `backend/Dockerfile` and
+A migration from Vercel/Render/Neon to **GCP `me-central2` (Dammam)**: Cloud Run +
+Cloud SQL + Firebase Hosting, is planned. `backend/Dockerfile` and
 `frontend/firebase.json` belong to it. The Dockerfile is a 2-stage build
 (builder compiles psycopg2 wheels; slim runtime ~180 MB, non-root user, Whitenoise
 static).
@@ -284,7 +284,7 @@ static).
 ## 10. Notes
 
 - The repo lives on an Arabic-named OneDrive path on Windows; OneDrive sometimes
-  leaves stale `.git/index.lock` files — `deploy.ps1` clears them.
-- Secrets (`.env`, `client_secret*.json`, `token.json`) are gitignored — never commit.
-- Pipeline scripts wrap stdout in a UTF-8 `TextIOWrapper` for Arabic console output —
+  leaves stale `.git/index.lock` files; `deploy.ps1` clears them.
+- Secrets (`.env`, `client_secret*.json`, `token.json`) are gitignored; never commit.
+- Pipeline scripts wrap stdout in a UTF-8 `TextIOWrapper` for Arabic console output;
   keep that pattern in new scripts.
