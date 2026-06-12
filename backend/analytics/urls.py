@@ -32,7 +32,7 @@ from .views import (
 )
 from . import (
     campaign_views, my_reports_views, reconciliation_views,
-    network_views, public_views,
+    network_views, public_views, ai_views,
 )
 
 router = DefaultRouter()
@@ -48,6 +48,8 @@ urlpatterns = [
     path('export/excel/',       export_excel,       name='export-excel'),
     path('papers/<int:paper_id>/detail/', paper_detail, name='paper-detail'),
     path('search/',             universal_search,   name='universal-search'),
+
+    path('ai/chat/',            ai_views.chat,      name='ai-chat'),
 
     # ---- Reporting Campaigns (admin) ----
     path('campaigns/',
