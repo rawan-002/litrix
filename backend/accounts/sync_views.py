@@ -9,7 +9,8 @@ from rest_framework.response import Response
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-SCRAPER_DIR = PROJECT_ROOT / 'scrapers'
+BACKEND_DIR = PROJECT_ROOT / 'backend'
+SCRAPER_DIR = BACKEND_DIR / 'scrapers'
 
 # Don't re-scrape researchers who already have papers on every whim — it
 # burns SerpAPI quota and rarely finds anything new within a week. Enforced
@@ -289,7 +290,7 @@ def _run_citation_refresh(job_id, args):
     existing papers; never inserts papers or touches Authors links."""
     _run_project_script(job_id, [
         ('citation-refresh',
-         PROJECT_ROOT / 'citations' / 'refresh_hybrid.py', args, 3600),
+         BACKEND_DIR / 'citations' / 'refresh_hybrid.py', args, 3600),
     ])
 
 
@@ -307,9 +308,9 @@ def _run_new_papers_scrape(job_id, args):
     """
     _run_project_script(job_id, [
         ('scrape-new-papers',
-         PROJECT_ROOT / 'scrapers' / 'scholar_new_papers.py', args, 3600),
+         BACKEND_DIR / 'scrapers' / 'scholar_new_papers.py', args, 3600),
         ('affiliation-verify',
-         PROJECT_ROOT / 'backend' / 'affiliation_verifier.py',
+         BACKEND_DIR / 'affiliation_verifier.py',
          ['--apply', '--source', 'Scholar'], 1800),
     ])
 
