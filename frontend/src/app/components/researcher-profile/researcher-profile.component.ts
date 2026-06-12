@@ -166,8 +166,12 @@ export class ResearcherProfileComponent implements OnInit {
     const id = this.data()?.identity;
     if (!id) return '';
     const en = [id.first_name, id.last_name].filter(Boolean).join(' ').trim();
-    // Only show the EN line when it differs from the primary (Arabic) name.
-    return id.full_name_ar && en ? en : '';
+    // Show the secondary line only when it's a genuine Latin-script English
+    // name that differs from the Arabic name. first/last sometimes hold an
+    // Arabic short form (e.g. "سعد القثامي") — that's not an English name, hide it.
+    const isAscii = [...en].every(ch => ch.charCodeAt(0) < 128);
+    const isLatin = /[A-Za-z]/.test(en) && isAscii;
+    return id.full_name_ar && en && isLatin ? en : '';
   });
 
   readonly initials = computed(() => {
