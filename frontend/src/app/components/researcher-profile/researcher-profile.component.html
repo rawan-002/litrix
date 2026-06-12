@@ -29,9 +29,6 @@
               <h1 class="text-xl sm:text-2xl font-semibold text-ink-900 leading-snug">
                 {{ displayName() }}
               </h1>
-              @if (secondaryName()) {
-                <div class="text-base text-ink-500 mt-0.5">{{ secondaryName() }}</div>
-              }
               <div class="text-sm text-ink-600 mt-2">
                 {{ d.identity.department_name || 'Researcher' }}
                 <span class="text-ink-300">·</span>
