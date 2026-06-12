@@ -106,8 +106,9 @@ export class ResearcherProfileComponent implements OnInit {
     (this.data()?.papers ?? []).filter(p => p.affiliation_verified !== true).length
   );
 
-  // Clip the citations chart before this year, matching the admin dashboard.
-  private readonly CHART_YEAR_FLOOR = 2019;
+  // Clip the citations chart before this year. The profile chart starts at
+  // 2021 (earlier years are near-zero and just stretch the axis).
+  readonly CHART_YEAR_FLOOR = 2021;
 
   // The citations-over-time series the chart actually draws. When the Al-Baha
   // filter is OFF, use Scholar's authoritative author-level graph (matches the

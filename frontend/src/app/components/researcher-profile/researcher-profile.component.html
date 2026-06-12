@@ -87,10 +87,10 @@
             </div>
           </div>
 
-          <!-- KPIs (follow the global Al-Baha toggle in the top bar).
-               Thin vertical hairlines separate each metric. -->
-          <div class="mt-8 flex flex-wrap gap-y-5">
-            <div class="pr-8">
+          <!-- KPIs (follow the global Al-Baha toggle in the top bar). Spread to
+               fill the full width; thin vertical hairlines separate each metric. -->
+          <div class="mt-8 flex flex-wrap items-center justify-between gap-y-5">
+            <div>
               <div class="flex items-center gap-2">
                 <span class="text-xl sm:text-2xl font-bold text-ink-900">{{ fmt(kpiPublications()) }}</span>
                 <span class="inline-flex w-7 h-7 rounded-lg bg-ink-50 text-ink-400
@@ -100,7 +100,7 @@
               </div>
               <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-0.5">Publications</div>
             </div>
-            <div class="px-8 border-l border-ink-200">
+            <div class="pl-8 border-l border-ink-200">
               <div class="flex items-center gap-2">
                 <span class="text-xl sm:text-2xl font-bold text-ink-900">{{ fmt(kpiCitations()) }}</span>
                 <span class="inline-flex w-7 h-7 rounded-lg bg-ink-50 text-ink-400
@@ -110,7 +110,7 @@
               </div>
               <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-0.5">Times Cited</div>
             </div>
-            <div class="px-8 border-l border-ink-200">
+            <div class="pl-8 border-l border-ink-200">
               <div class="flex items-center gap-2">
                 <span class="text-xl sm:text-2xl font-bold text-ink-900">{{ hIndex() }}</span>
                 <span class="inline-flex w-7 h-7 rounded-lg bg-ink-50 text-ink-400
@@ -120,7 +120,7 @@
               </div>
               <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-0.5">H-Index</div>
             </div>
-            <div class="px-8 border-l border-ink-200">
+            <div class="pl-8 border-l border-ink-200">
               <div class="flex items-center gap-2">
                 <span class="text-xl sm:text-2xl font-bold text-accent">{{ fmt(kpiQ1()) }}</span>
                 <span class="inline-flex w-7 h-7 rounded-lg bg-accent/10 text-accent
@@ -140,6 +140,7 @@
             <h3 class="text-xs font-semibold text-ink-700 mb-2">Citations over time</h3>
             <app-citations-chart
               [series]="chartCitations()"
+              [floorYear]="CHART_YEAR_FLOOR"
               [height]="180" />
           </div>
         </div>

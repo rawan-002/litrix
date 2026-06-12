@@ -16,7 +16,7 @@ Chart.register(...registerables);
 
 // Citations chart floor — pre-2019 years are near-zero here and just
 // clutter the line.
-const CHART_MIN_YEAR = 2019;
+const CHART_MIN_YEAR = 2021;
 
 @Component({
   selector: 'app-public-profile',
