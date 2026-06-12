@@ -90,35 +90,43 @@
           <!-- KPIs (follow the global Al-Baha toggle in the top bar) -->
           <div class="mt-8 flex flex-wrap gap-x-20 gap-y-5">
             <div>
-              <span class="inline-flex w-8 h-8 rounded-lg bg-ink-50 text-ink-400
-                           items-center justify-center mb-1.5">
-                <app-icon name="file-text" [size]="16" />
-              </span>
-              <div class="text-xl sm:text-2xl font-bold text-ink-900">{{ fmt(kpiPublications()) }}</div>
+              <div class="flex items-center gap-2">
+                <span class="text-xl sm:text-2xl font-bold text-ink-900">{{ fmt(kpiPublications()) }}</span>
+                <span class="inline-flex w-7 h-7 rounded-lg bg-ink-50 text-ink-400
+                             items-center justify-center shrink-0">
+                  <app-icon name="file-text" [size]="15" />
+                </span>
+              </div>
               <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-0.5">Publications</div>
             </div>
             <div>
-              <span class="inline-flex w-8 h-8 rounded-lg bg-ink-50 text-ink-400
-                           items-center justify-center mb-1.5">
-                <app-icon name="quote" [size]="16" />
-              </span>
-              <div class="text-xl sm:text-2xl font-bold text-ink-900">{{ fmt(kpiCitations()) }}</div>
+              <div class="flex items-center gap-2">
+                <span class="text-xl sm:text-2xl font-bold text-ink-900">{{ fmt(kpiCitations()) }}</span>
+                <span class="inline-flex w-7 h-7 rounded-lg bg-ink-50 text-ink-400
+                             items-center justify-center shrink-0">
+                  <app-icon name="quote" [size]="15" />
+                </span>
+              </div>
               <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-0.5">Times Cited</div>
             </div>
             <div>
-              <span class="inline-flex w-8 h-8 rounded-lg bg-ink-50 text-ink-400
-                           items-center justify-center mb-1.5">
-                <app-icon name="trending-up" [size]="16" />
-              </span>
-              <div class="text-xl sm:text-2xl font-bold text-ink-900">{{ hIndex() }}</div>
+              <div class="flex items-center gap-2">
+                <span class="text-xl sm:text-2xl font-bold text-ink-900">{{ hIndex() }}</span>
+                <span class="inline-flex w-7 h-7 rounded-lg bg-ink-50 text-ink-400
+                             items-center justify-center shrink-0">
+                  <app-icon name="trending-up" [size]="15" />
+                </span>
+              </div>
               <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-0.5">H-Index</div>
             </div>
             <div>
-              <span class="inline-flex w-8 h-8 rounded-lg bg-accent/10 text-accent
-                           items-center justify-center mb-1.5">
-                <app-icon name="award" [size]="16" />
-              </span>
-              <div class="text-xl sm:text-2xl font-bold text-accent">{{ fmt(kpiQ1()) }}</div>
+              <div class="flex items-center gap-2">
+                <span class="text-xl sm:text-2xl font-bold text-accent">{{ fmt(kpiQ1()) }}</span>
+                <span class="inline-flex w-7 h-7 rounded-lg bg-accent/10 text-accent
+                             items-center justify-center shrink-0">
+                  <app-icon name="award" [size]="15" />
+                </span>
+              </div>
               <div class="text-[11px] uppercase tracking-wide text-ink-500 mt-0.5">Q1 Papers</div>
             </div>
           </div>
