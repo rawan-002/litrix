@@ -13,12 +13,14 @@ import { PaperDetailModalComponent } from
   '../paper-detail-modal/paper-detail-modal.component';
 import { CitationsChartComponent } from
   '../citations-chart/citations-chart.component';
+import { IconComponent } from '../../shared/icon/icon.component';
 
 @Component({
   selector: 'app-researcher-profile',
   standalone: true,
   imports: [
     CommonModule, RouterLink, PaperDetailModalComponent, CitationsChartComponent,
+    IconComponent,
   ],
   templateUrl: './researcher-profile.component.html',
 })
