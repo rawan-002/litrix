@@ -55,7 +55,10 @@ def main():
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--missing-photos", action="store_true",
+                    help="only researchers with no PhotoURL yet (photo backfill, cheapest)")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--yes", action="store_true", help="skip the confirm prompt")
     ap.add_argument("--limit", type=int, default=None)
     args = ap.parse_args()
 
@@ -63,7 +66,16 @@ def main():
     cur = conn.cursor()
     print(f"Connected to: {os.getenv('DATABASE_URL', 'LOCAL').split('@')[-1].split('/')[0]}\n")
 
-    if args.force:
+    if args.missing_photos:
+        cur.execute('''
+            SELECT u."UserID", u."FullName_Ar", u."Scholar_ID"
+            FROM "Users" u
+            WHERE u."Scholar_ID" IS NOT NULL AND u."Scholar_ID" <> ''
+              AND u."UserType" = 'Researcher'
+              AND (u."PhotoURL" IS NULL OR u."PhotoURL" = '')
+            ORDER BY u."UserID"
+        ''')
+    elif args.force:
         cur.execute('''
             SELECT u."UserID", u."FullName_Ar", u."Scholar_ID"
             FROM "Users" u
@@ -99,9 +111,10 @@ def main():
     if not researchers:
         return
 
-    confirm = input("Proceed? [y/N]: ").strip().lower()
-    if confirm != 'y':
-        return
+    if not args.yes:
+        confirm = input("Proceed? [y/N]: ").strip().lower()
+        if confirm != 'y':
+            return
 
     n_filled = n_empty = n_failed = 0
     t_start = time.time()
