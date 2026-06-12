@@ -740,9 +740,11 @@ def universal_search(request):
         PAPER_LIMIT = 10
     PAPER_LIMIT = max(10, min(PAPER_LIMIT, 100))
 
-    # All roles now see every UserType — the search is intentionally
-    # unrestricted (it used to limit Researchers to Researcher-type profiles).
-    user_type_filter = ''
+    # Any viewer can find any real person (Researcher/Dean/HoD), but system
+    # accounts are never search results — an Admin/super-admin is a platform
+    # operator, not a researcher profile, and a still-Pending account isn't a
+    # published profile yet.
+    user_type_filter = ''' AND u."UserType" NOT IN ('Admin', 'Pending')'''
 
     with connection.cursor() as cur:
         # Cross-script aware: we match Arabic name, English first/last, the
