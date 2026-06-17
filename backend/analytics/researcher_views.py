@@ -379,7 +379,7 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                     COALESCE(j."JournalName", rp."RawData_Log"->>'publication')
                                             AS journal_name,
                     j."ISSN_Print",
-                    j."VenueType",
+                    COALESCE(rp."VenueType", j."VenueType") AS venue_type,
                     jr."Quartile",
                     jr."ImpactFactor",
                     rp."AffiliationVerified"

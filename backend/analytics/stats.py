@@ -157,9 +157,9 @@ def _dept_cards_windowed(years, albaha_only=False):
             COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q4') AS total_q4_papers,
             COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = 'Scopus' OR jr."Quartile" IS NOT NULL) AS total_scopus_papers,
             COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = 'ISI') AS total_isi_papers,
-            COUNT(DISTINCT rp."PaperID") FILTER (WHERE j."VenueType" ILIKE 'Conference%%') AS conference_papers,
+            COUNT(DISTINCT rp."PaperID") FILTER (WHERE COALESCE(rp."VenueType", j."VenueType") ILIKE 'Conference%%') AS conference_papers,
             COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."PaperID" IS NOT NULL
-                AND (j."VenueType" IS NULL OR j."VenueType" NOT ILIKE 'Conference%%')) AS journal_papers,
+                AND (COALESCE(rp."VenueType", j."VenueType") IS NULL OR COALESCE(rp."VenueType", j."VenueType") NOT ILIKE 'Conference%%')) AS journal_papers,
             COALESCE(MAX(dc.total_citations), 0) AS total_citations
         FROM "Department" d
         LEFT JOIN "Works_In" w ON w."DepartmentID" = d."DepartmentID" AND w."IsCurrentPosition" = TRUE

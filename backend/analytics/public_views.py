@@ -994,11 +994,16 @@ def export_excel(request):
             c.font = header_font; c.fill = header_fill; c.alignment = header_align
         ws.row_dimensions[1].height = 28
 
-    # Venue classifier to split journals from conferences. Same heuristic as
-    # the admin export — VenueType is often blank, so we also sniff the
-    # JournalName for the usual conference/proceedings tokens.
-    venue_case_sql = '''
+    # Venue classifier to split journals from conferences. The paper-level
+    # VenueType (set by classification/dblp_venue.py from Crossref + DBLP) wins;
+    # then the journal-level VenueType; then, since both are often blank, we
+    # sniff the JournalName for the usual conference/proceedings tokens. `p` is
+    # the paper alias (rp or the attributed_papers CTE alias ap).
+    def _venue_case(p):
+        return f'''
         CASE
+            WHEN LOWER(COALESCE({p}."VenueType", '')) LIKE 'conference%%' THEN 'conference'
+            WHEN LOWER(COALESCE({p}."VenueType", '')) = 'proceedings' THEN 'conference'
             WHEN LOWER(COALESCE(j."VenueType", '')) LIKE 'conference%%' THEN 'conference'
             WHEN LOWER(COALESCE(j."VenueType", '')) = 'proceedings' THEN 'conference'
             WHEN LOWER(COALESCE(j."JournalName", '')) LIKE '%%conference%%' THEN 'conference'
@@ -1008,6 +1013,8 @@ def export_excel(request):
             ELSE 'journal'
         END
     '''
+    venue_case_ap = _venue_case('ap')
+    venue_case_rp = _venue_case('rp')
 
     years_label = ', '.join(str(y) for y in years)
 
@@ -1028,6 +1035,7 @@ def export_excel(request):
                     SELECT DISTINCT
                         rp."PaperID",
                         rp."JournalID",
+                        rp."VenueType",
                         COALESCE(
                             (rp."RawData_Log"->'cited_by'->>'value')::int,
                             (rp."RawData_Log"->>'cited_by_count')::int,
@@ -1104,9 +1112,9 @@ def export_excel(request):
                         COUNT(DISTINCT ap."PaperID"),
                         COALESCE(SUM(ap.cites), 0),
                         COUNT(DISTINCT ap."PaperID")
-                            FILTER (WHERE {venue_case_sql} = 'journal'),
+                            FILTER (WHERE {venue_case_ap} = 'journal'),
                         COUNT(DISTINCT ap."PaperID")
-                            FILTER (WHERE {venue_case_sql} = 'conference'),
+                            FILTER (WHERE {venue_case_ap} = 'conference'),
                         COUNT(DISTINCT ap."PaperID") FILTER (WHERE jr."Quartile" = 'Q1'),
                         COUNT(DISTINCT ap."PaperID") FILTER (WHERE jr."Quartile" = 'Q2'),
                         COUNT(DISTINCT ap."PaperID") FILTER (WHERE jr."Quartile" = 'Q3'),
@@ -1150,7 +1158,7 @@ def export_excel(request):
                 cur.execute(f'''
                     WITH dept_papers AS (
                         SELECT DISTINCT d."DepartmentID", rp."PaperID",
-                            {venue_case_sql} AS venue,
+                            {venue_case_rp} AS venue,
                             jr."Quartile" AS quartile,
                             COALESCE(
                                 (rp."RawData_Log"->'cited_by'->>'value')::int,
@@ -1293,7 +1301,7 @@ def export_excel(request):
                         ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1
                     ) jr ON TRUE
                     WHERE rp."PubYear" = %s
-                      AND {venue_case_sql} = 'journal'
+                      AND {venue_case_rp} = 'journal'
                       AND {NOT_RETRACTED_SQL}
                       AND {AFFILIATION_VERIFIED_SQL}
                     GROUP BY rp."PaperID", rp."Title",
@@ -1338,7 +1346,7 @@ def export_excel(request):
                     LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
                     LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
                     WHERE rp."PubYear" = %s
-                      AND {venue_case_sql} = 'conference'
+                      AND {venue_case_rp} = 'conference'
                       AND {NOT_RETRACTED_SQL}
                       AND {AFFILIATION_VERIFIED_SQL}
                     GROUP BY rp."PaperID", rp."Title",

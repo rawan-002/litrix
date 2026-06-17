@@ -60,7 +60,7 @@ def paper_detail(request, paper_id):
                 ) AS total_citations,
                 COALESCE(j."JournalName", rp."RawData_Log"->>'publication') AS journal_name,
                 j."ISSN_Print",
-                j."VenueType",
+                COALESCE(rp."VenueType", j."VenueType") AS venue_type,
                 jr."Quartile",
                 jr."ImpactFactor",
                 rp."RawData_Log"->'authorships'   AS authorships_jsonb
@@ -585,11 +585,11 @@ def overview(request):
                 -- Book/Book Series/NULL fold into Journal (same rule as
                 -- v_department_stats after 20260607_dept_stats_split).
                 COUNT(DISTINCT rp."PaperID")
-                    FILTER (WHERE j."VenueType" ILIKE 'Conference%%') AS conference_papers,
+                    FILTER (WHERE COALESCE(rp."VenueType", j."VenueType") ILIKE 'Conference%%') AS conference_papers,
                 COUNT(DISTINCT rp."PaperID")
                     FILTER (WHERE rp."PaperID" IS NOT NULL
-                            AND (j."VenueType" IS NULL
-                                 OR j."VenueType" NOT ILIKE 'Conference%%')) AS journal_papers
+                            AND (COALESCE(rp."VenueType", j."VenueType") IS NULL
+                                 OR COALESCE(rp."VenueType", j."VenueType") NOT ILIKE 'Conference%%')) AS journal_papers
             FROM "Department" d
             LEFT JOIN "Works_In" w ON w."DepartmentID" = d."DepartmentID" AND w."IsCurrentPosition" = TRUE
             LEFT JOIN "Users" u ON u."UserID" = w."UserID" AND u."UserType" = 'Researcher'
