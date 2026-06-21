@@ -1,11 +1,16 @@
 """Role + permission management endpoints (RBAC admin)."""
 import psycopg2
-from django.db import connection
+from django.db import connection, transaction
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from .common import audit
+
+# Permissions that must never be strippable from the Admin system role -
+# without these no one could ever re-open the role-management screen again,
+# which would lock the whole tenant out of RBAC permanently.
+PROTECTED_ADMIN_PERMS = ('manage_roles', 'manage_users')
 
 
 @api_view(['GET'])
@@ -55,17 +60,40 @@ def set_role_permissions(request, role_id):
     permission_ids = request.data.get('permission_ids') or []
     with connection.cursor() as cur:
         cur.execute('''
-            SELECT 1 FROM "Role" WHERE "RoleID" = %s AND "TenantID" = %s
+            SELECT "Name", "IsSystem" FROM "Role"
+            WHERE "RoleID" = %s AND "TenantID" = %s
         ''', [role_id, request.user.tenant_id])
-        if not cur.fetchone():
+        role = cur.fetchone()
+        if not role:
             return Response({'error': 'Role not found'}, status=404)
 
-        cur.execute('DELETE FROM "RolePermission" WHERE "RoleID" = %s', [role_id])
-        for pid in permission_ids:
+        # Guard: the Admin system role must always keep the permissions that
+        # gate the role-management screen itself, or saving an incomplete set
+        # would lock everyone out of RBAC for good.
+        if role[1] and role[0] == 'Admin':
             cur.execute(
-                'INSERT INTO "RolePermission" ("RoleID", "PermissionID") VALUES (%s, %s) ON CONFLICT DO NOTHING',
-                [role_id, pid],
+                'SELECT "PermissionID", "Code" FROM "Permission" WHERE "Code" = ANY(%s)',
+                [list(PROTECTED_ADMIN_PERMS)],
             )
+            protected = {pid: code for pid, code in cur.fetchall()}
+            chosen = set(permission_ids)
+            missing = [code for pid, code in protected.items() if pid not in chosen]
+            if missing:
+                return Response(
+                    {'error': 'The Admin role must keep these permissions: '
+                              + ', '.join(sorted(missing))},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        # DELETE + re-INSERT must be atomic, else a mid-way failure leaves the
+        # role with a partial (or empty) permission set.
+        with transaction.atomic():
+            cur.execute('DELETE FROM "RolePermission" WHERE "RoleID" = %s', [role_id])
+            for pid in permission_ids:
+                cur.execute(
+                    'INSERT INTO "RolePermission" ("RoleID", "PermissionID") VALUES (%s, %s) ON CONFLICT DO NOTHING',
+                    [role_id, pid],
+                )
 
     audit(request.user.user_id, request.user.tenant_id,
           'role.update_permissions', 'Role', role_id,
