@@ -409,7 +409,8 @@
 
 
     <!-- Publications by Venue Type -->
-    <section class="bg-white rounded-apple shadow-card p-6 mb-8">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+      <div class="bg-white rounded-apple shadow-card p-6">
       <div class="flex items-baseline justify-between mb-4">
         <h2 class="text-sm font-semibold text-ink-700">Publications by Venue Type</h2>
         <button type="button" (click)="openVenueModal()"
@@ -418,7 +419,7 @@
         </button>
       </div>
       @if (chartVenue(); as v) {
-        <div class="flex flex-col md:flex-row items-center gap-6"
+        <div class="flex items-center gap-6"
              (mouseleave)="hoveredVenue.set(null)">
           <svg viewBox="-80 -80 160 160" class="w-44 h-44 -rotate-90 select-none">
             <circle r="56" cx="0" cy="0" fill="none" stroke="#f5f5f4" stroke-width="20" />
@@ -447,7 +448,7 @@
               }
             </g>
           </svg>
-          <ul class="flex-1 w-full space-y-2">
+          <ul class="flex-1 space-y-2">
             @for (s of v.slices; track s.label) {
               <li class="flex items-center justify-between text-xs px-2 py-1 rounded cursor-pointer transition-colors"
                   [class.bg-accent-light]="hoveredVenue() === s.label"
@@ -473,7 +474,8 @@
       } @else {
         <div class="text-center py-12 text-sm text-ink-400">No data</div>
       }
-    </section>
+      </div>
+    </div>
 
     <!-- Department Research Statistics -->
     @if (!isHoD()) {

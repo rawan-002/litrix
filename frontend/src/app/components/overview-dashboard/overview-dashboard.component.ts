@@ -280,12 +280,14 @@ export class OverviewDashboardComponent implements OnInit {
     const other = Math.max(0, total - journal - conference - book - preprint);
     if (total === 0) return null;
 
+    // Same stone grayscale as the Quartile donut above, so the two charts read
+    // as one system (darkest = the primary category).
     const order: { label: string; venue: string; value: number; color: string }[] = [
       { label: 'Journal',      venue: 'journal',      value: journal,    color: '#1c1917' },
-      { label: 'Conference',   venue: 'conference',   value: conference, color: '#b0752a' },
-      { label: 'Book',         venue: 'book',         value: book,       color: '#6d55e0' },
-      { label: 'Preprint',     venue: 'preprint',     value: preprint,   color: '#5a6b8c' },
-      { label: 'Unclassified', venue: 'unclassified', value: other,      color: '#d6d3d1' },
+      { label: 'Conference',   venue: 'conference',   value: conference, color: '#57534e' },
+      { label: 'Book',         venue: 'book',         value: book,       color: '#a8a29e' },
+      { label: 'Preprint',     venue: 'preprint',     value: preprint,   color: '#d6d3d1' },
+      { label: 'Unclassified', venue: 'unclassified', value: other,      color: '#e7e5e4' },
     ].filter(s => s.value > 0);
 
     const radius = 56;
