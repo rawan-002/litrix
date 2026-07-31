@@ -4,6 +4,7 @@
 import { Component, OnInit, Input, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { LitrixApiService } from '../../services/litrix-api.service';
+import { AffiliationService } from '../../core/services/affiliation.service';
 import { ResearcherProfilePayload } from '../../models/litrix.models';
 import { isLatinName, joinEnglishName } from '../../shared/utils/researcher-name';
 import { CitationsChartComponent } from '../citations-chart/citations-chart.component';
@@ -26,9 +27,30 @@ interface DonutSlice {
 })
 export class ResearcherDashboardComponent implements OnInit {
   private readonly api = inject(LitrixApiService);
+  private readonly affiliation = inject(AffiliationService);
 
   /** Litrix-ID of the researcher to render. Required. */
   @Input({ required: true }) litrixId!: string;
+
+  // Al-Baha filter, identical rule to the profile page so the two never
+  // disagree: when the header toggle is ON, keep only papers CONFIRMED
+  // Al-Baha (affiliation_verified === true) - foreign + still-unverified are
+  // both hidden. Every KPI/chart below reads statsPapers(), so flipping the
+  // toggle recomputes them instantly (no re-fetch; the payload has all papers).
+  readonly statsPapers = computed(() => {
+    const all = this.data()?.papers ?? [];
+    return this.affiliation.albahaOnly()
+      ? all.filter(p => p.affiliation_verified === true)
+      : all;
+  });
+
+  readonly kpiPublications = computed(() => this.statsPapers().length);
+  readonly kpiCitations = computed(() =>
+    this.statsPapers().reduce((s, p) => s + (p.citations ?? 0), 0)
+  );
+  readonly kpiQ1 = computed(() =>
+    this.statsPapers().filter(p => p.quartile === 'Q1').length
+  );
 
   readonly data    = signal<ResearcherProfilePayload | null>(null);
   readonly loading = signal<boolean>(true);
@@ -81,7 +103,7 @@ export class ResearcherDashboardComponent implements OnInit {
   // Largest h with h papers each cited >= h times. Computed here because the
   // profile endpoint doesn't surface it.
   readonly hIndex = computed(() => {
-    const papers = this.data()?.papers ?? [];
+    const papers = this.statsPapers();
     const cites = papers
       .map(p => p.citations || 0)
       .sort((a, b) => b - a);
@@ -127,7 +149,7 @@ export class ResearcherDashboardComponent implements OnInit {
 
   // Publications-per-year bar chart.
   readonly publicationsChart = computed(() => {
-    const papers = this.data()?.papers ?? [];
+    const papers = this.statsPapers();
     if (!papers.length) return null;
     // Skip papers with no year or older than CHART_YEAR_FLOOR.
     const buckets = new Map<number, number>();
@@ -171,7 +193,7 @@ export class ResearcherDashboardComponent implements OnInit {
   // circumference, with stroke-dasharray + dashoffset doing the arc work -
   // cleaner than computing arc paths by hand.
   readonly quartileChart = computed(() => {
-    const papers = this.data()?.papers ?? [];
+    const papers = this.statsPapers();
     if (!papers.length) return null;
 
     const counts: Record<string, number> = {

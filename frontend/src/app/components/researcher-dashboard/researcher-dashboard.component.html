@@ -35,7 +35,7 @@
               Publications
             </div>
             <div class="text-3xl font-bold text-ink-900 mt-1">
-              {{ fmt(d.stats.total_papers) }}
+              {{ fmt(kpiPublications()) }}
             </div>
           </div>
           <div class="rounded-xl bg-ink-50 p-4">
@@ -43,7 +43,7 @@
               Citations
             </div>
             <div class="text-3xl font-bold text-ink-900 mt-1">
-              {{ fmt(d.stats.total_citations) }}
+              {{ fmt(kpiCitations()) }}
             </div>
           </div>
           <div class="rounded-xl bg-ink-50 p-4">
@@ -59,7 +59,7 @@
               Q1 Papers
             </div>
             <div class="text-3xl font-bold text-ink-900 mt-1">
-              {{ fmt(d.stats.q1_papers) }}
+              {{ fmt(kpiQ1()) }}
             </div>
           </div>
         </div>
