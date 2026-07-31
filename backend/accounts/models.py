@@ -55,6 +55,8 @@ class User(AbstractBaseUser):
     middle_name    = models.CharField(max_length=100, db_column='MiddleName', null=True, blank=True)
     last_name      = models.CharField(max_length=100, db_column='LastName',   null=True, blank=True)
     full_name_ar   = models.CharField(max_length=255, db_column='FullName_Ar', null=True, blank=True)
+    scholar_display_name = models.CharField(max_length=255, db_column='ScholarDisplayName',
+                                             null=True, blank=True)
 
     user_type      = models.CharField(max_length=50, db_column='UserType')
     account_status = models.CharField(max_length=50, db_column='AccountStatus')
@@ -83,7 +85,7 @@ class User(AbstractBaseUser):
         db_table = 'Users'
 
     def __str__(self):
-        return self.full_name_ar or self.email
+        return self.get_full_name() or self.email
 
     @property
     def is_staff(self):
@@ -94,7 +96,18 @@ class User(AbstractBaseUser):
         return self.user_type == 'Admin'
 
     def get_full_name(self):
-        return self.full_name_ar or f'{self.first_name or ""} {self.last_name or ""}'.strip()
+        # Primary display name is the EXACT name Google Scholar shows on the
+        # researcher's profile (ScholarDisplayName, captured verbatim by
+        # citations/backfill_scholar_names.py). FullName_Ar is kept in the
+        # table but never shown in the UI. first/last sometimes hold an
+        # Arabic short form instead of a genuine English name, so guard for
+        # that in the fallback used when there's no Scholar name yet.
+        if self.scholar_display_name:
+            return self.scholar_display_name
+        en = f'{self.first_name or ""} {self.last_name or ""}'.strip()
+        if en and en.isascii() and any(c.isalpha() for c in en):
+            return en
+        return self.email
 
     def get_short_name(self):
         return self.first_name or self.email

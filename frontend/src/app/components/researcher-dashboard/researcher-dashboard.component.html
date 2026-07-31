@@ -15,8 +15,8 @@
       <div class="text-xs uppercase tracking-widest text-ink-500 font-medium mb-1">
         {{ d.identity.department_name || 'Researcher' }}
       </div>
-      <h1 class="text-3xl font-bold text-ink-900 leading-tight">
-        {{ d.identity.full_name_ar || d.identity.last_name }}
+      <h1 class="text-3xl font-bold text-ink-900 leading-tight" dir="auto">
+        {{ identityName() }}
       </h1>
       <div class="text-xs text-ink-400 mt-2 font-mono">
         {{ d.identity.litrix_id }}

@@ -8,7 +8,7 @@ import {
   ResearcherStats, DepartmentStats, TopPaper,
   PublicationTrend, OverviewPayload, Paginated,
   YearlyBreakdownPayload, ResearcherProfilePayload,
-  SearchProfileResult, SearchPaperResult,
+  SearchProfileResult, SearchPaperResult, ClassifiedPaper,
 } from '../models/litrix.models';
 import { environment } from '../../environments/environment';
 
@@ -50,6 +50,19 @@ export class LitrixApiService {
   getResearcherProfile(id: string | number): Observable<ResearcherProfilePayload> {
     return this.http.get<ResearcherProfilePayload>(
       `${this.baseUrl}/researchers/${id}/profile/`
+    );
+  }
+
+  // TEST endpoint (Moez Krichen's profile only, for now) - runs the same
+  // per-paper Al-Baha OpenAlex check affiliation_verifier.py uses, live and
+  // on demand, so the profile's Al-Baha filter can be tried against fresh
+  // OpenAlex data instead of the stored AffiliationVerified column. See
+  // ResearcherViewSet.openalex_live_affiliation_check.
+  getOpenAlexLiveAffiliationCheck(id: string | number): Observable<{
+    results: Record<string, boolean | null>;
+  }> {
+    return this.http.get<{ results: Record<string, boolean | null> }>(
+      `${this.baseUrl}/researchers/${id}/openalex-live-affiliation-check/`
     );
   }
 
@@ -150,6 +163,32 @@ export class LitrixApiService {
     }
     return this.http.get<OverviewPayload>(
       `${this.baseUrl}/stats/overview/`,
+      params.keys().length ? { params } : {}
+    );
+  }
+
+  // Full paper list backing the overview dashboard's Quartile & Indexing
+  // donut - same filters as getOverview() so the modal always matches what's
+  // on screen. `tier` narrows to one bucket (Q1/Scopus/ISI/Other); omitted or
+  // 'all' returns every classified-or-not paper in scope.
+  getClassifiedPapers(opts: {
+    years?: number | number[];
+    albahaOnly?: boolean;
+    departmentId?: number | null;
+    tier?: string | null;
+    venue?: string | null;
+  }): Observable<{ count: number; papers: ClassifiedPaper[] }> {
+    let params = new HttpParams();
+    if (opts.years != null) {
+      const list = Array.isArray(opts.years) ? opts.years : [opts.years];
+      if (list.length > 0) params = params.set('year', list.join(','));
+    }
+    if (opts.albahaOnly) params = params.set('affiliation', 'albaha');
+    if (opts.departmentId != null) params = params.set('department_id', opts.departmentId);
+    if (opts.tier) params = params.set('tier', opts.tier);
+    if (opts.venue) params = params.set('venue', opts.venue);
+    return this.http.get<{ count: number; papers: ClassifiedPaper[] }>(
+      `${this.baseUrl}/stats/classified-papers/`,
       params.keys().length ? { params } : {}
     );
   }

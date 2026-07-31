@@ -9,6 +9,17 @@ from .stats import (
     _cites_expr, _affil_clause, _hod_scope_department_id,
 )
 
+# A Scopus Quartile is a JOURNAL ranking: gate Q1-Q4 on venue so a Conference
+# paper / Book chapter linked to a ranked container is not counted as a Q-ranked
+# journal paper. Paper-level VenueType wins, Journals fallback; NULL is
+# journal-eligible. %% because these summary queries are passed to execute() with
+# params. Both summary SQLs below join "Journals" j, so the COALESCE form is safe.
+_JELIG = (
+    ' AND (COALESCE(rp."VenueType", j."VenueType") IS NULL'
+    ' OR (COALESCE(rp."VenueType", j."VenueType") NOT ILIKE \'Conference%%\''
+    ' AND COALESCE(rp."VenueType", j."VenueType") NOT IN (\'Book\', \'Preprint\')))'
+)
+
 
 def _excel_response(filename: str):
     """Helper: build an HttpResponse with the right xlsx headers."""
@@ -266,10 +277,10 @@ def export_excel(request):
                 summary_sql = (
                     'SELECT '
                     '    COUNT(DISTINCT rp."PaperID"), '
-                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q1\'), '
-                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q2\'), '
-                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q3\'), '
-                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q4\'), '
+                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q1\'' + _JELIG + '), '
+                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q2\'' + _JELIG + '), '
+                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q3\'' + _JELIG + '), '
+                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q4\'' + _JELIG + '), '
                     '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE COALESCE(rp."VenueType", j."VenueType") = \'Journal\'), '
                     '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE COALESCE(rp."VenueType", j."VenueType") = \'Conference\') '
                     'FROM "ResearchPaper" rp '
@@ -353,10 +364,10 @@ def export_excel(request):
                     '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE COALESCE(rp."VenueType", j."VenueType") = \'Conference\'), '
                     '    COUNT(DISTINCT rp."PaperID"), '
                     '    COALESCE(MAX(dc.cites), 0) AS citations, '
-                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q1\'), '
-                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q2\'), '
-                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q3\'), '
-                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q4\') '
+                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q1\'' + _JELIG + '), '
+                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q2\'' + _JELIG + '), '
+                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q3\'' + _JELIG + '), '
+                    '    COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q4\'' + _JELIG + ') '
                     'FROM "Department" d '
                     'LEFT JOIN "Works_In" w ON w."DepartmentID" = d."DepartmentID" AND w."IsCurrentPosition" = TRUE '
                     'LEFT JOIN "Users" u ON u."UserID" = w."UserID" AND u."UserType" = \'Researcher\' '

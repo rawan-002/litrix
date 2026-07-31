@@ -73,9 +73,16 @@ export interface OverviewPayload {
     papers: number;
     citations: number;
     q1_papers: number;
+    q2_papers: number;
+    q3_papers: number;
+    q4_papers: number;
     scopus_papers: number;
     isi_papers: number;
     avg_h_index: number;
+    journal_papers?: number;
+    conference_papers?: number;
+    book_papers?: number;
+    preprint_papers?: number;
   };
   top_researchers: any[];
   top_papers: any[];
@@ -97,13 +104,14 @@ export interface PaperDetail {
   doi: string | null;
   citations: number;
   journal_name: string | null;
-  venue_type: 'Journal' | 'Conference' | null;
+  venue_type: 'Journal' | 'Conference' | 'Book' | 'Preprint' | null;
   quartile: string | null;
   impact_factor: number | null;
   indexing: string | null;
   department_id: number;
   department_name: string;
   authors_ar: string | null;
+  authors_en: string | null;
 }
 
 export interface YearlyDepartmentSummary {
@@ -139,6 +147,9 @@ export interface ResearcherIdentity {
   photo_url: string | null;
   /** Scholar's "areas of interest" tags, [] when none scraped yet. */
   research_interests: string[];
+  /** Exact name Google Scholar shows on this profile - the primary
+   *  displayed name everywhere. Null until the researcher's been scraped. */
+  scholar_display_name: string | null;
 }
 
 export interface ResearcherStatsAgg {
@@ -217,4 +228,18 @@ export interface SearchPaperResult {
   quartile: string | null;
   citations: number;
   authors_summary: string | null;
+}
+
+// Backs the overview dashboard's Quartile & Indexing donut "view all" modal.
+export interface ClassifiedPaper {
+  paper_id: number;
+  title: string;
+  pub_year: number | null;
+  doi: string | null;
+  indexing: string | null;
+  quartile: string | null;
+  venue_type: string | null;
+  journal_name: string | null;
+  citations: number;
+  tier: 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'Other';
 }

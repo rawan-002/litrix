@@ -6,6 +6,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { LitrixApiService } from '../../services/litrix-api.service';
+import { researcherPrimaryName } from '../../shared/utils/researcher-name';
 
 interface ResearcherListItem {
   user_id: number;
@@ -102,8 +103,8 @@ interface DeptGroup {
                           class="w-full text-left px-3 py-2 rounded-apple
                                  hover:bg-ink-50 transition-colors group">
                           <div class="text-sm font-medium text-ink-700
-                                      group-hover:text-ink-900 truncate">
-                            {{ r.full_name_ar || r.full_name_en || ('User #' + r.user_id) }}
+                                      group-hover:text-ink-900 truncate" dir="auto">
+                            {{ primaryName(r) }}
                           </div>
                           <div class="text-[10px] text-ink-400 mt-0.5">
                             {{ r.papers }} pubs
@@ -126,6 +127,10 @@ export class ResearcherSearchSidebarComponent implements OnInit {
   private readonly router = inject(Router);
 
   readonly all = signal<ResearcherListItem[]>([]);
+
+  primaryName(r: ResearcherListItem): string {
+    return researcherPrimaryName(r, `User #${r.user_id}`);
+  }
   readonly loading = signal<boolean>(true);
   readonly expandedDepts = signal<Set<string>>(new Set());
   filter = '';

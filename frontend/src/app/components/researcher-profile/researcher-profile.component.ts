@@ -14,6 +14,7 @@ import { PaperDetailModalComponent } from
 import { CitationsChartComponent } from
   '../citations-chart/citations-chart.component';
 import { IconComponent } from '../../shared/icon/icon.component';
+import { isLatinName, joinEnglishName } from '../../shared/utils/researcher-name';
 
 @Component({
   selector: 'app-researcher-profile',
@@ -64,8 +65,8 @@ export class ResearcherProfileComponent implements OnInit {
   /** Paper counts per venue tab (respecting the affiliation filter). */
   readonly venueCounts = computed(() => {
     let papers = this.data()?.papers ?? [];
-    if (this.affiliationFilter() === 'albaha') {
-      papers = papers.filter(p => p.affiliation_verified === true);
+    if (this.effectiveAlbahaOnly()) {
+      papers = papers.filter(p => this.isAlbahaFor(p));
     }
     let conf = 0;
     for (const p of papers) if (this.isConference(p)) conf++;
@@ -85,11 +86,27 @@ export class ResearcherProfileComponent implements OnInit {
     this.affiliation.albahaOnly() ? 'albaha' : 'all'
   );
 
+  // TEST feature (Moez Krichen's profile only, see below): when active,
+  // this profile's Al-Baha filter runs off a freshly-fetched live OpenAlex
+  // per-paper check instead of the stored affiliation_verified column - same
+  // filtering pipeline as the header toggle, different data source. Remove
+  // this block (and isAlbahaFor's branch) once the trial is done.
+  readonly openAlexLiveActive = signal(false);
+  readonly effectiveAlbahaOnly = computed(() =>
+    this.openAlexLiveActive() || this.affiliationFilter() === 'albaha'
+  );
+  private isAlbahaFor(p: ProfilePaper): boolean {
+    if (this.openAlexLiveActive()) {
+      return this.openAlexLiveMap()?.get(p.paper_id) === true;
+    }
+    return p.affiliation_verified === true;
+  }
+
   // The papers the KPIs are computed over - same Al-Baha filter as the list.
   readonly statsPapers = computed(() => {
     const all = this.data()?.papers ?? [];
-    return this.affiliationFilter() === 'albaha'
-      ? all.filter(p => p.affiliation_verified === true)
+    return this.effectiveAlbahaOnly()
+      ? all.filter(p => this.isAlbahaFor(p))
       : all;
   });
 
@@ -103,7 +120,7 @@ export class ResearcherProfileComponent implements OnInit {
 
   /** Papers hidden by the "Al-Baha only" view (confirmed foreign + unverified). */
   readonly hiddenCount = computed(() =>
-    (this.data()?.papers ?? []).filter(p => p.affiliation_verified !== true).length
+    (this.data()?.papers ?? []).filter(p => !this.isAlbahaFor(p)).length
   );
 
   // Clip the citations chart before this year. The profile chart starts at
@@ -116,7 +133,7 @@ export class ResearcherProfileComponent implements OnInit {
   // so rebuild the series by summing the per-year citation counts of the
   // Al-Baha-only papers - so the chart reacts to the toggle like the KPIs do.
   readonly chartCitations = computed(() => {
-    if (this.affiliationFilter() === 'all') {
+    if (!this.effectiveAlbahaOnly()) {
       return this.data()?.citations_by_year ?? [];
     }
     const byYear = new Map<number, number>();
@@ -154,24 +171,15 @@ export class ResearcherProfileComponent implements OnInit {
     return Math.round((total / papers.length) * 10) / 10;
   });
 
-  // Display name + initials for the identity banner.
+  // Display name + initials for the identity banner: the exact name Google
+  // Scholar shows on this researcher's profile. The Arabic name is never
+  // shown here, not even as a fallback.
   readonly displayName = computed(() => {
     const id = this.data()?.identity;
     if (!id) return '';
-    const en = [id.first_name, id.last_name].filter(Boolean).join(' ').trim();
-    return id.full_name_ar || en || id.last_name || 'Researcher';
-  });
-
-  readonly secondaryName = computed(() => {
-    const id = this.data()?.identity;
-    if (!id) return '';
-    const en = [id.first_name, id.last_name].filter(Boolean).join(' ').trim();
-    // Show the secondary line only when it's a genuine Latin-script English
-    // name that differs from the Arabic name. first/last sometimes hold an
-    // Arabic short form (e.g. "سعد القثامي") - that's not an English name, hide it.
-    const isAscii = [...en].every(ch => ch.charCodeAt(0) < 128);
-    const isLatin = /[A-Za-z]/.test(en) && isAscii;
-    return id.full_name_ar && en && isLatin ? en : '';
+    const fallbackEn = joinEnglishName(id.first_name, id.last_name);
+    const en = id.scholar_display_name || fallbackEn;
+    return (isLatinName(en) ? en : '') || 'Researcher';
   });
 
   readonly initials = computed(() => {
@@ -182,6 +190,52 @@ export class ResearcherProfileComponent implements OnInit {
 
   // Flips to true if the Scholar photo fails to load, so we fall back to initials.
   readonly avatarError = signal<boolean>(false);
+
+  // TEST feature: an Al-Baha filter toggle sourced from a live per-paper
+  // OpenAlex check instead of the stored affiliation_verified column -
+  // Moez Krichen's profile only (Lit-000089), a one-off trial before
+  // deciding whether to build this for every researcher. `openAlexLiveActive`
+  // and `isAlbahaFor` above are the other half of this block. Remove all of
+  // it (and the matching template button) once the trial is done.
+  readonly TEST_OPENALEX_LITRIX_ID = 'Lit-000089';
+  readonly showOpenAlexTestButton = computed(() =>
+    this.data()?.identity?.litrix_id === this.TEST_OPENALEX_LITRIX_ID
+  );
+  readonly openAlexLiveMap = signal<Map<number, boolean | null> | null>(null);
+  readonly openAlexLiveLoading = signal(false);
+  readonly openAlexLiveError = signal<string | null>(null);
+
+  // Toggle button: first click fetches (live, uncached) and turns the filter
+  // on; a second click just turns it back off - re-clicking after that
+  // reuses the already-fetched map rather than re-querying OpenAlex.
+  toggleOpenAlexLiveTest() {
+    if (this.openAlexLiveActive()) {
+      this.openAlexLiveActive.set(false);
+      return;
+    }
+    if (this.openAlexLiveMap()) {
+      this.openAlexLiveActive.set(true);
+      return;
+    }
+    const litrixId = this.data()?.identity?.litrix_id;
+    if (!litrixId) return;
+    this.openAlexLiveLoading.set(true);
+    this.openAlexLiveError.set(null);
+    this.api.getOpenAlexLiveAffiliationCheck(litrixId).subscribe({
+      next: res => {
+        const map = new Map<number, boolean | null>(
+          Object.entries(res.results).map(([pid, v]) => [Number(pid), v])
+        );
+        this.openAlexLiveMap.set(map);
+        this.openAlexLiveActive.set(true);
+        this.openAlexLiveLoading.set(false);
+      },
+      error: err => {
+        this.openAlexLiveError.set(`Failed: ${err.message}`);
+        this.openAlexLiveLoading.set(false);
+      },
+    });
+  }
 
   // Co-authors: show a first batch, reveal the rest on demand.
   readonly COAUTHOR_BATCH = 6;
@@ -228,8 +282,8 @@ export class ResearcherProfileComponent implements OnInit {
   readonly sortedPapers = computed(() => {
     let all = [...(this.data()?.papers ?? [])];
 
-    if (this.affiliationFilter() === 'albaha') {
-      all = all.filter(p => p.affiliation_verified === true);
+    if (this.effectiveAlbahaOnly()) {
+      all = all.filter(p => this.isAlbahaFor(p));
     }
 
     const venue = this.activeVenue();

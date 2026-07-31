@@ -1209,6 +1209,7 @@ def list_users(request):
         cur.execute(f'''
             SELECT u."UserID", u."Email",
                    u."FullName_Ar", u."FirstName", u."MiddleName", u."LastName",
+                   u."ScholarDisplayName",
                    u."UserType",
                    u."AccountStatus", u."IsActive", u."EmailVerified",
                    u."Scholar_ID", u."Orcid_ID", u."Scopus_ID",

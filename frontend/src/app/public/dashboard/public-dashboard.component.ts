@@ -13,6 +13,7 @@ import {
   PublicApiService, OverviewResponse, DepartmentSummary,
   ResearcherSummary, TrendPoint, KpisResponse,
 } from '../services/public-api.service';
+import { researcherPrimaryName } from '../../shared/utils/researcher-name';
 
 Chart.register(...registerables);
 
@@ -265,11 +266,11 @@ Chart.register(...registerables);
                     <div *ngIf="!r.photo_url"
                          class="w-9 h-9 rounded-full bg-gray-900 text-white text-xs font-semibold
                                 flex items-center justify-center flex-shrink-0">
-                      {{ initials(r.full_name_ar || r.full_name_en) }}
+                      {{ initials(primaryName(r)) }}
                     </div>
                     <div class="min-w-0">
-                      <p class="font-medium text-gray-900 group-hover:text-indigo-700 transition-colors truncate">
-                        {{ r.full_name_ar }}
+                      <p class="font-medium text-gray-900 group-hover:text-indigo-700 transition-colors truncate" dir="auto">
+                        {{ primaryName(r) }}
                       </p>
                       <p class="text-xs text-gray-400 font-mono mt-0.5">{{ r.litrix_id }}</p>
                     </div>
@@ -476,6 +477,10 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
   initials(name: string | null | undefined): string {
     return (name || '').split(/\s+/).slice(0, 2)
       .map((s) => s[0] || '').join('').toUpperCase() || '?';
+  }
+
+  primaryName(r: ResearcherSummary): string {
+    return researcherPrimaryName(r);
   }
 
   // --- lifecycle ------------------------------------------------------

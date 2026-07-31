@@ -138,6 +138,12 @@ def _dept_cards_windowed(years, albaha_only=False):
     yk = _cites_expr('rp_all', years)
     affil_rp    = _affil_clause(albaha_only, 'rp')
     affil_rpall = _affil_clause(albaha_only, 'rp_all')
+    # A Scopus Quartile is a JOURNAL ranking: count it only for journal-venue
+    # papers (exclude Conference proceedings and Book chapters). Paper-level
+    # VenueType wins, journal fallback for safety.
+    jelig = ('(COALESCE(rp."VenueType", j."VenueType") IS NULL '
+             'OR (COALESCE(rp."VenueType", j."VenueType") NOT ILIKE \'Conference%%\' '
+             'AND COALESCE(rp."VenueType", j."VenueType") NOT IN (\'Book\', \'Preprint\')))')
     sql = f'''
         WITH dept_citations AS (
             SELECT dept AS did, SUM(cites) AS total_citations FROM (
@@ -151,15 +157,14 @@ def _dept_cards_windowed(years, albaha_only=False):
         )
         SELECT d."DepartmentID" AS department_id,
             COUNT(DISTINCT rp."PaperID") AS total_papers,
-            COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q1') AS total_q1_papers,
-            COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q2') AS total_q2_papers,
-            COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q3') AS total_q3_papers,
-            COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q4') AS total_q4_papers,
+            COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q1' AND {jelig}) AS total_q1_papers,
+            COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q2' AND {jelig}) AS total_q2_papers,
+            COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q3' AND {jelig}) AS total_q3_papers,
+            COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q4' AND {jelig}) AS total_q4_papers,
             COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = 'Scopus' OR jr."Quartile" IS NOT NULL) AS total_scopus_papers,
             COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = 'ISI') AS total_isi_papers,
             COUNT(DISTINCT rp."PaperID") FILTER (WHERE COALESCE(rp."VenueType", j."VenueType") ILIKE 'Conference%%') AS conference_papers,
-            COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."PaperID" IS NOT NULL
-                AND (COALESCE(rp."VenueType", j."VenueType") IS NULL OR COALESCE(rp."VenueType", j."VenueType") NOT ILIKE 'Conference%%')) AS journal_papers,
+            COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."PaperID" IS NOT NULL AND {jelig}) AS journal_papers,
             COALESCE(MAX(dc.total_citations), 0) AS total_citations
         FROM "Department" d
         LEFT JOIN "Works_In" w ON w."DepartmentID" = d."DepartmentID" AND w."IsCurrentPosition" = TRUE
@@ -194,10 +199,13 @@ def _researcher_rows_windowed(years, user_ids, albaha_only=False):
     year_strs = [str(y) for y in years]
     yk = _cites_expr('rp', years)
     affil = _affil_clause(albaha_only, 'rp')
+    # Quartile is a journal ranking: exclude Conference/Book venues from Q1.
+    jelig = ('(rp."VenueType" IS NULL '
+             'OR (rp."VenueType" NOT ILIKE \'Conference%%\' AND rp."VenueType" NOT IN (\'Book\', \'Preprint\')))')
     sql = f'''
         SELECT a."UserID" AS uid,
             COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."PubYear" = ANY(%s)) AS total_papers,
-            COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."PubYear" = ANY(%s) AND jr."Quartile" = 'Q1') AS q1_papers,
+            COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."PubYear" = ANY(%s) AND jr."Quartile" = 'Q1' AND {jelig}) AS q1_papers,
             COALESCE(SUM({yk}), 0) AS total_citations
         FROM "Authors" a
         JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"

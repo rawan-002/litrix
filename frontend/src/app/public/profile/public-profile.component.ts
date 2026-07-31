@@ -11,6 +11,7 @@ import { Chart, registerables } from 'chart.js';
 import {
   PublicApiService, ResearcherProfile, PaperSummary, PaperDetailResponse,
 } from '../services/public-api.service';
+import { researcherPrimaryName } from '../../shared/utils/researcher-name';
 
 Chart.register(...registerables);
 
@@ -52,12 +53,8 @@ const CHART_MIN_YEAR = 2021;
                 </div>
                 <div class="min-w-0 sm:pr-20">
                   <h1 class="text-2xl sm:text-3xl font-semibold text-gray-900 tracking-tight leading-tight">
-                    {{ p.full_name_ar }}
+                    {{ primaryName(p) }}
                   </h1>
-                  <p *ngIf="p.full_name_en && p.full_name_en !== p.full_name_ar"
-                     class="text-base text-gray-500 mt-0.5">
-                    {{ p.full_name_en }}
-                  </p>
                   <p class="text-sm text-gray-600 mt-2">
                     <span *ngIf="p.academic_rank">{{ p.academic_rank }} · </span>
                     {{ p.department_name || 'College of Computing & IT' }}
@@ -391,9 +388,12 @@ export class PublicProfileComponent implements OnInit, AfterViewInit {
     return Math.round((total / papers.length) * 10) / 10;
   });
 
+  primaryName(p: ResearcherProfile | null): string {
+    return researcherPrimaryName(p);
+  }
+
   readonly initials = computed(() => {
-    const p = this.profile();
-    const name = p?.full_name_ar || p?.full_name_en || '';
+    const name = researcherPrimaryName(this.profile());
     const parts = name.split(/\s+/).filter(Boolean).slice(0, 2);
     return parts.map(x => x[0] || '').join('').toUpperCase() || '?';
   });

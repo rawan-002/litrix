@@ -16,11 +16,14 @@ google-search-results==2.4.2
 # runs it after each incremental scrape). `requests` is a hard dependency
 # of that script; pypdf + beautifulsoup4 + lxml power its PDF and
 # publisher-HTML crawling tiers (imported lazily — without them those tiers
-# degrade gracefully to OpenAlex/Crossref only).
+# degrade gracefully to OpenAlex/Crossref only). selenium powers the
+# IEEE-only browser-render tier (also lazy-imported — needs a local Chrome
+# install too; without either, that tier degrades to inconclusive).
 requests==2.32.3
 pypdf==4.3.1
 beautifulsoup4==4.12.3
 lxml==5.2.2
+selenium==4.25.0
 
 gunicorn==22.0.0
 whitenoise==6.7.0

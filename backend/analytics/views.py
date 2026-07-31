@@ -161,7 +161,10 @@ def paper_detail(request, paper_id):
 
         # Al-Baha researchers attributed to this paper
         cur.execute('''
-            SELECT u."UserID", u."FullName_Ar", d."DepartmentName"
+            SELECT u."UserID", u."FullName_Ar",
+                   COALESCE(NULLIF(u."ScholarDisplayName", ''),
+                            TRIM(CONCAT_WS(' ', u."FirstName", u."LastName"))) AS full_name_en,
+                   d."DepartmentName"
             FROM "Authors" a
             JOIN "Users" u ON u."UserID" = a."UserID"
             LEFT JOIN "Works_In" w ON w."UserID" = u."UserID" AND w."IsCurrentPosition" = TRUE
@@ -170,7 +173,7 @@ def paper_detail(request, paper_id):
             ORDER BY a."AuthorOrder" NULLS LAST
         ''', [paper_id])
         paper['albaha_authors'] = [
-            {'user_id': r[0], 'full_name_ar': r[1], 'department_name': r[2]}
+            {'user_id': r[0], 'full_name_ar': r[1], 'full_name_en': r[2], 'department_name': r[3]}
             for r in cur.fetchall()
         ]
 
@@ -339,7 +342,15 @@ def yearly_breakdown(request):
             SELECT
                 paper_id, title, doi, citations, journal_name,
                 venue_type, quartile, impact_factor, indexing,
-                department_id, department_name, authors_ar
+                department_id, department_name, authors_ar,
+                (SELECT string_agg(DISTINCT COALESCE(
+                            NULLIF(u."ScholarDisplayName", ''),
+                            NULLIF(TRIM(BOTH FROM concat_ws(' ', u."FirstName", u."LastName")), ''),
+                            u."FullName_Ar"), ', ')
+                   FROM "Authors" a
+                   JOIN "Users" u ON u."UserID" = a."UserID"
+                  WHERE a."PaperID" = v_paper_details.paper_id
+                    AND u."UserType" = 'Researcher') AS authors_en
             FROM v_paper_details
             WHERE pub_year = %s
               AND department_id IS NOT NULL{dept_clause}
@@ -419,13 +430,27 @@ def overview(request):
 
     from django.db import connection
     with connection.cursor() as cur:
-        # Papers KPI plus Q1/Scopus/ISI counts — papers published in window.
+        # Papers KPI plus Q1-Q4/Scopus/ISI counts — papers published in window.
         # The author-in-dept clause is appended for HoDs only.
+        # A Scopus Quartile is a JOURNAL ranking: gate Q1-Q4 on venue so a
+        # Conference paper / Book chapter linked to a ranked container is not
+        # counted as a Q-ranked journal paper. Paper-level VenueType (fully
+        # populated; NULL -> journal-eligible). scopus/isi are NOT gated.
+        # %% because kpi_sql is passed to execute() with params.
+        jelig = (' AND (rp."VenueType" IS NULL OR (rp."VenueType" NOT ILIKE '
+                 '\'Conference%%\' AND rp."VenueType" NOT IN (\'Book\', \'Preprint\')))')
         kpi_sql = (
             'SELECT COUNT(DISTINCT rp."PaperID") AS papers, '
-            '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q1\') AS q1, '
+            '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q1\'' + jelig + ') AS q1, '
             '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = \'Scopus\' OR jr."Quartile" IS NOT NULL) AS scopus, '
-            '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = \'ISI\') AS isi '
+            '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = \'ISI\') AS isi, '
+            '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q2\'' + jelig + ') AS q2, '
+            '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q3\'' + jelig + ') AS q3, '
+            '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q4\'' + jelig + ') AS q4, '
+            '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."VenueType" = \'Journal\') AS journal, '
+            '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."VenueType" ILIKE \'Conference%%\') AS conference, '
+            '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."VenueType" = \'Book\') AS book, '
+            '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."VenueType" = \'Preprint\') AS preprint '
             'FROM "ResearchPaper" rp '
             'LEFT JOIN LATERAL (SELECT "Quartile","ImpactFactor" FROM "JournalRankings" '
             '  WHERE "JournalID" = rp."JournalID" ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1) jr ON TRUE '
@@ -473,14 +498,17 @@ def overview(request):
         cur.execute(cit_sql, cit_params)
         citations_row = cur.fetchone()
 
-        # paper_count_row is (papers, q1, scopus, isi); splice the citation total
-        # in to get the (papers, citations, q1, scopus, isi) shape.
+        # paper_count_row is (papers, q1, scopus, isi, q2, q3, q4); splice the
+        # citation total in to get (papers, citations, q1, scopus, isi, q2, q3, q4).
         paper_totals = (
             paper_count_row[0],
             citations_row[0],
             paper_count_row[1],
             paper_count_row[2],
             paper_count_row[3],
+            paper_count_row[4],
+            paper_count_row[5],
+            paper_count_row[6],
         )
 
         # Top researchers: papers PUBLISHED in window + citations
@@ -508,7 +536,9 @@ def overview(request):
                 u."FullName_Ar",
                 d."DepartmentName",
                 COALESCE(p.focus_papers, 0) AS focus_papers,
-                COALESCE(c.focus_citations, 0) AS focus_citations
+                COALESCE(c.focus_citations, 0) AS focus_citations,
+                COALESCE(NULLIF(u."ScholarDisplayName", ''),
+                         TRIM(CONCAT_WS(' ', u."FirstName", u."LastName"))) AS full_name_en
             FROM "Users" u
             LEFT JOIN papers_in_window    p ON p."UserID" = u."UserID"
             LEFT JOIN citations_in_window c ON c."UserID" = u."UserID"
@@ -551,6 +581,12 @@ def overview(request):
         # of joining authors→papers→citations; each dept-researcher contributes
         # once.
         year_keys_dept = _cites_expr('rp_all', years)
+        # Quartile is a JOURNAL ranking: gate Q1-Q4 (and journal_papers) on venue
+        # so Conference proceedings / Book chapters are excluded. COALESCE:
+        # paper-level VenueType wins, Journals fallback. %% -> % (execute params).
+        jelig = ('AND (COALESCE(rp."VenueType", j."VenueType") IS NULL '
+                 'OR (COALESCE(rp."VenueType", j."VenueType") NOT ILIKE \'Conference%%\' '
+                 'AND COALESCE(rp."VenueType", j."VenueType") NOT IN (\'Book\', \'Preprint\')))')
         cur.execute(f'''
             WITH dept_citations AS (
                 SELECT dept AS "DepartmentID", SUM(cites) AS total_citations
@@ -574,22 +610,27 @@ def overview(request):
                 COUNT(DISTINCT u."UserID") FILTER (WHERE r."LastSyncedAt" IS NOT NULL) AS active_researchers,
                 COUNT(DISTINCT rp."PaperID") AS total_papers,
                 COALESCE(MAX(dc.total_citations), 0) AS total_citations,
-                COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q1') AS total_q1_papers,
-                COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q2') AS total_q2_papers,
-                COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q3') AS total_q3_papers,
-                COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q4') AS total_q4_papers,
+                COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q1' {jelig}) AS total_q1_papers,
+                COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q2' {jelig}) AS total_q2_papers,
+                COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q3' {jelig}) AS total_q3_papers,
+                COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q4' {jelig}) AS total_q4_papers,
                 COUNT(DISTINCT rp."PaperID")
                     FILTER (WHERE rp."Indexing" = 'Scopus' OR jr."Quartile" IS NOT NULL) AS total_scopus_papers,
                 COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = 'ISI') AS total_isi_papers,
                 -- Venue split: 'Conference Proceedings' folds into Conference;
-                -- Book/Book Series/NULL fold into Journal (same rule as
-                -- v_department_stats after 20260607_dept_stats_split).
+                -- Book chapters are their own type; NULL folds into Journal (same
+                -- rule as v_department_stats after 20260702_venue_gate_quartile_kpis).
                 COUNT(DISTINCT rp."PaperID")
                     FILTER (WHERE COALESCE(rp."VenueType", j."VenueType") ILIKE 'Conference%%') AS conference_papers,
                 COUNT(DISTINCT rp."PaperID")
                     FILTER (WHERE rp."PaperID" IS NOT NULL
                             AND (COALESCE(rp."VenueType", j."VenueType") IS NULL
-                                 OR COALESCE(rp."VenueType", j."VenueType") NOT ILIKE 'Conference%%')) AS journal_papers
+                                 OR (COALESCE(rp."VenueType", j."VenueType") NOT ILIKE 'Conference%%'
+                                     AND COALESCE(rp."VenueType", j."VenueType") NOT IN ('Book', 'Preprint')))) AS journal_papers,
+                COUNT(DISTINCT rp."PaperID")
+                    FILTER (WHERE COALESCE(rp."VenueType", j."VenueType") = 'Book') AS book_papers,
+                COUNT(DISTINCT rp."PaperID")
+                    FILTER (WHERE COALESCE(rp."VenueType", j."VenueType") = 'Preprint') AS preprint_papers
             FROM "Department" d
             LEFT JOIN "Works_In" w ON w."DepartmentID" = d."DepartmentID" AND w."IsCurrentPosition" = TRUE
             LEFT JOIN "Users" u ON u."UserID" = w."UserID" AND u."UserType" = 'Researcher'
@@ -687,6 +728,13 @@ def overview(request):
             'q1_papers':           paper_totals[2] or 0,
             'scopus_papers':       paper_totals[3] or 0,
             'isi_papers':          paper_totals[4] or 0,
+            'q2_papers':           paper_totals[5] or 0,
+            'q3_papers':           paper_totals[6] or 0,
+            'q4_papers':           paper_totals[7] or 0,
+            'journal_papers':      (paper_count_row[7] if len(paper_count_row) > 7 else 0) or 0,
+            'conference_papers':   (paper_count_row[8] if len(paper_count_row) > 8 else 0) or 0,
+            'book_papers':         (paper_count_row[9] if len(paper_count_row) > 9 else 0) or 0,
+            'preprint_papers':     (paper_count_row[10] if len(paper_count_row) > 10 else 0) or 0,
             'avg_h_index':         float(dept_agg['avg_h'] or 0),
         },
         'top_researchers': [
@@ -697,12 +745,130 @@ def overview(request):
                 'total_papers':    r[3],
                 'total_citations': r[4],
                 'h_index':         0,
+                'full_name_en':    r[5],
             }
             for r in top_researchers_rows
         ],
         'top_papers':      top_papers,
         'departments':     departments,
     })
+
+
+@decorators.api_view(['GET'])
+def classified_papers(request):
+    """GET /api/stats/classified-papers/ (?year=&years=&affiliation=albaha&department_id=&tier=)
+
+    Full paper list behind the overview dashboard's "Quartile & Indexing"
+    donut, for its "view all" modal. Same year/department/affiliation filters
+    and the same paper-scoping rules as overview() (EXISTS on Authors, only
+    department-scoped via Works_In.IsCurrentPosition when a department is
+    actually selected) so the count always matches what's on screen.
+    Each paper gets a `tier` of Q1 / Scopus / ISI / Other, using the same
+    precedence the donut buckets use.
+    """
+    from django.db import connection
+
+    years = _resolve_years(request)
+    albaha_only = _albaha_only(request)
+    affil_rp = _affil_clause(albaha_only, 'rp')
+
+    u = request.user
+    if not (u and u.is_authenticated and (
+            u.has_litrix_perm('view_all_researchers') or
+            u.has_litrix_perm('view_dept_researchers'))):
+        return response.Response({'error': 'Forbidden'}, status=403)
+
+    hod_dept_id = _hod_scope_department_id(request)
+    dept_id = hod_dept_id
+    if dept_id is None:
+        raw = request.query_params.get('department_id')
+        if raw and raw.lstrip('-').isdigit():
+            dept_id = int(raw)
+    if dept_id == -1:
+        return response.Response({'count': 0, 'papers': []})
+
+    tier_filter = (request.query_params.get('tier') or '').strip().lower()
+    # Optional venue-type filter for the venue donut's "view all" modal:
+    # journal / conference / book / preprint / unclassified.
+    venue_filter = (request.query_params.get('venue') or '').strip().lower()
+    yk = _cites_expr('rp', years)
+
+    sql = (
+        f'SELECT rp."PaperID", rp."Title", rp."PubYear", rp."DOI", '
+        f'       rp."Indexing", jr."Quartile", '
+        f'       COALESCE(rp."VenueType", j."VenueType") AS venue_type, '
+        f'       j."JournalName", COALESCE(({yk}), 0) AS citations '
+        'FROM "ResearchPaper" rp '
+        'LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID" '
+        'LEFT JOIN LATERAL (SELECT "Quartile" FROM "JournalRankings" '
+        '  WHERE "JournalID" = rp."JournalID" '
+        '  ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1) jr ON TRUE '
+        'WHERE rp."PubYear" = ANY(%s) '
+        '  AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"'
+    )
+    params = [str(y) for y in years] + [years]
+    if dept_id is not None:
+        sql += (
+            ' AND EXISTS (SELECT 1 FROM "Works_In" w2 '
+            '              WHERE w2."UserID" = a."UserID" '
+            '                AND w2."DepartmentID" = %s '
+            '                AND w2."IsCurrentPosition" = TRUE)'
+        )
+        params.append(dept_id)
+    sql += ')'
+    sql += affil_rp
+    sql += ' ORDER BY rp."PubYear" DESC, rp."Title"'
+
+    # Journal-venue eligibility for the Q1-Q4 buckets: a quartile is a
+    # journal ranking, so stats.py's per-department totals exclude
+    # conference/book venues from every quartile bucket. Only applied when a
+    # department is actually selected, mirroring overview()'s
+    # institution-wide kpi_sql (which never gates quartiles on venue type),
+    # so the modal's count always matches the chart that opened it.
+    def _quartile_eligible(venue_type):
+        if dept_id is None:
+            return True
+        if not venue_type:
+            return True
+        v = venue_type.lower()
+        return not v.startswith('conference') and v != 'book'
+
+    with connection.cursor() as cur:
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+
+    papers = []
+    for (pid, title, year, doi, indexing, quartile, venue_type, journal_name, citations) in rows:
+        if quartile in ('Q1', 'Q2', 'Q3', 'Q4') and _quartile_eligible(venue_type):
+            tier = quartile
+        else:
+            tier = 'Other'
+        if tier_filter and tier_filter != 'all' and tier.lower() != tier_filter:
+            continue
+        if venue_filter and venue_filter != 'all':
+            vt = (venue_type or 'unclassified').lower()
+            if venue_filter == 'conference':
+                if not vt.startswith('conference'):
+                    continue
+            elif venue_filter == 'unclassified':
+                if venue_type:
+                    continue
+            elif vt != venue_filter:
+                continue
+        papers.append({
+            'paper_id':     pid,
+            'title':        title,
+            'pub_year':     year,
+            'doi':          doi,
+            'indexing':     indexing,
+            'quartile':     quartile,
+            'venue_type':   venue_type,
+            'journal_name': journal_name,
+            'citations':    int(citations or 0),
+            'tier':         tier,
+        })
+
+    return response.Response({'count': len(papers), 'papers': papers})
 
 
 # Spotlight-style global search returning { profiles: [...], papers: [...] }.
@@ -757,7 +923,8 @@ def universal_search(request):
                 u."UserID",
                 u."Litrix_ID",
                 u."FullName_Ar",
-                TRIM(CONCAT_WS(' ', u."FirstName", u."LastName")) AS full_name_en,
+                COALESCE(NULLIF(u."ScholarDisplayName", ''),
+                         TRIM(CONCAT_WS(' ', u."FirstName", u."LastName"))) AS full_name_en,
                 u."UserType",
                 d."DepartmentName",
                 (SELECT COUNT(*) FROM "Authors" a WHERE a."UserID" = u."UserID") AS papers,
@@ -840,12 +1007,15 @@ def universal_search(request):
                 ) AS citations,
                 -- compact summary of the first 3 system authors, for the card
                 (
-                    SELECT STRING_AGG(u2."FullName_Ar", '  ·  ')
+                    SELECT STRING_AGG(u2.name, '  ·  ')
                     FROM (
-                        SELECT u3."FullName_Ar" FROM "Authors" a2
+                        SELECT COALESCE(NULLIF(u3."ScholarDisplayName", ''),
+                                        NULLIF(TRIM(CONCAT_WS(' ', u3."FirstName", u3."LastName")), '')) AS name
+                        FROM "Authors" a2
                         JOIN "Users" u3 ON u3."UserID" = a2."UserID"
                         WHERE a2."PaperID" = rp."PaperID"
-                          AND u3."FullName_Ar" IS NOT NULL
+                          AND COALESCE(NULLIF(u3."ScholarDisplayName", ''),
+                                       NULLIF(TRIM(CONCAT_WS(' ', u3."FirstName", u3."LastName")), '')) IS NOT NULL
                         ORDER BY a2."AuthorOrder" NULLS LAST
                         LIMIT 3
                     ) u2

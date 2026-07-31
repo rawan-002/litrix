@@ -130,6 +130,7 @@ def overview(request):
                 SELECT DISTINCT
                     rp."PaperID",
                     rp."JournalID",
+                    rp."VenueType",
                     COALESCE(
                         (rp."RawData_Log"->'cited_by'->>'value')::int,
                         (rp."RawData_Log"->>'cited_by_count')::int,
@@ -147,10 +148,14 @@ def overview(request):
                    FROM "Users" u
                    WHERE u."UserType" = 'Researcher')                          AS total_researchers,
                 (SELECT COALESCE(SUM(cites), 0) FROM attributed_papers)        AS total_citations,
+                -- Q1 is a JOURNAL ranking: exclude Conference/Book venues.
                 (SELECT COUNT(DISTINCT ap."PaperID")
                    FROM attributed_papers ap
                    JOIN "JournalRankings" jr ON jr."JournalID" = ap."JournalID"
-                                            AND jr."Quartile" = 'Q1')          AS q1_papers,
+                                            AND jr."Quartile" = 'Q1'
+                   WHERE ap."VenueType" IS NULL
+                      OR (ap."VenueType" NOT ILIKE 'Conference%%'
+                          AND ap."VenueType" NOT IN ('Book', 'Preprint')))    AS q1_papers,
                 (SELECT COALESCE(ROUND(AVG(h_index))::int, 0)
                    FROM ({H_INDEX_PER_USER_SQL}) hi
                    WHERE h_index > 0)                                          AS avg_h_index
@@ -211,7 +216,10 @@ def departments_list(request):
                     FILTER (WHERE rp."PubYear" = ANY(%s))               AS papers_count,
                 COUNT(DISTINCT a."PaperID")
                     FILTER (WHERE jr."Quartile" = 'Q1'
-                              AND rp."PubYear" = ANY(%s))               AS q1_papers,
+                              AND rp."PubYear" = ANY(%s)
+                              AND (rp."VenueType" IS NULL
+                                   OR (rp."VenueType" NOT ILIKE 'Conference%%'
+                                       AND rp."VenueType" NOT IN ('Book', 'Preprint'))))   AS q1_papers,
                 COALESCE(
                     (SELECT SUM(cites) FROM dept_papers dp
                      WHERE dp."DepartmentID" = d."DepartmentID"),
@@ -272,7 +280,8 @@ def researchers_list(request):
                 u."UserID",
                 u."Litrix_ID",
                 u."FullName_Ar",
-                TRIM(CONCAT_WS(' ', u."FirstName", u."MiddleName", u."LastName"))
+                COALESCE(NULLIF(u."ScholarDisplayName", ''),
+                         TRIM(CONCAT_WS(' ', u."FirstName", u."MiddleName", u."LastName")))
                                                                 AS full_name_en,
                 d."DepartmentID",
                 d."DepartmentName",
@@ -352,7 +361,8 @@ def researcher_profile(request, litrix_id: str):
                 u."UserID",
                 u."Litrix_ID",
                 u."FullName_Ar",
-                TRIM(CONCAT_WS(' ', u."FirstName", u."MiddleName", u."LastName"))
+                COALESCE(NULLIF(u."ScholarDisplayName", ''),
+                         TRIM(CONCAT_WS(' ', u."FirstName", u."MiddleName", u."LastName")))
                                                             AS full_name_en,
                 d."DepartmentID",
                 d."DepartmentName",
@@ -384,7 +394,10 @@ def researcher_profile(request, litrix_id: str):
                     (rp."RawData_Log"->>'cited_by_count')::int,
                     0)), 0)                                          AS total_citations,
                 COUNT(DISTINCT rp."PaperID")
-                    FILTER (WHERE jr."Quartile" = 'Q1')              AS q1_papers,
+                    FILTER (WHERE jr."Quartile" = 'Q1'
+                              AND (rp."VenueType" IS NULL
+                                   OR (rp."VenueType" NOT ILIKE 'Conference%%'
+                                       AND rp."VenueType" NOT IN ('Book', 'Preprint')))) AS q1_papers,
                 MIN(rp."PubYear")                                    AS first_year,
                 MAX(rp."PubYear")                                    AS last_year
             FROM "ResearchPaper" rp
@@ -440,7 +453,7 @@ def researcher_profile(request, litrix_id: str):
                     cu."Litrix_ID" AS litrix_id,
                     cu."PhotoURL"  AS photo_url,
                     COALESCE(
-                        cu."FullName_Ar",
+                        NULLIF(cu."ScholarDisplayName", ''),
                         NULLIF(TRIM(CONCAT_WS(' ', cu."FirstName", cu."LastName")), ''),
                         co."AuthorNameRaw"
                     )              AS name,
@@ -450,7 +463,9 @@ def researcher_profile(request, litrix_id: str):
                                   AND co."UserID" IS DISTINCT FROM me."UserID"
                 LEFT JOIN "Users" cu ON cu."UserID" = co."UserID"
                 WHERE me."UserID" = %s
-                  AND COALESCE(cu."FullName_Ar", co."AuthorNameRaw") IS NOT NULL
+                  AND COALESCE(NULLIF(cu."ScholarDisplayName", ''),
+                               NULLIF(TRIM(CONCAT_WS(' ', cu."FirstName", cu."LastName")), ''),
+                               co."AuthorNameRaw") IS NOT NULL
             ) sub
             GROUP BY user_id, litrix_id, name, photo_url
             ORDER BY (user_id IS NOT NULL) DESC, shared_papers DESC, name
@@ -668,7 +683,9 @@ def paper_detail(request, paper_id: int):
 
         # Internal authors (registered researchers)
         cur.execute('''
-            SELECT u."UserID", u."Litrix_ID", u."FullName_Ar",
+            SELECT u."UserID", u."Litrix_ID",
+                   COALESCE(NULLIF(u."ScholarDisplayName", ''),
+                            NULLIF(TRIM(CONCAT_WS(' ', u."FirstName", u."LastName")), '')),
                    a."AuthorOrder", a."IsCorrespondingAuthor"
             FROM "Authors" a
             JOIN "Users" u ON u."UserID" = a."UserID"
@@ -1016,6 +1033,14 @@ def export_excel(request):
     venue_case_ap = _venue_case('ap')
     venue_case_rp = _venue_case('rp')
 
+    # Quartile eligibility: a Scopus Quartile is a JOURNAL ranking, so it counts
+    # only for journal-venue papers -- exclude Conference proceedings and Book
+    # chapters. Paper-level VenueType (curated, fully populated bar a few NULLs);
+    # NULL is journal-eligible. %% -> % (these queries run through execute params).
+    jelig_ap = ('(ap."VenueType" IS NULL '
+                'OR (ap."VenueType" NOT ILIKE \'Conference%%\' '
+                'AND ap."VenueType" NOT IN (\'Book\', \'Preprint\')))')
+
     years_label = ', '.join(str(y) for y in years)
 
     # --- Overview sheet ---
@@ -1061,7 +1086,10 @@ def export_excel(request):
                     (SELECT COUNT(DISTINCT ap."PaperID")
                        FROM attributed_papers ap
                        JOIN "JournalRankings" jr ON jr."JournalID" = ap."JournalID"
-                                                AND jr."Quartile" = 'Q1'),
+                                                AND jr."Quartile" = 'Q1'
+                       WHERE ap."VenueType" IS NULL
+                          OR (ap."VenueType" NOT ILIKE 'Conference%%'
+                              AND ap."VenueType" NOT IN ('Book', 'Preprint'))),
                     (SELECT COALESCE(SUM(cites), 0) FROM attributed_papers),
                     (SELECT COALESCE(ROUND(AVG(h_index)::numeric, 1), 0)
                        FROM ({H_INDEX_PER_USER_SQL}) hi WHERE h_index > 0)
@@ -1099,6 +1127,7 @@ def export_excel(request):
                         SELECT DISTINCT
                             rp."PaperID",
                             rp."JournalID",
+                            rp."VenueType",
                             COALESCE(
                                 (rp."RawData_Log"->'cited_by'->>'value')::int,
                                 (rp."RawData_Log"->>'cited_by_count')::int, 0) AS cites
@@ -1115,10 +1144,10 @@ def export_excel(request):
                             FILTER (WHERE {venue_case_ap} = 'journal'),
                         COUNT(DISTINCT ap."PaperID")
                             FILTER (WHERE {venue_case_ap} = 'conference'),
-                        COUNT(DISTINCT ap."PaperID") FILTER (WHERE jr."Quartile" = 'Q1'),
-                        COUNT(DISTINCT ap."PaperID") FILTER (WHERE jr."Quartile" = 'Q2'),
-                        COUNT(DISTINCT ap."PaperID") FILTER (WHERE jr."Quartile" = 'Q3'),
-                        COUNT(DISTINCT ap."PaperID") FILTER (WHERE jr."Quartile" = 'Q4')
+                        COUNT(DISTINCT ap."PaperID") FILTER (WHERE jr."Quartile" = 'Q1' AND {jelig_ap}),
+                        COUNT(DISTINCT ap."PaperID") FILTER (WHERE jr."Quartile" = 'Q2' AND {jelig_ap}),
+                        COUNT(DISTINCT ap."PaperID") FILTER (WHERE jr."Quartile" = 'Q3' AND {jelig_ap}),
+                        COUNT(DISTINCT ap."PaperID") FILTER (WHERE jr."Quartile" = 'Q4' AND {jelig_ap})
                     FROM attributed_papers ap
                     LEFT JOIN "Journals" j ON j."JournalID" = ap."JournalID"
                     LEFT JOIN LATERAL (

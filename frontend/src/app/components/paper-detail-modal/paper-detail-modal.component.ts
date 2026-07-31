@@ -3,6 +3,7 @@
 import { Component, Input, Output, EventEmitter, inject, signal, computed, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { LitrixApiService } from '../../services/litrix-api.service';
+import { researcherPrimaryName } from '../../shared/utils/researcher-name';
 
 @Component({
   selector: 'app-paper-detail-modal',
@@ -28,6 +29,10 @@ export class PaperDetailModalComponent implements OnChanges {
     const a = this.data()?.abstract;
     return typeof a === 'string' && a.length > this.ABSTRACT_PREVIEW_CHARS;
   });
+
+  primaryName(a: any): string {
+    return researcherPrimaryName(a);
+  }
 
   readonly abstractDisplay = computed(() => {
     const a = this.data()?.abstract || '';

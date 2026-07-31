@@ -10,6 +10,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Subject, debounceTime, distinctUntilChanged, switchMap, of } from 'rxjs';
 import { LitrixApiService } from '../../services/litrix-api.service';
+import { researcherPrimaryName } from '../../shared/utils/researcher-name';
 import {
   SearchProfileResult, SearchPaperResult,
 } from '../../models/litrix.models';
@@ -106,8 +107,12 @@ export class SearchModalComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   initials(p: SearchProfileResult): string {
-    const src = p.full_name_ar || p.full_name_en || '';
+    const src = researcherPrimaryName(p);
     return src.split(/\s+/).slice(0, 2)
       .map(s => s[0] || '').join('').toUpperCase() || '?';
+  }
+
+  primaryName(p: SearchProfileResult): string {
+    return researcherPrimaryName(p, 'Unnamed');
   }
 }

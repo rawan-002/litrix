@@ -67,7 +67,7 @@
                   </div>
                   <div class="flex-1 min-w-0">
                     <div class="text-sm font-medium text-ink-900 truncate">
-                      {{ p.full_name_ar || p.full_name_en || 'Unnamed' }}
+                      {{ primaryName(p) }}
                     </div>
                     <div class="flex items-center gap-2 text-xs text-ink-500 mt-0.5">
                       @if (p.department_name) {

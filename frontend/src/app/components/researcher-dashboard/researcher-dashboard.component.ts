@@ -5,6 +5,7 @@ import { Component, OnInit, Input, inject, signal, computed } from '@angular/cor
 import { CommonModule } from '@angular/common';
 import { LitrixApiService } from '../../services/litrix-api.service';
 import { ResearcherProfilePayload } from '../../models/litrix.models';
+import { isLatinName, joinEnglishName } from '../../shared/utils/researcher-name';
 import { CitationsChartComponent } from '../citations-chart/citations-chart.component';
 
 interface DonutSlice {
@@ -39,6 +40,14 @@ export class ResearcherDashboardComponent implements OnInit {
 
   // Clip both bar charts before this year, matching the admin dashboard.
   private readonly CHART_YEAR_FLOOR = 2019;
+
+  readonly identityName = computed(() => {
+    const id = this.data()?.identity;
+    if (!id) return '';
+    const fallbackEn = joinEnglishName(id.first_name, id.last_name);
+    const en = id.scholar_display_name || fallbackEn;
+    return (isLatinName(en) ? en : '') || 'Researcher';
+  });
 
   ngOnInit() {
     this.load();

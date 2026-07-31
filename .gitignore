@@ -51,6 +51,9 @@ scraper_logs/
 backend/.authorships_cache.json
 backend/ghost_papers_review.xlsx
 backend/*.xlsx
+# Verifier resume-checkpoints (large generated JSONL, not app source).
+backend/*_checkpoint.jsonl
+backend/venue_verify_checkpoint.jsonl
 
 # Large reference data that lives outside git (downloaded on demand).
 # scimagojr2025.csv is 11 MB and updated yearly by the Scimago import.

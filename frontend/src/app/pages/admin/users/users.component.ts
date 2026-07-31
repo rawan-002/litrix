@@ -3,12 +3,14 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../../environments/environment';
+import { isLatinName, joinEnglishName } from '../../../shared/utils/researcher-name';
 
 
 interface User {
   UserID: number;
   Email: string;
   FullName_Ar: string | null;
+  ScholarDisplayName: string | null;
   FirstName: string;
   MiddleName: string | null;
   LastName: string;
@@ -66,6 +68,12 @@ export class UsersComponent {
   readonly loading = signal(true);
   readonly search = signal('');
   readonly editingId = signal<number | null>(null);
+
+  displayName(u: User): string {
+    const fallbackEn = joinEnglishName(u.FirstName, u.LastName);
+    const en = u.ScholarDisplayName || fallbackEn;
+    return (isLatinName(en) ? en : '') || u.Email;
+  }
 
   // Row currently being deleted - drives its spinner / disabled state.
   readonly deletingId = signal<number | null>(null);

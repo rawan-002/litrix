@@ -14,9 +14,10 @@ import { LitrixApiService } from '../../services/litrix-api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { AffiliationService } from '../../core/services/affiliation.service';
 import {
-  OverviewPayload, YearlyBreakdownPayload, PaperDetail,
+  OverviewPayload, YearlyBreakdownPayload, PaperDetail, ClassifiedPaper,
 } from '../../models/litrix.models';
 import { environment } from '../../../environments/environment';
+import { researcherPrimaryName } from '../../shared/utils/researcher-name';
 import { PaperDetailModalComponent } from
   '../paper-detail-modal/paper-detail-modal.component';
 import { CitationsChartComponent } from
@@ -128,7 +129,9 @@ export class OverviewDashboardComponent implements OnInit {
     if (!d) {
       return {
         researchers: 0, active_researchers: 0, papers: 0, citations: 0,
-        q1_papers: 0, scopus_papers: 0, isi_papers: 0, avg_h_index: 0,
+        q1_papers: 0, q2_papers: 0, q3_papers: 0, q4_papers: 0,
+        scopus_papers: 0, isi_papers: 0, avg_h_index: 0,
+        journal_papers: 0, conference_papers: 0, book_papers: 0, preprint_papers: 0,
       };
     }
     if (this.selectedDeptId() == null) return d.totals;
@@ -146,8 +149,15 @@ export class OverviewDashboardComponent implements OnInit {
       papers,
       citations,
       q1_papers:          dept.total_q1_papers     ?? 0,
+      q2_papers:          dept.total_q2_papers     ?? 0,
+      q3_papers:          dept.total_q3_papers     ?? 0,
+      q4_papers:          dept.total_q4_papers     ?? 0,
       scopus_papers:      dept.total_scopus_papers ?? 0,
       isi_papers:         dept.total_isi_papers    ?? 0,
+      journal_papers:     dept.journal_papers      ?? 0,
+      conference_papers:  dept.conference_papers   ?? 0,
+      book_papers:        dept.book_papers         ?? 0,
+      preprint_papers:    dept.preprint_papers     ?? 0,
       avg_h_index:        d.totals.avg_h_index,
     };
   });
@@ -161,6 +171,10 @@ export class OverviewDashboardComponent implements OnInit {
     if (!dept) return list;
     return list.filter(r => r.department_name === dept.department_name);
   });
+
+  primaryName(r: any): string {
+    return researcherPrimaryName(r);
+  }
 
   /** Top papers filtered to the selected dept's authors (best-effort). */
   readonly visibleTopPapers = computed<any[]>(() => {
@@ -219,21 +233,23 @@ export class OverviewDashboardComponent implements OnInit {
     return list.map(x => ({ ...x, pct: x.value / max }));
   });
 
-  /** Quartile / indexing donut: Q1, Scopus-only, ISI-only, Unindexed. */
+  /** Quartile donut: Q1-Q4, Unindexed. ISI dropped per request. */
   readonly chartQuartile = computed(() => {
     const t = this.filteredTotals();
-    const q1     = t.q1_papers || 0;
-    const scopus = Math.max(0, (t.scopus_papers || 0) - q1);  // Scopus excluding Q1
-    const isi    = Math.max(0, (t.isi_papers    || 0));
-    const total  = t.papers || 0;
-    const other  = Math.max(0, total - q1 - scopus - isi);
+    const q1    = t.q1_papers || 0;
+    const q2    = t.q2_papers || 0;
+    const q3    = t.q3_papers || 0;
+    const q4    = t.q4_papers || 0;
+    const total = t.papers || 0;
+    const other = Math.max(0, total - q1 - q2 - q3 - q4);
     if (total === 0) return null;
 
     const order: { label: string; value: number; color: string }[] = [
-      { label: 'Q1',        value: q1,     color: '#1c1917' },
-      { label: 'Scopus',    value: scopus, color: '#57534e' },
-      { label: 'ISI',       value: isi,    color: '#a8a29e' },
-      { label: 'Unindexed', value: other,  color: '#e7e5e4' },
+      { label: 'Q1',        value: q1,    color: '#1c1917' },
+      { label: 'Q2',        value: q2,    color: '#57534e' },
+      { label: 'Q3',        value: q3,    color: '#a8a29e' },
+      { label: 'Q4',        value: q4,    color: '#d6d3d1' },
+      { label: 'Unindexed', value: other, color: '#e7e5e4' },
     ].filter(s => s.value > 0);
 
     const radius = 56;
@@ -251,6 +267,142 @@ export class OverviewDashboardComponent implements OnInit {
     }
     return { slices, total, circumference: circ, radius };
   });
+
+  /** Venue-type donut: Journal / Conference / Book / Preprint / Unclassified.
+   *  Distinct categorical hues (unlike the ordinal grayscale quartile donut). */
+  readonly chartVenue = computed(() => {
+    const t = this.filteredTotals();
+    const journal    = t.journal_papers    || 0;
+    const conference = t.conference_papers || 0;
+    const book       = t.book_papers       || 0;
+    const preprint   = t.preprint_papers   || 0;
+    const total      = t.papers || 0;
+    const other = Math.max(0, total - journal - conference - book - preprint);
+    if (total === 0) return null;
+
+    const order: { label: string; venue: string; value: number; color: string }[] = [
+      { label: 'Journal',      venue: 'journal',      value: journal,    color: '#1c1917' },
+      { label: 'Conference',   venue: 'conference',   value: conference, color: '#b0752a' },
+      { label: 'Book',         venue: 'book',         value: book,       color: '#6d55e0' },
+      { label: 'Preprint',     venue: 'preprint',     value: preprint,   color: '#5a6b8c' },
+      { label: 'Unclassified', venue: 'unclassified', value: other,      color: '#d6d3d1' },
+    ].filter(s => s.value > 0);
+
+    const radius = 56;
+    const circ   = 2 * Math.PI * radius;
+    const slices: (DonutSlice & { venue: string })[] = [];
+    let cursor = 0;
+    for (const s of order) {
+      const pct = s.value / total;
+      const len = pct * circ;
+      slices.push({
+        label: s.label, venue: s.venue, value: s.value, color: s.color, pct,
+        dashOffset: -cursor, dashLength: len,
+      });
+      cursor += len;
+    }
+    return { slices, total, circumference: circ, radius };
+  });
+
+  readonly hoveredVenue = signal<string | null>(null);
+
+  // --- "View all classified papers" modal, opened from the donut ---------
+  // Filters live-follow the dashboard's own filter signals (dept/year/
+  // Al-Baha toggle) while the modal is open, so changing them on the page
+  // behind it refreshes the list instead of leaving it stale.
+  readonly classifiedModalOpen = signal<boolean>(false);
+  readonly classifiedTier      = signal<string | null>(null);
+  /** Venue-type filter for the modal (set when opened from the venue donut). */
+  readonly classifiedVenue     = signal<string | null>(null);
+  readonly classifiedPapers    = signal<ClassifiedPaper[]>([]);
+  readonly classifiedLoading   = signal<boolean>(false);
+  readonly classifiedSearch    = signal<string>('');
+  private classifiedReqSeq = 0;
+
+  // Lazy-render the list in batches instead of dumping 300+ rows into the
+  // DOM at once - keeps the modal snappy even on the institution-wide view.
+  readonly CLASSIFIED_BATCH = 40;
+  readonly classifiedShown  = signal<number>(40);
+
+  readonly filteredClassifiedPapers = computed(() => {
+    const q = this.classifiedSearch().trim().toLowerCase();
+    const list = this.classifiedPapers();
+    if (!q) return list;
+    return list.filter(p =>
+      p.title.toLowerCase().includes(q) ||
+      (p.journal_name || '').toLowerCase().includes(q)
+    );
+  });
+
+  readonly visibleClassifiedPapers = computed(() =>
+    this.filteredClassifiedPapers().slice(0, this.classifiedShown())
+  );
+
+  showMoreClassifiedPapers() {
+    this.classifiedShown.update(n => n + this.CLASSIFIED_BATCH);
+  }
+
+  // Reset the visible batch whenever the underlying list or the search text
+  // changes, so "load more" always starts from the top of the new result set.
+  private readonly classifiedResetEffect = effect(() => {
+    this.classifiedPapers();
+    this.classifiedSearch();
+    untracked(() => this.classifiedShown.set(this.CLASSIFIED_BATCH));
+  });
+
+  private readonly classifiedEffect = effect(() => {
+    const open = this.classifiedModalOpen();
+    // Track the filters so the effect reruns when any of them changes.
+    const deptId = this.selectedDeptId();
+    const years  = [...this.selectedYears()];
+    const albaha = this.albahaOnly();
+    const tier   = this.classifiedTier();
+    const venue  = this.classifiedVenue();
+    if (!open) return;
+
+    const seq = ++this.classifiedReqSeq;
+    this.classifiedLoading.set(true);
+    this.api.getClassifiedPapers({
+      years: years.length ? years : undefined,
+      albahaOnly: albaha,
+      departmentId: deptId,
+      tier,
+      venue,
+    }).subscribe({
+      next: (res) => {
+        if (seq !== this.classifiedReqSeq) return;
+        this.classifiedPapers.set(res.papers);
+        this.classifiedLoading.set(false);
+      },
+      error: () => {
+        if (seq !== this.classifiedReqSeq) return;
+        this.classifiedPapers.set([]);
+        this.classifiedLoading.set(false);
+      },
+    });
+  });
+
+  /** Opens the modal. `tier` is a donut slice label ('Q1'/'Q2'/'Q3'/'Q4'/
+   *  'Unindexed') or omitted to show every paper in scope. */
+  openClassifiedModal(tier?: string) {
+    this.classifiedSearch.set('');
+    this.classifiedVenue.set(null);
+    this.classifiedTier.set(tier === 'Unindexed' ? 'Other' : (tier ?? null));
+    this.classifiedModalOpen.set(true);
+  }
+
+  /** Opens the modal filtered to one venue type (from the venue donut).
+   *  `venue` is a slice key: journal/conference/book/preprint/unclassified. */
+  openVenueModal(venue?: string) {
+    this.classifiedSearch.set('');
+    this.classifiedTier.set(null);
+    this.classifiedVenue.set(venue ?? null);
+    this.classifiedModalOpen.set(true);
+  }
+
+  closeClassifiedModal() {
+    this.classifiedModalOpen.set(false);
+  }
 
   private buildBars(
     series: { label: number | string; value: number }[],
@@ -300,6 +452,15 @@ export class OverviewDashboardComponent implements OnInit {
   readonly yearlyData     = signal<YearlyBreakdownPayload | null>(null);
   readonly yearlyLoading  = signal<boolean>(false);
   readonly expandedDeptId = signal<number | null>(null);
+
+  /** Yearly breakdown scoped to the page's department filter: when a dept is
+   *  selected, show only that one card (matches Department Research Statistics). */
+  readonly visibleYearlyDepartments = computed<any[]>(() => {
+    const list = this.yearlyData()?.departments ?? [];
+    const id = this.selectedDeptId();
+    if (id == null) return list;
+    return list.filter(d => d.department_id === id);
+  });
 
   readonly showExportModal = signal<boolean>(false);
 

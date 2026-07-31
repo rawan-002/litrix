@@ -90,7 +90,8 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                     u."UserID",
                     u."Litrix_ID",
                     u."FullName_Ar",
-                    TRIM(CONCAT_WS(' ', u."FirstName", u."LastName")) AS full_name_en,
+                    COALESCE(NULLIF(u."ScholarDisplayName", ''),
+                             TRIM(CONCAT_WS(' ', u."FirstName", u."LastName"))) AS full_name_en,
                     d."DepartmentName",
                     (SELECT COUNT(*) FROM "Authors" a WHERE a."UserID" = u."UserID") AS papers
                 FROM "Users" u
@@ -131,7 +132,8 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                     u."UserID",
                     u."Litrix_ID",
                     u."FullName_Ar",
-                    TRIM(CONCAT_WS(' ', u."FirstName", u."LastName")) AS full_name_en,
+                    COALESCE(NULLIF(u."ScholarDisplayName", ''),
+                             TRIM(CONCAT_WS(' ', u."FirstName", u."LastName"))) AS full_name_en,
                     d."DepartmentName",
                     u."Scholar_ID"
                 FROM "Users" u
@@ -217,7 +219,8 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                     u."Scholar_ID", u."ORCID",
                     r."OpenAlex_AuthorID", r."LastSyncedAt",
                     d."DepartmentID", d."DepartmentName",
-                    u."Litrix_ID", u."PhotoURL", r."ResearchInterests"
+                    u."Litrix_ID", u."PhotoURL", r."ResearchInterests",
+                    u."ScholarDisplayName"
                 FROM "Users" u
                 LEFT JOIN "Researcher" r ON r."UserID" = u."UserID"
                 LEFT JOIN "Works_In" w ON w."UserID" = u."UserID"
@@ -245,6 +248,7 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                 'litrix_id':         row[11],
                 'photo_url':         row[12],
                 'research_interests': _normalize_interests(row[13]),
+                'scholar_display_name': row[14],
             }
 
             # For citations, sum the per-paper Scholar cited_by.value (the most
@@ -257,7 +261,10 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                         ("RawData_Log"->>'cited_by_count')::int,
                         0)), 0)                                          AS total_citations,
                     COUNT(DISTINCT rp."PaperID")
-                        FILTER (WHERE jr."Quartile" = 'Q1')              AS q1_papers,
+                        FILTER (WHERE jr."Quartile" = 'Q1'
+                                   AND (rp."VenueType" IS NULL
+                                        OR (rp."VenueType" NOT ILIKE 'Conference%%'
+                                            AND rp."VenueType" NOT IN ('Book', 'Preprint'))))  AS q1_papers,
                     COUNT(DISTINCT rp."PaperID")
                         FILTER (WHERE rp."Indexing" = 'Scopus'
                                    OR jr."Quartile" IS NOT NULL)         AS scopus_papers,
@@ -411,7 +418,7 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                         cu."Litrix_ID" AS litrix_id,
                         cu."PhotoURL"  AS photo_url,
                         COALESCE(
-                            cu."FullName_Ar",
+                            NULLIF(cu."ScholarDisplayName", ''),
                             NULLIF(TRIM(CONCAT_WS(' ', cu."FirstName", cu."LastName")), ''),
                             co."AuthorNameRaw"
                         )              AS name,
@@ -421,7 +428,9 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                                       AND co."UserID" IS DISTINCT FROM me."UserID"
                     LEFT JOIN "Users" cu ON cu."UserID" = co."UserID"
                     WHERE me."UserID" = %s
-                      AND COALESCE(cu."FullName_Ar", co."AuthorNameRaw") IS NOT NULL
+                      AND COALESCE(NULLIF(cu."ScholarDisplayName", ''),
+                                   NULLIF(TRIM(CONCAT_WS(' ', cu."FirstName", cu."LastName")), ''),
+                                   co."AuthorNameRaw") IS NOT NULL
                 ) sub
                 GROUP BY user_id, litrix_id, name, photo_url
                 ORDER BY (user_id IS NOT NULL) DESC, shared_papers DESC, name
@@ -446,6 +455,85 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
             'papers':            papers,
             'coauthors':         coauthors,
         })
+
+    @staticmethod
+    def _resolve_user_id(pk):
+        """Litrix-ID or numeric UserID -> integer UserID. Returns
+        (user_id, None) or (None, error_response)."""
+        from django.db import connection
+
+        canonical = normalize_litrix_id(pk)
+        if canonical is not None:
+            seq = int(LITRIX_ID_PATTERN.match(pk.strip()).group(1))
+            with connection.cursor() as cur:
+                cur.execute(
+                    '''
+                    SELECT "UserID" FROM "Users"
+                    WHERE "Litrix_ID" IS NOT NULL
+                      AND "Litrix_ID" ~* '^lit-[0-9]+$'
+                      AND CAST(SUBSTRING("Litrix_ID" FROM 5) AS INTEGER) = %s
+                    LIMIT 1
+                    ''',
+                    [seq],
+                )
+                row = cur.fetchone()
+                if not row:
+                    return None, response.Response(
+                        {'error': f'Researcher {canonical} not found'}, status=404)
+                return row[0], None
+        try:
+            return int(pk), None
+        except (TypeError, ValueError):
+            return None, response.Response({'error': 'Invalid researcher ID'}, status=400)
+
+    @decorators.action(detail=True, methods=['get'], url_path='openalex-live-affiliation-check')
+    def openalex_live_affiliation_check(self, request, pk=None):
+        """
+        GET /api/researchers/{id}/openalex-live-affiliation-check/
+
+        TEST ENDPOINT (Moez Krichen's profile only, for now). Runs the exact
+        same per-paper Al-Baha detection affiliation_verifier.py's OpenAlex
+        tier already does (verify_via_openalex) — live, on demand, for every
+        DOI'd paper of this researcher — so the profile's existing Al-Baha
+        filter (same list/KPIs the top-bar toggle drives) can be tried out
+        against fresh OpenAlex data instead of the stored AffiliationVerified
+        column. Nothing is written to the DB.
+
+        Returns {"results": {"<paper_id>": true|false|null, ...}} - null
+        means OpenAlex was inconclusive (no DOI, not found, no institution
+        data), same tri-state as AffiliationVerified.
+        """
+        from django.db import connection
+        import sys, os, time
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # backend/
+        from affiliation_verifier import verify_via_openalex, OPENALEX_DELAY
+
+        resolved_user_id, err = self._resolve_user_id(pk)
+        if err is not None:
+            return err
+
+        with connection.cursor() as cur:
+            cur.execute(
+                '''
+                SELECT rp."PaperID", rp."DOI"
+                FROM "ResearchPaper" rp
+                JOIN "Authors" a ON a."PaperID" = rp."PaperID"
+                WHERE a."UserID" = %s
+                ''',
+                [resolved_user_id],
+            )
+            rows = cur.fetchall()
+
+        results = {}
+        for paper_id, doi in rows:
+            if not doi:
+                results[paper_id] = None
+                continue
+            verified, _evidence = verify_via_openalex(doi)
+            results[paper_id] = verified
+            time.sleep(OPENALEX_DELAY)
+
+        return response.Response({'results': results})
 
     @decorators.action(detail=True, methods=['get'])
     def papers(self, request, pk=None):

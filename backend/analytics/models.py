@@ -21,6 +21,8 @@ class User(models.Model):
     last_name   = models.CharField(max_length=100, db_column='LastName')
     full_name_ar = models.CharField(max_length=255, db_column='FullName_Ar',
                                     null=True, blank=True)
+    scholar_display_name = models.CharField(max_length=255, db_column='ScholarDisplayName',
+                                             null=True, blank=True)
     email       = models.CharField(max_length=255, db_column='Email')
     user_type   = models.CharField(max_length=50,  db_column='UserType')
     account_status = models.CharField(max_length=50, db_column='AccountStatus')
@@ -35,7 +37,12 @@ class User(models.Model):
         db_table = 'Users'
 
     def __str__(self):
-        return self.full_name_ar or f"{self.first_name} {self.last_name}"
+        if self.scholar_display_name:
+            return self.scholar_display_name
+        en = f"{self.first_name or ''} {self.last_name or ''}".strip()
+        if en and en.isascii() and any(c.isalpha() for c in en):
+            return en
+        return self.email
 
 
 class Department(models.Model):

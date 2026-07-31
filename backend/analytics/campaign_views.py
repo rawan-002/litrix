@@ -848,7 +848,10 @@ def campaign_submission_detail(request, campaign_id, submission_id):
                       s."StartedAt", s."SubmittedAt", s."IsLate",
                       c."Title", c."TargetYears", c."OpensAt", c."ClosesAt",
                       c."Status" AS campaign_status,
-                      u."FullName_Ar", u."Email", u."Litrix_ID",
+                      u."FullName_Ar",
+                      COALESCE(NULLIF(u."ScholarDisplayName", ''),
+                               TRIM(CONCAT_WS(' ', u."FirstName", u."LastName"))) AS full_name_en,
+                      u."Email", u."Litrix_ID",
                       d."DepartmentName"
                FROM "ReportSubmission" s
                JOIN "ReportCampaign"   c ON c."CampaignID" = s."CampaignID"
@@ -867,7 +870,7 @@ def campaign_submission_detail(request, campaign_id, submission_id):
 
         (_, _, user_id, sub_status, started_at, submitted_at, is_late,
          c_title, target_years, c_opens, c_closes, c_status,
-         name_ar, email, litrix_id, dept_name) = row
+         name_ar, name_en, email, litrix_id, dept_name) = row
 
         # Paper list (same shape as the my-reports endpoint).
         cur.execute(
@@ -950,6 +953,7 @@ def campaign_submission_detail(request, campaign_id, submission_id):
         },
         'researcher': {
             'full_name_ar':    name_ar,
+            'full_name_en':    name_en,
             'email':           email,
             'litrix_id':       litrix_id,
             'department_name': dept_name,
@@ -992,6 +996,8 @@ def campaign_submissions(request, campaign_id):
                 s."SubmissionID", s."UserID", s."Status",
                 s."StartedAt", s."SubmittedAt", s."IsLate",
                 u."FullName_Ar", u."Email", u."Litrix_ID",
+                COALESCE(NULLIF(u."ScholarDisplayName", ''),
+                         TRIM(CONCAT_WS(' ', u."FirstName", u."LastName"))) AS full_name_en,
                 d."DepartmentName",
                 (SELECT COUNT(*) FROM "ReportPaperDecision" rd
                   WHERE rd."SubmissionID" = s."SubmissionID"

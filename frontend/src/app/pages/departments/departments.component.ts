@@ -8,6 +8,7 @@ import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { LitrixApiService } from '../../services/litrix-api.service';
 import { AffiliationService } from '../../core/services/affiliation.service';
+import { researcherPrimaryName } from '../../shared/utils/researcher-name';
 
 
 interface DeptCard {
@@ -68,6 +69,10 @@ export class DepartmentsComponent {
 
   readonly expandedId = signal<number | null>(null);
   readonly researchers = signal<ResearcherRow[]>([]);
+
+  primaryName(r: ResearcherRow): string {
+    return researcherPrimaryName(r, '-');
+  }
   readonly resLoading = signal(false);
 
   // Distinct head-count from the overview endpoint. Summing total_researchers

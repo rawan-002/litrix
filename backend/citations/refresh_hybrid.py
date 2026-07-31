@@ -6,6 +6,15 @@ against. Stage 1 is OpenAlex (free): DOI lookup, else a strict title+lastname
 match. Stage 2 is a SerpAPI Scholar title search for whatever Stage 1 couldn't
 resolve, hard-capped by --serp-budget so a run can't silently drain the quota.
 
+Routing is source-aware: papers with "ResearchPaper"."Source" = 'Scholar' (i.e.
+we originally pulled them from that researcher's own Google Scholar profile)
+may fall back to Stage 2 SerpAPI Scholar search, since that's the same
+authoritative source and a title search against it is trustworthy. Papers from
+ORCID/manual imports have no such cross-check, so they run OpenAlex-only in
+strict mode (exact title + ALL author lastnames + pub-year match) and are left
+unresolved rather than risk a SerpAPI mismatch attributing another author's
+citations to them.
+
 In apply mode it writes "ResearchPaper"."CitationsByYear" (Scholar only gives a
 total, so a Scholar-only result becomes {"<PubYear>": total}, flagged
 `serp_total_only`) and the "RawData_Log" total. It never touches
@@ -42,11 +51,12 @@ try:
 except Exception:
     pass
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
 SERP_KEY = os.getenv("SERP_API_KEY")          # NOTE: SERP_API_KEY (repo convention)
 CONTACT_EMAIL = os.getenv("CONTACT_EMAIL", "noreply@example.com")
+OPENALEX_API_KEY = os.getenv("OPENALEX_API_KEY")
 AUDIT_DIR = PROJECT_ROOT / "data" / "citation_audit"
 
 
@@ -76,7 +86,7 @@ def extract_lastnames(authors_str):
     return out
 
 
-def has_lastname_match(authorships, lastnames):
+def has_lastname_match(authorships, lastnames, require_all=False):
     if not lastnames:
         return True
     text = ' '.join(
@@ -84,7 +94,7 @@ def has_lastname_match(authorships, lastnames):
         for a in (authorships or [])
     )
     text = ''.join(c if c.isalpha() else ' ' for c in text)
-    return any(ln in text for ln in lastnames)
+    return all(ln in text for ln in lastnames) if require_all else any(ln in text for ln in lastnames)
 
 
 _local = threading.local()
@@ -102,6 +112,8 @@ def client():
 def openalex_get(url, params=None, retries=5):
     p = dict(params or {})
     p["mailto"] = CONTACT_EMAIL
+    if OPENALEX_API_KEY:
+        p["api_key"] = OPENALEX_API_KEY
     backoff = [10, 30, 60, 120, 180]
     for attempt in range(retries):
         try:
@@ -132,10 +144,18 @@ def to_year_dict(counts_by_year):
     }
 
 
-def openalex_fetch_one(paper_row):
-    # Returns (pid, year_dict|None, method). DOI lookup first, else a strict
-    # normalized-title + lastname-overlap search (same as per_paper.fetch_one).
-    pid, doi, title, authors_str = paper_row[:4]
+def openalex_fetch_one(paper_row, strict=False):
+    """Returns (pid, year_dict|None, method). DOI lookup first (deterministic,
+    trusted even in strict mode), else a title search.
+
+    strict=True is used for papers NOT sourced from Google Scholar (ORCID /
+    manual imports) — these have no SerpAPI cross-check available for us, so
+    a wrong OpenAlex title match would silently attribute another author's
+    citations. Strict mode requires: exact normalized-title match, ALL known
+    author lastnames present (not just one), AND publication year within ±1 —
+    any single miss rejects the candidate instead of falling through.
+    """
+    pid, doi, title, authors_str, pub_year = paper_row[0], paper_row[1], paper_row[2], paper_row[3], paper_row[4]
 
     if doi:
         clean = str(doi).strip().lower().removeprefix("https://doi.org/").removeprefix("doi.org/")
@@ -148,9 +168,14 @@ def openalex_fetch_one(paper_row):
     if len(n_target) < 15:
         return (pid, None, 'title_too_short')
     lastnames = extract_lastnames(authors_str)
+    if strict and not lastnames:
+        # No author lastnames to verify a title-only match against — too
+        # risky to accept in strict mode; leave unresolved rather than guess.
+        return (pid, None, 'strict_no_lastnames')
+
     data = openalex_get(
         "https://api.openalex.org/works",
-        {"search": title, "per-page": 5},
+        {"search": title, "per-page": 8 if strict else 5},
     )
     if not data:
         return (pid, None, 'no_match')
@@ -158,10 +183,15 @@ def openalex_fetch_one(paper_row):
     for w in (data.get("results") or []):
         if normalize_title(w.get("title") or "") != n_target:
             continue
-        if not has_lastname_match(w.get("authorships"), lastnames):
+        if not has_lastname_match(w.get("authorships"), lastnames, require_all=strict):
             continue
+        if strict and pub_year:
+            w_year = w.get("publication_year")
+            if w_year and abs(int(w_year) - int(pub_year)) > 1:
+                continue
         cby = to_year_dict(w.get("counts_by_year") or [])
-        return (pid, cby, 'title') if cby else (pid, {}, 'title_empty')
+        method = 'title_strict' if strict else 'title'
+        return (pid, cby, method) if cby else (pid, {}, method + '_empty')
 
     return (pid, None, 'no_match')
 
@@ -259,12 +289,15 @@ def write_paper(cur, pid, year_dict, total, write_citations_table):
             print(f"     [warn] Citations table upsert failed for {pid}: {e}")
 
 
-def select_papers(cur, user_id, only_missing, limit):
-    # Rows: (PaperID, DOI, Title, authors_str, PubYear, old_total, has_year_dict).
+def select_papers(cur, user_id, only_missing, limit, years=None):
+    # Rows: (PaperID, DOI, Title, authors_str, PubYear, old_total, has_year_dict, Source).
     where = ['TRUE']
     params = []
     if only_missing:
         where.append('(rp."CitationsByYear" IS NULL OR rp."CitationsByYear"::text = \'{}\')')
+    if years:
+        where.append('rp."PubYear" = ANY(%s)')
+        params.append(list(years))
 
     join = ''
     if user_id is not None:
@@ -281,7 +314,8 @@ def select_papers(cur, user_id, only_missing, limit):
                    (rp."RawData_Log"->>'cited_by_count')::int,
                    0) AS old_total,
                (rp."CitationsByYear" IS NOT NULL
-                AND rp."CitationsByYear"::text <> '{{}}') AS has_year_dict
+                AND rp."CitationsByYear"::text <> '{{}}') AS has_year_dict,
+               rp."Source"
         FROM "ResearchPaper" rp
         {join}
         WHERE {' AND '.join(where)}
@@ -304,6 +338,8 @@ def main():
     mode.add_argument("--apply", action="store_true",
                       help="Fetch and write CitationsByYear + RawData_Log totals.")
     ap.add_argument("--user", type=int, default=None, help="Scope to one researcher (UserID).")
+    ap.add_argument("--year", type=str, default=None,
+                    help="Restrict to PubYear(s), comma-separated (e.g. 2025,2026).")
     ap.add_argument("--limit", type=int, default=None, help="Process at most N papers.")
     ap.add_argument("--all", action="store_true",
                     help="Refresh every paper in scope, not just those missing "
@@ -318,6 +354,11 @@ def main():
                     help='Also UPSERT "Citations" + append "CitationsHistory".')
     ap.add_argument("--report", type=str, default=None, help="CSV report path override.")
     ap.add_argument("--workers", type=int, default=4, help="OpenAlex thread pool size.")
+    ap.add_argument("--skip-openalex", action="store_true",
+                    help="Skip Stage 1 OpenAlex entirely (e.g. daily OpenAlex quota "
+                         "exhausted). Scholar-sourced papers go straight to Stage 2 "
+                         "SerpAPI; non-Scholar papers are left unresolved (no OpenAlex "
+                         "cross-check available, so strict mode has nothing to run).")
     args = ap.parse_args()
 
     serp_budget = args.serp_budget
@@ -327,54 +368,104 @@ def main():
     if use_serp and not SERP_KEY:
         sys.exit("ERROR: SERP_API_KEY missing from .env (or pass --no-serp).")
 
+    years = None
+    if args.year:
+        years = [int(y.strip()) for y in args.year.split(',') if y.strip()]
+
     conn = db()
     cur = conn.cursor()
     target = os.getenv('DATABASE_URL', 'LOCAL')
     print(f"Connected to: {target.split('@')[-1].split('/')[0] if '@' in target else 'LOCAL'}")
     print(f"Mode: {'APPLY' if args.apply else 'DRY-RUN'} | "
           f"scope: {'all papers' if args.all else 'missing CitationsByYear only'}"
-          f"{f' | user {args.user}' if args.user else ''}")
-    print(f"SerpAPI fallback: {'ON (budget ' + str(serp_budget) + ' calls)' if use_serp else 'OFF'}\n")
+          f"{f' | user {args.user}' if args.user else ''}"
+          f"{f' | years {years}' if years else ''}")
+    print(f"SerpAPI fallback: {'ON (budget ' + str(serp_budget) + ' calls)' if use_serp else 'OFF'}")
+    print(f"OpenAlex API key: {'loaded (higher quota)' if OPENALEX_API_KEY else 'none (free polite pool)'}\n")
 
-    papers = select_papers(cur, args.user, only_missing=not args.all, limit=args.limit)
+    papers = select_papers(cur, args.user, only_missing=not args.all, limit=args.limit, years=years)
     print(f"Found {len(papers)} papers in scope\n")
     if not papers:
         return
 
     meta = {p[0]: {"doi": p[1], "title": p[2], "pub_year": p[4],
-                   "old_total": p[5] or 0, "has_year_dict": p[6]}
+                   "old_total": p[5] or 0, "has_year_dict": p[6], "source": p[7]}
             for p in papers}
+    n_scholar = sum(1 for p in papers if p[7] == 'Scholar')
+    print(f"Source split: {n_scholar} from Scholar (SerpAPI-eligible for residuals) | "
+          f"{len(papers) - n_scholar} from ORCID/Manual/other "
+          f"(OpenAlex strict-match only, no SerpAPI cross-check)\n")
+
     report_rows = []
     stats = {"oa_doi": 0, "oa_title": 0, "oa_empty": 0,
-             "serp_ok": 0, "serp_flagged": 0, "unresolved": 0, "serp_calls": 0}
+             "serp_ok": 0, "serp_flagged": 0, "unresolved": 0, "serp_calls": 0,
+             "strict_unresolved": 0}
 
-    print(f"=== Stage 1: OpenAlex ({args.workers} workers) ===")
-    residuals = []          # pids OpenAlex couldn't resolve to a year dict
-    oa_results = {}         # pid -> (year_dict, method)
-    done = 0
-    with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        futures = {pool.submit(openalex_fetch_one, p): p[0] for p in papers}
-        for fut in as_completed(futures):
-            pid_fallback = futures[fut]
-            try:
-                pid, cby, method = fut.result()
-            except Exception:
-                pid, cby, method = pid_fallback, None, 'error'
-            oa_results[pid] = (cby, method)
-            if not cby:
+    residuals = []              # pids eligible for Stage 2 (Scholar-sourced only)
+    strict_unresolved = []      # non-Scholar pids OpenAlex couldn't resolve — left as-is
+    oa_results = {}              # pid -> (year_dict, method)
+
+    if args.skip_openalex:
+        print("=== Stage 1: OpenAlex SKIPPED (--skip-openalex) ===")
+        for p in papers:
+            pid, source = p[0], p[7]
+            oa_results[pid] = (None, 'skipped_openalex')
+            if source == 'Scholar':
                 residuals.append(pid)
-            done += 1
-            if done % 25 == 0 or done == len(papers):
-                print(f"  {done}/{len(papers)} processed "
-                      f"(residuals so far: {len(residuals)})", flush=True)
+            else:
+                strict_unresolved.append(pid)
+        print(f"  {len(residuals)} Scholar papers routed straight to Stage 2, "
+              f"{len(strict_unresolved)} non-Scholar papers left unresolved "
+              f"(no OpenAlex cross-check available)\n")
+    else:
+        print(f"=== Stage 1: OpenAlex ({args.workers} workers) ===")
+        done = 0
+        with ThreadPoolExecutor(max_workers=args.workers) as pool:
+            futures = {pool.submit(openalex_fetch_one, p, p[7] != 'Scholar'): p[0] for p in papers}
+            for fut in as_completed(futures):
+                pid_fallback = futures[fut]
+                try:
+                    pid, cby, method = fut.result()
+                except Exception:
+                    pid, cby, method = pid_fallback, None, 'error'
+                oa_results[pid] = (cby, method)
+                if not cby:
+                    if meta[pid]["source"] == 'Scholar':
+                        residuals.append(pid)
+                    else:
+                        strict_unresolved.append(pid)
+                done += 1
+                if done % 25 == 0 or done == len(papers):
+                    print(f"  {done}/{len(papers)} processed "
+                          f"(Scholar residuals so far: {len(residuals)}, "
+                          f"strict/unresolved: {len(strict_unresolved)})", flush=True)
 
     residuals.sort()
-    print(f"OpenAlex resolved {len(papers) - len(residuals)}/{len(papers)} — "
-          f"{len(residuals)} residuals for Stage 2\n")
+    stats["strict_unresolved"] = len(strict_unresolved)
+    print(f"OpenAlex resolved {len(papers) - len(residuals) - len(strict_unresolved)}/{len(papers)} — "
+          f"{len(residuals)} Scholar residuals go to Stage 2, "
+          f"{len(strict_unresolved)} non-Scholar papers left unresolved "
+          f"(strict mode, no SerpAPI fallback to avoid mismatches)\n")
+
+    def keep_alive():
+        # SerpAPI calls are pure network I/O — the DB connection sits idle for
+        # the whole Stage 2 pass (minutes), which is long enough for Neon's
+        # pooler to drop it. A periodic no-op query keeps it (or a reconnect
+        # here, cheaply, catches the drop before it kills a real write).
+        nonlocal conn, cur
+        try:
+            cur.execute("SELECT 1")
+        except psycopg2.OperationalError:
+            try:
+                conn.close()
+            except Exception:
+                pass
+            conn = db()
+            cur = conn.cursor()
 
     serp_results = {}       # pid -> (total|None, matched_title, score, status)
     if use_serp and residuals:
-        print(f"=== Stage 2: SerpAPI Scholar title search "
+        print(f"=== Stage 2: SerpAPI Scholar title search — Scholar-sourced papers only "
               f"(budget {serp_budget} of {len(residuals)} residuals) ===")
         for pid in residuals:
             if stats["serp_calls"] >= serp_budget:
@@ -398,8 +489,33 @@ def main():
             print(f"  [{stats['serp_calls']}/{serp_budget}] paper {pid}: {status}"
                   f"{f' total={cited} score={score:.2f}' if status == 'OK' else ''}",
                   flush=True)
+            if stats["serp_calls"] % 15 == 0:
+                keep_alive()
             time.sleep(1.0)
         print()
+
+    def commit_write(pid, year_dict, total, write_citations_table):
+        # One retry with a fresh connection — a dropped connection here would
+        # otherwise silently discard an entire batch of already-paid-for
+        # SerpAPI/OpenAlex results.
+        nonlocal conn, cur
+        for attempt in range(2):
+            try:
+                write_paper(cur, pid, year_dict, total, write_citations_table)
+                conn.commit()
+                return True
+            except psycopg2.OperationalError as e:
+                print(f"     [warn] DB connection dropped writing paper {pid}, "
+                      f"reconnecting (attempt {attempt + 1}/2): {e}")
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                conn = db()
+                cur = conn.cursor()
+        print(f"     [error] paper {pid} not written after retry — will still be "
+              f"'missing' next run")
+        return False
 
     n_written = 0
     for p in papers:
@@ -422,9 +538,7 @@ def main():
                        year_dict_source="openalex", accepted="yes")
             if oa_method == 'doi': stats["oa_doi"] += 1
             else: stats["oa_title"] += 1
-            if args.apply:
-                write_paper(cur, pid, cby, total, args.write_citations_table)
-                conn.commit()
+            if args.apply and commit_write(pid, cby, total, args.write_citations_table):
                 n_written += 1
 
         elif pid in serp_results:
@@ -446,18 +560,20 @@ def main():
                     year_dict = None
                     row["year_dict_source"] = "none"
                 if args.apply and total >= m["old_total"]:
-                    write_paper(cur, pid, year_dict, total, args.write_citations_table)
-                    conn.commit()
-                    n_written += 1
+                    if commit_write(pid, year_dict, total, args.write_citations_table):
+                        n_written += 1
                 elif args.apply:
                     row["accepted"] = "no (lower than current)"
             else:
                 stats["serp_flagged"] += 1
         else:
-            if oa_method in ('doi_empty', 'title_empty'):
+            if oa_method in ('doi_empty', 'title_empty', 'title_strict_empty'):
                 stats["oa_empty"] += 1
                 row.update(stage="openalex", status=oa_method)
-            else:
+            elif m["source"] == 'Scholar':
+                # Genuinely unresolved Scholar-sourced paper (e.g. SerpAPI
+                # budget ran out before reaching it) — NOT the non-Scholar
+                # strict_unresolved set, which is already counted separately.
                 stats["unresolved"] += 1
 
         report_rows.append(row)
@@ -484,7 +600,8 @@ def main():
     print(f"  SerpAPI accepted (OK) : {stats['serp_ok']}  "
           f"(calls used: {stats['serp_calls']}/{serp_budget if use_serp else 0})")
     print(f"  SerpAPI flagged       : {stats['serp_flagged']}")
-    print(f"  Unresolved            : {stats['unresolved']}")
+    print(f"  Unresolved (Scholar)  : {stats['unresolved']}")
+    print(f"  Unresolved (strict, non-Scholar, no SerpAPI attempted): {stats['strict_unresolved']}")
     print(f"  DB rows written       : {n_written}{'' if args.apply else '  (dry-run)'}")
     print(f"\n  CSV report : {report_path}")
     print(f"  JSON audit : {audit_path}")

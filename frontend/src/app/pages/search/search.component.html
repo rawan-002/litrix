@@ -92,7 +92,7 @@
                            hover:border-accent hover:shadow-card transition
                            p-6 text-left flex items-center gap-4">
               @if (p.photo_url) {
-                <img [src]="p.photo_url" [alt]="p.full_name_ar || p.full_name_en || ''"
+                <img [src]="p.photo_url" [alt]="primaryName(p)"
                      referrerpolicy="no-referrer"
                      class="w-16 h-16 rounded-full object-cover flex-shrink-0
                             ring-1 ring-ink-100" />
@@ -106,8 +106,8 @@
               }
               <div class="flex-1 min-w-0">
                 <div class="text-base font-semibold text-ink-900 truncate
-                            group-hover:text-accent transition-colors">
-                  {{ p.full_name_ar || p.full_name_en || 'Unnamed' }}
+                            group-hover:text-accent transition-colors" dir="auto">
+                  {{ primaryName(p) }}
                 </div>
                 <div class="flex items-center gap-2 text-sm text-ink-500 mt-1.5">
                   @if (p.department_name) {

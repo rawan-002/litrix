@@ -29,11 +29,6 @@
               <h1 class="text-xl sm:text-2xl font-semibold text-ink-900 leading-snug">
                 {{ displayName() }}
               </h1>
-              <!-- English name only when the researcher actually has one on file
-                   (and it differs from the Arabic name); hidden otherwise. -->
-              @if (secondaryName()) {
-                <div class="text-base text-ink-500 mt-0.5">{{ secondaryName() }}</div>
-              }
               <div class="text-sm text-ink-600 mt-2">
                 {{ d.identity.department_name || 'Researcher' }}
                 <span class="text-ink-300">·</span>
@@ -86,6 +81,40 @@
                   </span>
                 }
               </div>
+
+              <!-- TEST: Al-Baha filter (same as the header toggle), sourced from a
+                   live per-paper OpenAlex check instead of the stored column.
+                   This profile only. -->
+              @if (showOpenAlexTestButton()) {
+                <div class="mt-4">
+                  <button type="button"
+                          (click)="toggleOpenAlexLiveTest()"
+                          [disabled]="openAlexLiveLoading()"
+                          class="text-[11px] px-3 py-1.5 rounded-full border font-medium transition
+                                 disabled:opacity-50"
+                          [class.border-accent]="!openAlexLiveActive()"
+                          [class.text-accent]="!openAlexLiveActive()"
+                          [class.hover:bg-accent-light]="!openAlexLiveActive()"
+                          [class.bg-accent]="openAlexLiveActive()"
+                          [class.text-white]="openAlexLiveActive()"
+                          [class.border-transparent]="openAlexLiveActive()">
+                    {{ openAlexLiveLoading() ? 'Checking OpenAlex…'
+                       : openAlexLiveActive() ? 'Test: OpenAlex Al-Baha filter (ON)'
+                       : 'Test: OpenAlex Al-Baha filter (OFF)' }}
+                  </button>
+
+                  @if (openAlexLiveError()) {
+                    <div class="text-[11px] text-red-600 mt-2">{{ openAlexLiveError() }}</div>
+                  }
+
+                  @if (openAlexLiveActive() && !openAlexLiveLoading()) {
+                    <div class="text-[11px] text-ink-400 mt-2">
+                      Filtering by live OpenAlex data: {{ statsPapers().length }} of
+                      {{ d.papers.length }} papers confirmed Al-Baha.
+                    </div>
+                  }
+                </div>
+              }
             </div>
           </div>
 

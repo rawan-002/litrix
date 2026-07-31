@@ -40,6 +40,20 @@ MAX_INTEREST_NEIGHBOURS = 30
 MAX_HIDDEN_GEMS = 6
 
 
+def _display_name_expr(alias):
+    """SQL for a graph node's label: the exact Scholar name when scraped,
+    else FirstName+LastName but ONLY when that's a genuine Latin-script name
+    (ASCII + at least one letter) — first/last sometimes hold an Arabic short
+    form for not-yet-scraped users, and that must never leak into the UI as
+    if it were the node's display name."""
+    en = (f'TRIM(CONCAT_WS(\' \', {alias}."FirstName", {alias}."LastName"))')
+    return (
+        f'COALESCE(NULLIF({alias}."ScholarDisplayName", \'\'), '
+        f'CASE WHEN {en} ~ \'^[\\x00-\\x7F]+$\' AND {en} ~ \'[A-Za-z]\' '
+        f'THEN {en} END)'
+    )
+
+
 def _resolve_user_id(pk):
     """Accept either a numeric UserID or a Litrix-ID and return UserID."""
     if pk is None:
@@ -261,8 +275,7 @@ candidate_concepts AS (
 )
 SELECT cc."UserID",
        u."Litrix_ID",
-       COALESCE(u."FullName_Ar",
-                TRIM(CONCAT_WS(' ', u."FirstName", u."LastName"))) AS label,
+       COALESCE({display_name_expr}, '—')                          AS label,
        COALESCE(d."DepartmentName", 'Unaffiliated')                AS dept,
        COUNT(DISTINCT cc.lname)                                     AS overlap,
        (cc."UserID" IN (SELECT "UserID" FROM coauthor_ids))         AS already_collab,
@@ -280,8 +293,8 @@ LEFT JOIN LATERAL (
     LIMIT 1
 ) w ON TRUE
 LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
-GROUP BY cc."UserID", u."Litrix_ID", u."FullName_Ar", u."FirstName",
-         u."LastName", d."DepartmentName"
+GROUP BY cc."UserID", u."Litrix_ID", u."FullName_Ar", u."ScholarDisplayName",
+         u."FirstName", u."LastName", d."DepartmentName"
 HAVING COUNT(DISTINCT cc.lname) >= %s
 ORDER BY overlap DESC
 LIMIT %s
@@ -408,7 +421,7 @@ def researcher_network(request, pk):
         # Centre node.
         cur.execute(
             'SELECT u."UserID", u."FullName_Ar", '
-            '       TRIM(CONCAT_WS(\' \', u."FirstName", u."LastName")), '
+            f'       {_display_name_expr("u")}, '
             '       u."Litrix_ID", '
             '       d."DepartmentName", '
             '       (SELECT COUNT(*) FROM "Authors" a WHERE a."UserID" = u."UserID") '
@@ -455,8 +468,7 @@ def researcher_network(request, pk):
                 HAVING COUNT(DISTINCT rp."PaperID") >= %s
             )
             SELECT u."UserID", u."Litrix_ID",
-                   COALESCE(u."FullName_Ar",
-                            TRIM(CONCAT_WS(' ', u."FirstName", u."LastName"))) AS label,
+                   COALESCE({_display_name_expr('u')}, '—') AS label,
                    COALESCE(d."DepartmentName", 'Unaffiliated') AS dept,
                    cp.shared,
                    (SELECT COUNT(*) FROM "Authors" a WHERE a."UserID" = u."UserID") AS total_papers
@@ -617,6 +629,7 @@ def researcher_network(request, pk):
                     INTEREST_NEIGHBOURS_SQL.format(
                         year_sql_centre=year_sql,
                         year_sql_cand=year_sql,
+                        display_name_expr=_display_name_expr('u'),
                     ),
                     params,
                 )
@@ -643,7 +656,7 @@ def researcher_network(request, pk):
 
     nodes = [{
         'id':        f'u{center["user_id"]}',
-        'label':     center['name_ar'] or center['name_en'] or '—',
+        'label':     center['name_en'] or '—',
         'dept':      center['dept'],
         'papers':    center['papers'],
         'shared':    center['papers'],

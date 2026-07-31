@@ -9,10 +9,21 @@ authored under Al-Baha, so this labels each one.
 
 Verification cascades through tiers (cheapest/most reliable first), stopping
 at the first conclusive answer: OpenAlex by DOI, then Crossref by DOI, then
-the publisher's HTML landing page, then an Unpaywall OA PDF scan. Anything
-left unresolved is marked pending-review for a human. Each tier looks for
-"Al-Baha University" (and dash/space/no-dash/Arabic variants) or the
-definitive Scopus AF-ID / ROR identifiers.
+the publisher's HTML landing page, then (IEEE DOIs only) a real headless
+browser render of the IEEE Xplore page, then an Unpaywall OA PDF scan.
+Anything left unresolved is marked pending-review for a human. Each tier
+looks for "Al-Baha University" (and dash/space/no-dash/Arabic variants) or
+the definitive Scopus AF-ID / ROR identifiers.
+
+The browser tier exists because IEEE Xplore's document page is a JS-only
+Angular SPA: a plain HTTP GET gets back a bot-challenge stub (empirically:
+HTTP 202, ~2KB, zero author data), so the HTML tier can never resolve it.
+A real browser isn't blocked the same way, and the rendered page embeds the
+full per-author affiliation array as JSON (the same data IEEE's own UI reads
+to populate the on-hover author tooltip) — so no hover/click simulation is
+needed, just a page load + a JSON extraction. Requires Chrome + the
+`selenium` package; degrades to inconclusive (not a false negative) if
+either is missing.
 
 Two things are deliberate and easy to break: a network/API failure leaves a
 paper NULL rather than marking it not-Al-Baha (a retry picks it up), and a
@@ -256,7 +267,8 @@ def verify_via_crossref(doi: str) -> tuple[Optional[bool], dict[str, Any]]:
     }
 
 
-# Tier 3 (PDF) helpers — see verify_via_pdf below.
+# Tier 5 (PDF) helpers — see verify_via_pdf below. Last resort: only reached
+# if openalex/crossref/publisher_html/ieee_browser were all inconclusive.
 
 def _import_pdf_lib():
     """Lazy-import the PDF library so the verifier still runs Tier 1+2 even
@@ -357,7 +369,148 @@ def verify_via_pdf(doi: str) -> tuple[Optional[bool], dict[str, Any]]:
     }
 
 
-# Tier 4: the publisher's HTML landing page. Unlike the PDF tier it sees the
+# Tier 4: a real (headless) browser render for JS-only publishers. IEEE
+# Xplore's document page is an Angular SPA -- a plain `requests.get()` (used
+# by Tier 3 below) gets back a bot-challenge stub (HTTP 202, ~2KB, no author
+# data at all; verified empirically against a live DOI). A real browser
+# executing the page's JS is not detected the same way and gets the full
+# page -- and the author affiliations are sitting there as a clean JSON
+# array (`"authors":[{"name":...,"affiliation":[...]}]`) that IEEE's own UI
+# reads to populate the on-hover author tooltip. So no hover/click
+# simulation is needed: load the page, pull that JSON straight out of the
+# rendered HTML.
+#
+# Scoped to IEEE DOI prefixes only -- other blocked-by-scraping publishers
+# would need their own JSON/selector research before being added here.
+
+IEEE_DOI_PREFIXES = ('10.1109/', '10.1049/')  # IEEE + IET (co-published via Xplore)
+
+_selenium_driver = None  # lazy singleton -- one browser reused across the whole run
+
+
+def _get_selenium_driver():
+    """Start (once) a headless Chrome for the IEEE render tier. Returns None
+    if selenium/Chrome isn't available -- callers must degrade gracefully,
+    same as the pypdf/bs4 lazy imports elsewhere in this file."""
+    global _selenium_driver
+    if _selenium_driver is not None:
+        return _selenium_driver
+    try:
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+    except ImportError:
+        return None
+
+    opts = Options()
+    opts.add_argument('--headless=new')
+    opts.add_argument('--disable-blink-features=AutomationControlled')
+    opts.add_argument('--window-size=1400,1000')
+    opts.add_argument(
+        'user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+        'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36')
+    try:
+        _selenium_driver = webdriver.Chrome(options=opts)
+    except Exception:
+        return None
+
+    import atexit
+    atexit.register(lambda: _selenium_driver.quit())
+    return _selenium_driver
+
+
+def _extract_ieee_authors_json(html: str) -> Optional[list]:
+    """Pull the `"authors":[{"name":...,"affiliation":[...]}, ...]` array out
+    of IEEE's rendered page HTML via bracket-matching (it's embedded inside a
+    larger JS object literal, not standalone JSON, so a full-document
+    json.loads() won't work)."""
+    idx = html.find('"authors":[{"name"')
+    if idx < 0:
+        return None
+    start = html.find('[', idx)
+    depth, end = 0, None
+    for i in range(start, min(start + 20000, len(html))):
+        if html[i] == '[':
+            depth += 1
+        elif html[i] == ']':
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+    if end is None:
+        return None
+    try:
+        return json.loads(html[start:end])
+    except json.JSONDecodeError:
+        return None
+
+
+def verify_via_ieee_browser(doi: str) -> tuple[Optional[bool], dict[str, Any]]:
+    """Render the IEEE Xplore page in a real headless browser and inspect the
+    embedded per-author affiliation JSON. Same (verified, evidence) contract
+    as the other tiers."""
+    if not doi:
+        return None, {'reason': 'no_doi'}
+    clean_doi = doi.strip()
+    for prefix in ('https://doi.org/', 'http://doi.org/', 'doi:'):
+        if clean_doi.lower().startswith(prefix):
+            clean_doi = clean_doi[len(prefix):]
+    if not clean_doi.lower().startswith(IEEE_DOI_PREFIXES):
+        return None, {'reason': 'not_ieee_doi'}
+
+    driver = _get_selenium_driver()
+    if driver is None:
+        return None, {'reason': 'selenium_unavailable'}
+
+    try:
+        from selenium.webdriver.support.ui import WebDriverWait
+        driver.get(f'https://doi.org/{clean_doi}')
+        try:
+            WebDriverWait(driver, 15).until(
+                lambda d: '"authors":[' in d.page_source
+                or 'ieeexplore.ieee.org' not in d.current_url
+            )
+        except Exception:
+            pass  # fall through -- we still try to read whatever loaded
+        current_url = driver.current_url
+        if 'ieeexplore.ieee.org' not in current_url:
+            return None, {'reason': 'not_ieee_after_redirect', 'url': current_url[:200]}
+        html = driver.page_source
+    except Exception as e:
+        return None, {'reason': 'browser_failed', 'detail': str(e)[:200]}
+
+    authors = _extract_ieee_authors_json(html)
+    if authors is None:
+        return None, {'reason': 'no_authors_json_found', 'url': current_url[:200]}
+
+    affiliations_seen = 0
+    for a in authors:
+        name = a.get('name', '') if isinstance(a, dict) else ''
+        for aff in (a.get('affiliation') or []) if isinstance(a, dict) else []:
+            if aff:
+                affiliations_seen += 1
+            match = detect_albaha_in_text(aff)
+            if match:
+                return True, {
+                    'tier': 'ieee_browser',
+                    'matched_author': name,
+                    'matched_affiliation': aff,
+                    'matched_substring': match,
+                    'url': current_url[:300],
+                }
+
+    if affiliations_seen == 0:
+        return None, {'tier': 'ieee_browser', 'reason': 'no_affiliations_in_json',
+                       'url': current_url[:200]}
+    return False, {
+        'tier': 'ieee_browser',
+        'reason': 'no_albaha_in_affiliations',
+        'authors_count': len(authors),
+        'affiliations_seen': affiliations_seen,
+        'url': current_url[:300],
+    }
+
+
+# Tier 3: the publisher's HTML landing page. Unlike the PDF tier it sees the
 # page's structured metadata — citation/Dublin Core meta tags, JSON-LD, and
 # publisher-specific affiliation selectors — falling back to a full-text
 # scan. This also catches affiliations hidden behind a "show more authors"
@@ -621,17 +774,21 @@ TIERS = {
     'openalex':        verify_via_openalex,
     'crossref':        verify_via_crossref,
     'publisher_html':  verify_via_publisher_html,
+    'ieee_browser':    verify_via_ieee_browser,
     'pdf':             verify_via_pdf,
 }
-# Default order — Publisher HTML BEFORE PDF because it's both faster AND
-# more accurate (the affiliation is rendered as structured metadata, not
-# scattered inside the document body).
-DEFAULT_TIER_ORDER = ['openalex', 'crossref', 'publisher_html', 'pdf']
+# Default order — Publisher HTML before the browser tier (cheaper, works for
+# every non-JS-blocked publisher); ieee_browser before PDF (IEEE papers are
+# rarely open-access, so PDF would rarely resolve them anyway, and the
+# browser tier is far more accurate when it does apply). ieee_browser
+# short-circuits instantly (no browser launch) for any non-IEEE DOI.
+DEFAULT_TIER_ORDER = ['openalex', 'crossref', 'publisher_html', 'ieee_browser', 'pdf']
 
 TIER_DELAYS = {
     'openalex':       OPENALEX_DELAY,
     'crossref':       CROSSREF_DELAY,
     'publisher_html': 0.2,  # be polite — many publishers rate-limit aggressively
+    'ieee_browser':   1.0,  # be extra polite — real page loads, not an API
     'pdf':            UNPAYWALL_DELAY,
 }
 

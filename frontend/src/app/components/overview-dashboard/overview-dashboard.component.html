@@ -245,7 +245,10 @@
       <div class="bg-white rounded-apple shadow-card p-6">
         <div class="flex items-baseline justify-between mb-4">
           <h2 class="text-sm font-semibold text-ink-700">Quartile & Indexing</h2>
-          <div class="text-[10px] text-ink-400">share of papers by tier</div>
+          <button type="button" (click)="openClassifiedModal()"
+                  class="text-[10px] text-accent hover:underline">
+            view all papers
+          </button>
         </div>
         @if (chartQuartile(); as q) {
           <div class="flex items-center gap-6"
@@ -261,7 +264,8 @@
                         class="cursor-pointer transition-all"
                         [attr.stroke-dasharray]="s.dashLength + ' ' + (q.circumference - s.dashLength)"
                         [attr.stroke-dashoffset]="s.dashOffset"
-                        (mouseenter)="hoveredQuartile.set(s.label)" />
+                        (mouseenter)="hoveredQuartile.set(s.label)"
+                        (click)="openClassifiedModal(s.label)" />
               }
               <g class="rotate-90 pointer-events-none">
                 @if (hoveredQuartile(); as hl) {
@@ -292,10 +296,11 @@
             <ul class="flex-1 space-y-2">
               @for (s of q.slices; track s.label) {
                 <li class="flex items-center justify-between text-xs px-2 py-1
-                           rounded cursor-default transition-colors"
+                           rounded cursor-pointer transition-colors"
                     [class.bg-accent-light]="hoveredQuartile() === s.label"
                     (mouseenter)="hoveredQuartile.set(s.label)"
-                    (mouseleave)="hoveredQuartile.set(null)">
+                    (mouseleave)="hoveredQuartile.set(null)"
+                    (click)="openClassifiedModal(s.label)">
                   <div class="flex items-center gap-2">
                     <span class="w-2.5 h-2.5 rounded-full inline-block transition-transform"
                           [class.scale-150]="hoveredQuartile() === s.label"
@@ -403,6 +408,73 @@
     </section>
 
 
+    <!-- Publications by Venue Type -->
+    <section class="bg-white rounded-apple shadow-card p-6 mb-8">
+      <div class="flex items-baseline justify-between mb-4">
+        <h2 class="text-sm font-semibold text-ink-700">Publications by Venue Type</h2>
+        <button type="button" (click)="openVenueModal()"
+                class="text-[10px] text-accent hover:underline">
+          view all papers
+        </button>
+      </div>
+      @if (chartVenue(); as v) {
+        <div class="flex flex-col md:flex-row items-center gap-6"
+             (mouseleave)="hoveredVenue.set(null)">
+          <svg viewBox="-80 -80 160 160" class="w-44 h-44 -rotate-90 select-none">
+            <circle r="56" cx="0" cy="0" fill="none" stroke="#f5f5f4" stroke-width="20" />
+            @for (s of v.slices; track s.label) {
+              <circle r="56" cx="0" cy="0" fill="none"
+                      [attr.stroke]="s.color"
+                      [attr.stroke-width]="hoveredVenue() === s.label ? 26 : 20"
+                      stroke-linecap="butt"
+                      class="cursor-pointer transition-all"
+                      [attr.stroke-dasharray]="s.dashLength + ' ' + (v.circumference - s.dashLength)"
+                      [attr.stroke-dashoffset]="s.dashOffset"
+                      (mouseenter)="hoveredVenue.set(s.label)"
+                      (click)="openVenueModal(s.venue)" />
+            }
+            <g class="rotate-90 pointer-events-none">
+              @if (hoveredVenue(); as hl) {
+                @for (s of v.slices; track s.label) {
+                  @if (s.label === hl) {
+                    <text x="0" y="-3" text-anchor="middle" class="text-[18px] fill-ink-900 font-bold">{{ s.value }}</text>
+                    <text x="0" y="14" text-anchor="middle" class="text-[9px] fill-ink-500 uppercase tracking-widest">{{ s.label }}</text>
+                  }
+                }
+              } @else {
+                <text x="0" y="-3" text-anchor="middle" class="text-[20px] fill-ink-900 font-bold">{{ v.total }}</text>
+                <text x="0" y="14" text-anchor="middle" class="text-[9px] fill-ink-500 uppercase tracking-widest">Papers</text>
+              }
+            </g>
+          </svg>
+          <ul class="flex-1 w-full space-y-2">
+            @for (s of v.slices; track s.label) {
+              <li class="flex items-center justify-between text-xs px-2 py-1 rounded cursor-pointer transition-colors"
+                  [class.bg-accent-light]="hoveredVenue() === s.label"
+                  (mouseenter)="hoveredVenue.set(s.label)"
+                  (mouseleave)="hoveredVenue.set(null)"
+                  (click)="openVenueModal(s.venue)">
+                <div class="flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-full inline-block transition-transform"
+                        [class.scale-150]="hoveredVenue() === s.label"
+                        [style.background]="s.color"></span>
+                  <span class="font-medium transition-colors"
+                        [class.text-accent]="hoveredVenue() === s.label"
+                        [class.text-ink-700]="hoveredVenue() !== s.label">{{ s.label }}</span>
+                </div>
+                <div class="text-ink-500 tabular-nums">
+                  {{ s.value }}
+                  <span class="text-ink-400 ml-1">({{ (s.pct * 100).toFixed(0) }}%)</span>
+                </div>
+              </li>
+            }
+          </ul>
+        </div>
+      } @else {
+        <div class="text-center py-12 text-sm text-ink-400">No data</div>
+      }
+    </section>
+
     <!-- Department Research Statistics -->
     @if (!isHoD()) {
       <section class="bg-white rounded-apple shadow-card p-6 mb-8">
@@ -464,8 +536,8 @@
         @for (r of visibleTopResearchers(); track r.user_id) {
           <li class="flex items-center justify-between py-3">
             <div class="flex-1 min-w-0">
-              <div class="text-sm font-medium text-ink-700 truncate" dir="rtl">
-                {{ r.full_name_ar || r.full_name_en }}
+              <div class="text-sm font-medium text-ink-700 truncate" dir="auto">
+                {{ primaryName(r) }}
               </div>
               <div class="text-xs text-ink-400 mt-1">
                 {{ r.department_name }}
@@ -502,11 +574,11 @@
       }
 
       @if (!yearlyLoading() && yearlyData(); as yd) {
-        @if (yd.departments.length === 0) {
+        @if (visibleYearlyDepartments().length === 0) {
           <div class="text-ink-400 text-sm py-8 text-center">No publications recorded for {{ yd.year }}.</div>
         } @else {
           <ul class="divide-y divide-ink-200">
-            @for (dept of yd.departments; track dept.department_id) {
+            @for (dept of visibleYearlyDepartments(); track dept.department_id) {
               <li>
                 <button (click)="toggleDept(dept.department_id)"
                         class="w-full flex items-center justify-between py-4 text-start hover:bg-ink-50 transition-colors px-2 -mx-2 rounded"
@@ -540,7 +612,9 @@
                               <button (click)="openPaper(p)"
                                       class="text-sm font-medium text-ink-700 line-clamp-2
                                              text-left hover:text-accent transition-colors cursor-pointer">{{ p.title }}</button>
-                              @if (p.authors_ar) {
+                              @if (p.authors_en) {
+                                <div class="text-xs text-ink-500 mt-1" dir="ltr">{{ p.authors_en }}</div>
+                              } @else if (p.authors_ar) {
                                 <div class="text-xs text-ink-500 mt-1" dir="rtl">{{ p.authors_ar }}</div>
                               }
                               <div class="text-xs text-ink-400 mt-2 flex items-center flex-wrap gap-2">
@@ -578,7 +652,9 @@
                               <button (click)="openPaper(p)"
                                       class="text-sm font-medium text-ink-700 line-clamp-2
                                              text-left hover:text-accent transition-colors cursor-pointer">{{ p.title }}</button>
-                              @if (p.authors_ar) {
+                              @if (p.authors_en) {
+                                <div class="text-xs text-ink-500 mt-1" dir="ltr">{{ p.authors_en }}</div>
+                              } @else if (p.authors_ar) {
                                 <div class="text-xs text-ink-500 mt-1" dir="rtl">{{ p.authors_ar }}</div>
                               }
                               <div class="text-xs text-ink-400 mt-2 flex items-center flex-wrap gap-2">
@@ -747,6 +823,101 @@
             Export
           }
         </button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (classifiedModalOpen()) {
+  <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+       (click)="closeClassifiedModal()">
+    <div class="bg-white rounded-apple shadow-hover max-w-3xl w-full max-h-[85vh] flex flex-col p-6"
+         (click)="$event.stopPropagation()">
+
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h2 class="text-lg font-semibold text-ink-700">Classified Papers</h2>
+          <div class="text-xs text-ink-400 mt-0.5">
+            @if (classifiedVenue(); as ve) {
+              {{ ve | titlecase }} venue
+            } @else {
+              {{ classifiedTier() ? (classifiedTier() === 'Other' ? 'Unindexed' : classifiedTier()) : 'All tiers' }}
+            }
+            · follows the dashboard's department / year / Al-Baha filters
+          </div>
+        </div>
+        <button (click)="closeClassifiedModal()"
+                class="text-ink-400 hover:text-ink-700 text-2xl leading-none">×</button>
+      </div>
+
+      <div class="flex items-center gap-2 mb-4">
+        <select [ngModel]="classifiedTier()"
+                (ngModelChange)="openClassifiedModal($event || undefined)"
+                class="text-xs border border-ink-200 rounded-full px-3 py-1.5 text-ink-700">
+          <option [ngValue]="null">All tiers</option>
+          <option value="Q1">Q1</option>
+          <option value="Q2">Q2</option>
+          <option value="Q3">Q3</option>
+          <option value="Q4">Q4</option>
+          <option value="Other">Unindexed</option>
+        </select>
+        <input type="text" [(ngModel)]="classifiedSearch"
+               placeholder="Search title or journal…"
+               class="flex-1 text-xs border border-ink-200 rounded-full px-3 py-1.5
+                      text-ink-700 placeholder:text-ink-400" />
+        <span class="text-xs text-ink-400 tabular-nums whitespace-nowrap">
+          {{ filteredClassifiedPapers().length }} / {{ classifiedPapers().length }}
+        </span>
+      </div>
+
+      <div class="overflow-y-auto flex-1 -mx-2 px-2">
+        @if (classifiedLoading()) {
+          <div class="text-center py-16 text-sm text-ink-400">Loading…</div>
+        } @else if (filteredClassifiedPapers().length === 0) {
+          <div class="text-center py-16 text-sm text-ink-400">No papers match</div>
+        } @else {
+          <ul class="divide-y divide-ink-100">
+            @for (p of visibleClassifiedPapers(); track p.paper_id) {
+              <li (click)="openPaper(p)"
+                  class="py-3 px-2 hover:bg-ink-50 rounded cursor-pointer transition-colors">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <div class="text-sm text-ink-900 font-medium truncate">{{ p.title }}</div>
+                    <div class="text-xs text-ink-500 mt-1 flex items-center gap-2 flex-wrap">
+                      <span>{{ p.pub_year }}</span>
+                      @if (p.journal_name) {
+                        <span class="text-ink-300">·</span>
+                        <span class="truncate">{{ p.journal_name }}</span>
+                      }
+                      @if (p.venue_type) {
+                        <span class="text-ink-300">·</span>
+                        <span>{{ p.venue_type }}</span>
+                      }
+                    </div>
+                  </div>
+                  <div class="flex flex-col items-end gap-1 flex-shrink-0">
+                    <span class="px-2 py-0.5 rounded text-[10px] font-medium"
+                          [class.bg-ink-900]="p.tier === 'Q1'"
+                          [class.text-white]="p.tier === 'Q1'"
+                          [class.bg-accent-light]="p.tier !== 'Q1'"
+                          [class.text-accent]="p.tier !== 'Q1'">
+                      {{ p.tier === 'Other' ? 'Unindexed' : p.tier }}
+                    </span>
+                    <span class="text-[10px] text-ink-400">{{ p.citations }} cites</span>
+                  </div>
+                </div>
+              </li>
+            }
+          </ul>
+          @if (filteredClassifiedPapers().length > visibleClassifiedPapers().length) {
+            <div class="text-center py-3">
+              <button (click)="showMoreClassifiedPapers()"
+                      class="text-xs text-accent hover:underline">
+                Load more ({{ filteredClassifiedPapers().length - visibleClassifiedPapers().length }} more)
+              </button>
+            </div>
+          }
+        }
       </div>
     </div>
   </div>

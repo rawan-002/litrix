@@ -5,6 +5,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LitrixApiService } from '../../../services/litrix-api.service';
+import { researcherPrimaryName } from '../../../shared/utils/researcher-name';
 
 
 interface Campaign {
@@ -31,6 +32,7 @@ interface SubmissionRow {
   UserID: number;
   Status: string;
   FullName_Ar: string | null;
+  full_name_en: string | null;
   Email: string;
   Litrix_ID: string | null;
   DepartmentName: string | null;
@@ -64,6 +66,10 @@ export class CampaignsComponent {
 
   // Modal - single researcher's papers
   readonly showDetailFor = signal<any | null>(null);
+
+  primaryName(r: any): string {
+    return researcherPrimaryName(r, r?.email ?? r?.Email ?? '');
+  }
   readonly detailLoading = signal(false);
 
   // Create modal state

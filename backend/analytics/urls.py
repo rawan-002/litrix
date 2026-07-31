@@ -27,7 +27,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     ResearcherViewSet, DepartmentViewSet,
     TopPaperViewSet, PublicationTrendViewSet,
-    overview, yearly_breakdown, export_excel, paper_detail,
+    overview, classified_papers, yearly_breakdown, export_excel, paper_detail,
     universal_search,
 )
 from . import (
@@ -44,6 +44,7 @@ router.register(r'trends',       PublicationTrendViewSet, basename='trend')
 urlpatterns = [
     path('', include(router.urls)),
     path('stats/overview/',     overview,           name='overview'),
+    path('stats/classified-papers/', classified_papers, name='classified-papers'),
     path('yearly-breakdown/',   yearly_breakdown,   name='yearly-breakdown'),
     path('export/excel/',       export_excel,       name='export-excel'),
     path('papers/<int:paper_id>/detail/', paper_detail, name='paper-detail'),
