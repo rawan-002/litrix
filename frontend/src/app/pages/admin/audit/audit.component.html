@@ -42,7 +42,7 @@
                 {{ formatDate(log.CreatedAt) }}
               </td>
               <td class="px-4 py-3">
-                <div class="text-xs text-ink-900" dir="rtl">{{ log.FullName_Ar || '-' }}</div>
+                <div class="text-xs text-ink-900" dir="auto">{{ log.FullName_En || log.FullName_Ar || '-' }}</div>
                 <div class="text-[10px] text-ink-400">{{ log.Email || 'system' }}</div>
               </td>
               <td class="px-4 py-3">

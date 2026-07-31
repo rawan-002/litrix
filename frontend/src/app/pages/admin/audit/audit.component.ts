@@ -15,6 +15,7 @@ interface LogEntry {
   CreatedAt: string;
   Email: string | null;
   FullName_Ar: string | null;
+  FullName_En: string | null;
 }
 
 

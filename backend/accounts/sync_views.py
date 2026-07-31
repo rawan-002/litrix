@@ -491,7 +491,11 @@ def list_sync_jobs(request):
                    sj."CreatedAt",
                    u."UserID", u."FullName_Ar", u."Email",
                    u."FirstName", u."LastName",
-                   tu."FullName_Ar" AS triggered_by_name
+                   COALESCE(NULLIF(u."ScholarDisplayName", ''),
+                            NULLIF(TRIM(CONCAT_WS(' ', u."FirstName", u."LastName")), '')) AS "FullName_En",
+                   COALESCE(NULLIF(tu."ScholarDisplayName", ''),
+                            NULLIF(TRIM(CONCAT_WS(' ', tu."FirstName", tu."LastName")), ''),
+                            tu."FullName_Ar") AS triggered_by_name
             FROM "SyncJob" sj
             LEFT JOIN "Users" u ON u."UserID" = sj."UserID"
             LEFT JOIN "Users" tu ON tu."UserID" = sj."TriggeredBy"
@@ -514,6 +518,8 @@ def list_syncable_researchers(request):
     with connection.cursor() as cur:
         cur.execute('''
             SELECT u."UserID", u."Litrix_ID", u."FullName_Ar", u."Email",
+                   COALESCE(NULLIF(u."ScholarDisplayName", ''),
+                            NULLIF(TRIM(CONCAT_WS(' ', u."FirstName", u."LastName")), '')) AS "FullName_En",
                    u."Scholar_ID", u."Orcid_ID",
                    r."LastSyncedAt",
                    COUNT(a."PaperID") AS papers,
@@ -532,6 +538,7 @@ def list_syncable_researchers(request):
             WHERE u."TenantID" = %s
               AND (u."Scholar_ID" IS NOT NULL OR u."Orcid_ID" IS NOT NULL)
             GROUP BY u."UserID", u."Litrix_ID", u."FullName_Ar", u."Email",
+                     u."ScholarDisplayName", u."FirstName", u."LastName",
                      u."Scholar_ID", u."Orcid_ID", r."LastSyncedAt"
             ORDER BY r."LastSyncedAt" ASC NULLS FIRST
         ''', [SYNC_COOLDOWN_DAYS, SYNC_COOLDOWN_DAYS, request.user.tenant_id])

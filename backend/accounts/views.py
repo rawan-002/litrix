@@ -1540,7 +1540,9 @@ def list_audit_log(request):
         cur.execute(f'''
             SELECT al."LogID", al."Action", al."TargetType", al."TargetID",
                    al."Metadata", al."IpAddress", al."CreatedAt",
-                   u."Email", u."FullName_Ar"
+                   u."Email", u."FullName_Ar",
+                   COALESCE(NULLIF(u."ScholarDisplayName", ''),
+                            NULLIF(TRIM(CONCAT_WS(' ', u."FirstName", u."LastName")), '')) AS "FullName_En"
             FROM "AuditLog" al
             LEFT JOIN "Users" u ON u."UserID" = al."UserID"
             WHERE {" AND ".join(where)}

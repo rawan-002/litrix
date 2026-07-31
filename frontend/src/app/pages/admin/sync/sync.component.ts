@@ -9,6 +9,7 @@ interface Researcher {
   UserID: number;
   Litrix_ID: string;
   FullName_Ar: string | null;
+  FullName_En: string | null;
   Email: string;
   Scholar_ID: string | null;
   Orcid_ID: string | null;
@@ -30,6 +31,7 @@ interface SyncJob {
   CreatedAt: string;
   UserID: number;
   FullName_Ar: string | null;
+  FullName_En: string | null;
   FirstName: string | null;
   LastName: string | null;
   Email: string | null;
@@ -221,9 +223,11 @@ export class SyncComponent implements OnDestroy {
   // Best human-readable label for a job's researcher, falling back through the
   // name chain so "User #N" only shows when we know nothing else.
   jobLabel(j: SyncJob): string {
-    if (j.FullName_Ar) return j.FullName_Ar;
+    // English first (ScholarDisplayName-based), matching the rest of the UI.
+    if (j.FullName_En) return j.FullName_En;
     const en = [j.FirstName, j.LastName].filter(Boolean).join(' ').trim();
-    if (en) return en;
+    if (en && /[A-Za-z]/.test(en)) return en;
+    if (j.FullName_Ar) return j.FullName_Ar;
     if (j.Email) return j.Email;
     // Institution-wide jobs carry no researcher.
     if (j.Source === 'citations') return 'All papers';
@@ -231,9 +235,9 @@ export class SyncComponent implements OnDestroy {
     return `User #${j.UserID}`;
   }
 
-  // Arabic names render RTL, everything else LTR - avoids the mixed-bidi mess.
+  // English/Latin names render LTR; fall back to RTL only for an Arabic label.
   jobLabelDir(j: SyncJob): 'rtl' | 'ltr' {
-    return j.FullName_Ar ? 'rtl' : 'ltr';
+    return (!j.FullName_En && j.FullName_Ar) ? 'rtl' : 'ltr';
   }
 
   formatDate(s: string | null): string {

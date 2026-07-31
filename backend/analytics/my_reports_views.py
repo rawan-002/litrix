@@ -430,8 +430,11 @@ def submit_submission(request, submission_id):
             # Notify the admin who opened the campaign. Include the
             # researcher's name so the inbox is useful without a click-through.
             # English copy, matching the "Research Reports" UI label.
-            full_name = (request.user.full_name_ar
-                         or request.user.get_full_name()
+            # English first (get_full_name prefers ScholarDisplayName), so the
+            # notification copy stays English like the rest of the UI; Arabic
+            # only as a last-resort fallback.
+            full_name = (request.user.get_full_name()
+                         or request.user.full_name_ar
                          or request.user.email)
             cur.execute(
                 '''INSERT INTO "Notification"
