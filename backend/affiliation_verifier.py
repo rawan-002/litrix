@@ -43,6 +43,7 @@ import os
 import re
 import sys
 import time
+import unicodedata
 from datetime import datetime
 from io import BytesIO
 from typing import Any, Optional
@@ -102,19 +103,35 @@ UNPAYWALL_DELAY = 0.1
 PDF_DOWNLOAD_TIMEOUT = 30
 API_TIMEOUT = 15
 
-# Al-Baha detection patterns (case-insensitive regex)
+# Al-Baha detection patterns (case-insensitive regex). Expanded synonym set:
+# covers spacing (Al Baha / Al-Baha / Albaha), common misspellings (Bahah,
+# Bahaa, Baaha), the abbreviated "Univ.", the "University of ..." word order,
+# and Arabic ة/ه ending variants. Anchored on "<albaha> + univ" (or the Arabic
+# جامعة) so a stray "Baha" alone never matches.
+_BAHA = r'(?:baha|bahah|bahaa|baaha)'
 ALBAHA_NAME_PATTERNS = [
-    r'al[\s\-]?baha\s+university',
-    r'albaha\s+university',
-    r'university\s+of\s+al[\s\-]?baha',
-    r'university\s+of\s+albaha',
-    r'جامعة\s*الباحة',
+    rf'al[\s\-]?{_BAHA}\s+univ',            # Al-Baha / Al Baha / Albaha (+typos) University/Univ.
+    rf'univ\w*\s+of\s+al[\s\-]?{_BAHA}',    # University of Al-Baha
+    rf'al[\s\-]?{_BAHA}\s+(?:college|faculty)',  # Al-Baha College/Faculty (some records name it so)
+    r'جامع[ةه]\s*الباح[ةه]',                # جامعة الباحة (+ ة/ه variants)
+    r'كلي[ةه].{0,40}الباح[ةه]',             # كلية ... الباحة
 ]
-# Exact identifiers (substring match)
+# Exact institutional identifiers (substring match) — the most decisive signal.
 ALBAHA_IDENTIFIERS = [
-    '60104698',   # Scopus AF-ID
-    '0270eb240',  # ROR ID (case-insensitive)
+    '60104698',   # Scopus Affiliation ID
+    '0270eb240',  # ROR ID (ror.org/0270eb240)
+    'grid.449644', # GRID ID (legacy, maps to the ROR)
 ]
+
+# Verification-algorithm version, stamped into every result's details as
+# `verifier_version`. Bump it whenever the decision logic changes so we can tell
+# which papers were verified by an OLDER algorithm and re-verify only those (the
+# resume path re-picks any paper whose stored version != this). History:
+#   1.x  linear cascade, OpenAlex-first, DOI required
+#   2.x  (unreleased) venue work
+#   3.0.0  authority model (official decisive / supporting = evidence only),
+#          no-DOI title resolution, decision_basis + evidence_trail, Strict/Perf.
+VERIFIER_VERSION = '3.0.0'
 
 # Logging
 logging.basicConfig(
@@ -762,9 +779,34 @@ def verify_via_publisher_html(doi: str) -> tuple[Optional[bool], dict[str, Any]]
             'url': final_url[:300],
         }
 
-    return False, {
+    # An authoritative FALSE requires the page to actually CARRY structured
+    # affiliation data (meta tags / affiliation elements) that simply didn't
+    # include Al-Baha. A bare full-text miss is inconclusive (the page may render
+    # affiliations via JS, or our parser missed them) -> None, so it never
+    # excludes a paper on absence alone.
+    has_structured = False
+    for meta in soup.find_all('meta'):
+        nm = (meta.get('name', '') or meta.get('property', '') or '').lower()
+        if any(p in nm for p in meta_patterns) and (meta.get('content') or '').strip():
+            has_structured = True
+            break
+    if not has_structured:
+        try:
+            has_structured = bool(soup.select_one(
+                '[class*="affiliation"], [id*="aff"], .aff, .NLM_aff'))
+        except Exception:
+            has_structured = False
+
+    if has_structured:
+        return False, {
+            'tier': 'publisher_html',
+            'reason': 'structured_affiliation_no_albaha',
+            'url': final_url[:300],
+            'html_length': len(html),
+        }
+    return None, {
         'tier': 'publisher_html',
-        'reason': 'no_albaha_in_html',
+        'reason': 'no_structured_affiliation_data',
         'url': final_url[:300],
         'html_length': len(html),
     }
@@ -777,12 +819,18 @@ TIERS = {
     'ieee_browser':    verify_via_ieee_browser,
     'pdf':             verify_via_pdf,
 }
-# Default order — Publisher HTML before the browser tier (cheaper, works for
-# every non-JS-blocked publisher); ieee_browser before PDF (IEEE papers are
-# rarely open-access, so PDF would rarely resolve them anyway, and the
-# browser tier is far more accurate when it does apply). ieee_browser
-# short-circuits instantly (no browser launch) for any non-IEEE DOI.
-DEFAULT_TIER_ORDER = ['openalex', 'crossref', 'publisher_html', 'ieee_browser', 'pdf']
+# AUTHORITY MODEL (accuracy > speed — this is a batch verifier, not a fast one):
+# the OFFICIAL record is decisive; mediated databases only support it.
+#   Authoritative (may return a final TRUE or FALSE): the publisher's own
+#     landing page, IEEE's rendered page, and the article PDF.
+#   Supporting  (evidence only — a TRUE is accepted at LOWER confidence, a
+#     negative is NEVER a final FALSE): OpenAlex, Crossref. They frequently ship
+#     empty/partial affiliations, so their "no Al-Baha" means "not enough data",
+#     not "not Al-Baha". Only an official source may exclude a paper.
+AUTHORITATIVE_TIERS = ['publisher_html', 'ieee_browser', 'pdf']
+SUPPORTING_TIERS    = ['openalex', 'crossref']
+# Back-compat for --tier <name> (single forced tier is run standalone).
+DEFAULT_TIER_ORDER = AUTHORITATIVE_TIERS + SUPPORTING_TIERS
 
 TIER_DELAYS = {
     'openalex':       OPENALEX_DELAY,
@@ -793,64 +841,214 @@ TIER_DELAYS = {
 }
 
 
+def _run_tier(tier_name: str, doi: Optional[str]):
+    """Run one tier, never letting an exception abort the pipeline."""
+    time.sleep(TIER_DELAYS[tier_name])
+    try:
+        v, ev = TIERS[tier_name](doi or '')
+    except Exception as e:
+        v, ev = None, {'reason': 'tier_exception', 'detail': str(e)[:200]}
+    if isinstance(ev, dict):
+        ev.setdefault('tier', tier_name)
+    return v, ev
+
+
+def _result(verified, source, confidence, detail, trail,
+            decision_basis=None, official=False):
+    """Assemble the DB-ready dict, keeping the VERDICT separate from the
+    EVIDENCE. Details always carry: `decision_basis` (the tier the final verdict
+    rests on) + `official_source` (was it an authoritative source?) so the
+    decision is self-explaining; `confidence` (authoritative/supporting/none);
+    and the full `evidence_trail` (every source consulted, positive OR negative)
+    so an audit never needs to re-run the paper."""
+    return {
+        'verified': verified,
+        'verification_source': source,
+        'details': {
+            **(detail or {}),
+            'decision_basis':  decision_basis or (source if verified is not None else None),
+            'official_source': official,
+            'confidence':      confidence,
+            'verifier_version': VERIFIER_VERSION,
+            'evidence_trail':  trail,
+        },
+    }
+
+
+_TITLE_STOP = {'a', 'an', 'the', 'of', 'for', 'and', 'in', 'on', 'to', 'with', 'via', 'using'}
+
+
+def _norm_title_tokens(t: Optional[str]) -> set:
+    if not t:
+        return set()
+    t = unicodedata.normalize('NFKD', t)
+    t = ''.join(c for c in t if not unicodedata.combining(c)).lower()
+    t = re.sub(r'[^a-z0-9\s]', ' ', t)
+    return {w for w in t.split() if w and w not in _TITLE_STOP}
+
+
+def _title_match(our_tokens: set, cand_title: Optional[str],
+                 our_year, cand_year) -> bool:
+    b = _norm_title_tokens(cand_title)
+    if not our_tokens or not b:
+        return False
+    jac = len(our_tokens & b) / len(our_tokens | b)
+    year_ok = (our_year is None or cand_year is None
+               or abs(int(cand_year) - int(our_year)) <= 1)
+    return jac >= 0.9 and year_ok
+
+
+def resolve_doi_by_title(title: Optional[str], year=None, authors_hint: Optional[str] = None):
+    """P1: recover a DOI for a no-DOI paper by TITLE search — Crossref first,
+    then OpenAlex. Conservative: accepts only a near-exact title match (token
+    Jaccard >= 0.9) within +/-1 year, so we never attach a different work's DOI
+    (the same trap that caused past contamination). Google Scholar is
+    deliberately NOT used (no official API, unstable/limited). Returns
+    (doi, via) or (None, None)."""
+    toks = _norm_title_tokens(title)
+    if not toks:
+        return None, None
+    hint = _norm_title_tokens(authors_hint) if authors_hint else None
+
+    def _author_ok(family_names):
+        # When we have our own author list, require at least one candidate
+        # author family name to appear in it — guards against similar titles by
+        # DIFFERENT authors slipping past the title+year check. When we have no
+        # author data (hint is None) or the candidate lists none, don't block.
+        if hint is None or not family_names:
+            return True
+        for fam in family_names:
+            f = re.sub(r'[^a-z]', '', (fam or '').lower())
+            if f and f in hint:
+                return True
+        return False
+
+    # Crossref (free, no budget) first.
+    try:
+        r = requests.get('https://api.crossref.org/works',
+                         params={'query.bibliographic': (title or '')[:300], 'rows': 5,
+                                 'select': 'DOI,title,issued,author'},
+                         headers={'User-Agent': USER_AGENT}, timeout=API_TIMEOUT)
+        if r.status_code == 200:
+            for it in (((r.json() or {}).get('message') or {}).get('items') or []):
+                ct = (it.get('title') or [''])[0]
+                try:
+                    cy = (it.get('issued', {}).get('date-parts') or [[None]])[0][0]
+                except (IndexError, TypeError):
+                    cy = None
+                fams = [a.get('family', '') for a in (it.get('author') or [])]
+                if it.get('DOI') and _title_match(toks, ct, year, cy) and _author_ok(fams):
+                    return it['DOI'], 'crossref-title'
+    except (requests.RequestException, ValueError):
+        pass
+    time.sleep(CROSSREF_DELAY)
+    # OpenAlex fallback.
+    try:
+        r = requests.get('https://api.openalex.org/works',
+                         params={'search': (title or '')[:300], 'per-page': 5,
+                                 'select': 'doi,title,publication_year,authorships'},
+                         headers={'User-Agent': USER_AGENT}, timeout=API_TIMEOUT)
+        if r.status_code == 200:
+            for w in ((r.json() or {}).get('results') or []):
+                names = [((a.get('author') or {}).get('display_name') or '')
+                         for a in (w.get('authorships') or [])]
+                fams = [n.split()[-1] for n in names if n.strip()]
+                if (w.get('doi') and _title_match(toks, w.get('title'),
+                                                  year, w.get('publication_year'))
+                        and _author_ok(fams)):
+                    return (w['doi'] or '').replace('https://doi.org/', ''), 'openalex-title'
+    except (requests.RequestException, ValueError):
+        pass
+    time.sleep(OPENALEX_DELAY)
+    return None, None
+
+
 def verify_paper(
     paper_id: int,
     doi: Optional[str],
     source: str,
-    tiers_to_run: list[str],
+    tiers_to_run: Optional[list[str]] = None,
+    mode: str = 'strict',
 ) -> dict[str, Any]:
-    """Run the tiers in order until one gives a positive match (or all fail),
-    returning a dict ready for the DB: verified (True/False/None),
-    verification_source, and the evidence details."""
-    last_evidence: dict[str, Any] = {}
-    conclusive_negative: Optional[dict[str, Any]] = None
+    """Authority-weighted verification.
 
-    for tier_name in tiers_to_run:
-        tier_fn = TIERS[tier_name]
-        time.sleep(TIER_DELAYS[tier_name])
+    Phase A — AUTHORITATIVE (publisher page / IEEE render / PDF): decisive.
+      first TRUE  -> TRUE ; a structured-but-no-Al-Baha -> FALSE.
+    Phase B — SUPPORTING (OpenAlex / Crossref): consulted only when no official
+      source produced a verdict. A supporting Al-Baha match -> TRUE at LOWER
+      confidence; a supporting negative is EVIDENCE only, never a final FALSE
+      (a mediated DB being incomplete must never exclude a paper) -> stays NULL.
 
-        # A bug or unexpected payload in one tier must never abort the whole
-        # run — treat any unhandled error as inconclusive and move on.
-        try:
-            verified, evidence = tier_fn(doi or '')
-        except Exception as e:
-            verified, evidence = None, {
-                'tier': tier_name, 'reason': 'tier_exception', 'detail': str(e)[:200],
-            }
-        last_evidence = evidence
+    A single forced tier (--tier X) is run standalone (native verdict) for
+    debugging one source.
+    """
+    if tiers_to_run and len(tiers_to_run) == 1:
+        t = tiers_to_run[0]
+        v, ev = _run_tier(t, doi)
+        conf = 'authoritative' if t in AUTHORITATIVE_TIERS else 'supporting'
+        return _result(v, t if v is not None else 'pending-review', conf, ev, [ev],
+                       decision_basis=t, official=(t in AUTHORITATIVE_TIERS))
 
-        if verified is True:
-            return {
-                'verified': True,
-                'verification_source': tier_name,
-                'details': evidence,
-            }
-        if verified is False:
-            # Conclusive negative — this tier had affiliation data and none
-            # of it was Al-Baha. Remember it (prefer the FIRST, most
-            # authoritative tier — OpenAlex), but keep trying later tiers in
-            # case their richer metadata surfaces an Al-Baha affiliation.
-            if conclusive_negative is None:
-                conclusive_negative = dict(evidence)
-                conclusive_negative.setdefault('tier', tier_name)
-            continue
-        # verified is None → inconclusive (no data / network / 404), try next.
+    trail: list = []
 
-    # All tiers exhausted with no positive match. If ANY tier conclusively
-    # inspected affiliation data and found no Al-Baha, mark False. Otherwise
-    # leave it NULL (pending-review) so a retry / human can resolve it — a
-    # purely inconclusive run must never exclude a paper.
-    if conclusive_negative is not None:
-        return {
-            'verified': False,
-            'verification_source': conclusive_negative.get('tier', 'pending-review'),
-            'details': conclusive_negative,
-        }
-    return {
-        'verified': None,
-        'verification_source': 'pending-review',
-        'details': last_evidence,
-    }
+    # Authoritative sources for THIS paper. IEEE render only for IEEE DOIs
+    # (skip it entirely otherwise — it can't help a non-IEEE paper). Publisher
+    # HTML + PDF apply to everything.
+    clean_doi = (doi or '').strip().lower()
+    for _pfx in ('https://doi.org/', 'http://doi.org/', 'doi:'):
+        if clean_doi.startswith(_pfx):
+            clean_doi = clean_doi[len(_pfx):]
+    auth_tiers = ['publisher_html']
+    if clean_doi.startswith(IEEE_DOI_PREFIXES):
+        auth_tiers.append('ieee_browser')
+    auth_tiers.append('pdf')
+
+    # --- Phase A: authoritative. STRICT (default) runs EVERY official source and
+    # keeps ALL evidence (Publisher+PDF double-confirm recorded, fully auditable
+    # without re-processing). PERFORMANCE stops at the first decisive official
+    # answer (tiny coverage loss for a big speed win on large batches). The
+    # verdict rests on the first positive (or, absent any, the first structured
+    # negative).
+    auth_positive: list = []
+    auth_negative: list = []
+    for t in auth_tiers:
+        v, ev = _run_tier(t, doi)
+        trail.append(ev)
+        if v is True:
+            auth_positive.append((t, ev))
+            if mode == 'performance':
+                break
+        elif v is False:                    # official record, structured data, no Al-Baha
+            auth_negative.append((t, ev))
+            if mode == 'performance':
+                break
+    if auth_positive:
+        t0, ev0 = auth_positive[0]
+        return _result(True, t0, 'authoritative', ev0, trail, decision_basis=t0, official=True)
+    if auth_negative:
+        t0, ev0 = auth_negative[0]
+        return _result(False, t0, 'authoritative', ev0, trail, decision_basis=t0, official=True)
+
+    # --- Phase B: supporting — run all for a full trail; evidence only.
+    support_positive: list = []
+    support_negatives: list = []
+    for t in SUPPORTING_TIERS:
+        v, ev = _run_tier(t, doi)
+        trail.append(ev)
+        if v is True:
+            support_positive.append((t, ev))
+        elif v is False:
+            support_negatives.append(ev)    # EVIDENCE-, never a verdict on its own
+    if support_positive:
+        t0, ev0 = support_positive[0]
+        return _result(True, t0, 'supporting', ev0, trail, decision_basis=t0, official=False)
+
+    # No official data + no supporting positive -> NULL (pending-review),
+    # carrying the supporting negatives so a reviewer sees why it's unresolved.
+    return _result(None, 'pending-review', 'none',
+                   {'reason': 'no_authoritative_data',
+                    'supporting_negatives': support_negatives[:4]}, trail,
+                   decision_basis=None, official=False)
 
 
 def default_verification_years() -> list[int]:
@@ -926,7 +1124,15 @@ def fetch_pending_papers(
         where.append('rp."VerificationSource" = %s')
         params.append('pending-review')
     elif not re_verify and resume:
-        where.append('rp."AffiliationVerified" IS NULL')
+        # Version-aware resume: pick papers not yet verified (NULL) AND papers
+        # verified by an OLDER algorithm version. This makes a full migration to
+        # a new VERIFIER_VERSION resumable — a killed/re-started run just skips
+        # what the current version already did, and re-verifies stale results.
+        where.append(
+            '(rp."AffiliationVerified" IS NULL '
+            'OR COALESCE(rp."VerificationDetails"->>%s, %s) <> %s)'
+        )
+        params.extend(['verifier_version', '', VERIFIER_VERSION])
 
     # Only consider papers in dashboard scope to avoid wasting effort
     where.append('rp."PubYear" = ANY(%s)')
@@ -939,7 +1145,9 @@ def fetch_pending_papers(
             rp."DOI",
             rp."Source",
             rp."AffiliationVerified",
-            rp."VerificationSource"
+            rp."VerificationSource",
+            rp."PubYear",
+            rp."RawData_Log"->>'authors' AS authors_raw
         FROM "ResearchPaper" rp
         WHERE {' AND '.join(where)}
         ORDER BY
@@ -1072,27 +1280,50 @@ def cmd_verify(conn, args):
         'verified_yes': 0,
         'verified_no':  0,
         'pending':      0,
-        'skipped_no_doi': 0,
+        'resolved_doi': 0,
+        'unresolvable_no_doi': 0,
     }
 
     for idx, paper in enumerate(papers, 1):
         title_preview = (paper['Title'] or '')[:60]
         doi = paper['DOI']
 
-        # If a tier was requested but paper has no DOI, skip immediately
+        # P1: no stored DOI -> recover one by TITLE (Crossref -> OpenAlex) so
+        # book chapters / old conferences / local journals get verified too,
+        # instead of being skipped. Only a near-exact title match is accepted.
         if not doi or doi.strip() == '':
-            log.warning(f'[{idx}/{len(papers)}] Paper #{paper["PaperID"]} — '
-                        f'no DOI, skipping. Title: {title_preview}')
-            stats['skipped_no_doi'] += 1
-            continue
-
-        log.info(f'[{idx}/{len(papers)}] Paper #{paper["PaperID"]} (DOI={doi[:50]})')
+            doi, via = resolve_doi_by_title(
+                paper['Title'], paper.get('PubYear'), paper.get('authors_raw'))
+            if not doi:
+                log.warning(f'[{idx}/{len(papers)}] Paper #{paper["PaperID"]} — '
+                            f'no DOI, none found by title. Title: {title_preview}')
+                stats['unresolvable_no_doi'] += 1
+                continue
+            stats['resolved_doi'] += 1
+            log.info(f'[{idx}/{len(papers)}] Paper #{paper["PaperID"]} — DOI recovered '
+                     f'via {via}: {doi[:50]}')
+            # Persist the recovered DOI + its provenance (DoiResolvedBy/At) so we
+            # always know this DOI was inferred, not original. Guarded; a
+            # duplicate-DOI collision just rolls back (still verify in-memory).
+            if args.apply:
+                try:
+                    with conn.cursor() as c:
+                        c.execute('UPDATE "ResearchPaper" SET "DOI"=%s, '
+                                  '"DoiResolvedBy"=%s, "DoiResolvedAt"=NOW() '
+                                  'WHERE "PaperID"=%s AND ("DOI" IS NULL OR "DOI"=\'\')',
+                                  [doi, via, paper['PaperID']])
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+        else:
+            log.info(f'[{idx}/{len(papers)}] Paper #{paper["PaperID"]} (DOI={doi[:50]})')
 
         result = verify_paper(
             paper_id=paper['PaperID'],
             doi=doi,
             source=paper['Source'],
             tiers_to_run=tiers_to_run,
+            mode=getattr(args, 'mode', 'strict'),
         )
 
         # Update stats
@@ -1122,12 +1353,13 @@ def cmd_verify(conn, args):
     print('═' * 80)
     print(' RUN SUMMARY'.center(80))
     print('═' * 80)
-    print(f'  Processed:        {stats["processed"]}')
-    print(f'  Al-Baha verified: {stats["verified_yes"]}')
-    print(f'  NOT Al-Baha:      {stats["verified_no"]}')
-    print(f'  Pending (retry):  {stats["pending"]}')
-    print(f'  Skipped (no DOI): {stats["skipped_no_doi"]}')
-    print(f'  Mode:             {"APPLY (writes to DB)" if args.apply else "DRY-RUN (no writes)"}')
+    print(f'  Processed:            {stats["processed"]}')
+    print(f'  Al-Baha verified:     {stats["verified_yes"]}')
+    print(f'  NOT Al-Baha:          {stats["verified_no"]}')
+    print(f'  Pending (retry):      {stats["pending"]}')
+    print(f'  DOI recovered by title:{stats["resolved_doi"]}')
+    print(f'  No DOI (unresolvable): {stats["unresolvable_no_doi"]}')
+    print(f'  Mode:                 {"APPLY (writes to DB)" if args.apply else "DRY-RUN (no writes)"}')
     print()
 
 
@@ -1156,6 +1388,10 @@ def main():
                         help='Restrict to one source (default: all)')
     parser.add_argument('--tier', choices=list(TIERS.keys()),
                         help='Run a single tier only (default: all in order)')
+    parser.add_argument('--mode', choices=['strict', 'performance'], default='strict',
+                        help='strict (default): run every authoritative source and '
+                             'keep all evidence. performance: stop at the first '
+                             'decisive official answer (faster, tiny coverage loss).')
     parser.add_argument('--limit', type=int, help='Process at most N papers (testing)')
     parser.add_argument('--user', type=int,
                         help='Restrict to papers authored by this Users.UserID')
