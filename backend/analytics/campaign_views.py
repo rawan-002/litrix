@@ -662,7 +662,8 @@ def campaign_export(request, campaign_id):
         cur.execute(
             '''SELECT
                  u."FullName_Ar",
-                 TRIM(CONCAT_WS(' ', u."FirstName", u."LastName")) AS full_name_en,
+                 COALESCE(NULLIF(u."ScholarDisplayName", ''),
+                          TRIM(CONCAT_WS(' ', u."FirstName", u."LastName"))) AS full_name_en,
                  u."Email", u."Litrix_ID",
                  d."DepartmentName",
                  s."Status",
