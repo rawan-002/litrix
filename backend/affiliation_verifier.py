@@ -190,15 +190,19 @@ def verify_via_openalex(doi: str) -> tuple[Optional[bool], dict[str, Any]]:
     if not authorships:
         return None, {'tier': 'openalex', 'reason': 'openalex_no_authorships'}
 
-    # A conclusive "not Al-Baha" requires that OpenAlex actually had
-    # affiliation data to inspect. If no authorship lists institutions we
-    # return None (inconclusive) so a later tier / retry can resolve it,
-    # rather than falsely excluding the paper.
-    institutions_seen = 0
+    # Tier B may DECIDE "not Al-Baha" only when the affiliation data is COMPLETE
+    # — every author carries an institution. OpenAlex copies affiliations from
+    # Crossref/publishers (it doesn't invent them), so a complete author×
+    # institution list with no Al-Baha is a strong signal. If ANY author has no
+    # institution the data is partial -> inconclusive (None), never a verdict.
+    n_authors = len(authorships)
+    n_with_inst = 0
     for auth in authorships:
+        insts = auth.get('institutions') or []
+        if insts:
+            n_with_inst += 1
         author_name = (auth.get('author') or {}).get('display_name', '')
-        for inst in auth.get('institutions') or []:
-            institutions_seen += 1
+        for inst in insts:
             inst_name = inst.get('display_name', '') or ''
             ror = inst.get('ror', '') or ''
             country = inst.get('country_code', '') or ''
@@ -213,14 +217,14 @@ def verify_via_openalex(doi: str) -> tuple[Optional[bool], dict[str, Any]]:
                     'matched_substring':   match,
                 }
 
-    if institutions_seen == 0:
-        return None, {'tier': 'openalex', 'reason': 'openalex_no_institutions'}
-
+    if not (n_authors > 0 and n_with_inst == n_authors):
+        return None, {'tier': 'openalex', 'reason': 'openalex_incomplete_affiliations',
+                      'authors': n_authors, 'authors_with_institution': n_with_inst}
     return False, {
         'tier': 'openalex',
-        'reason': 'no_albaha_in_authorships',
-        'authorships_count': len(authorships),
-        'institutions_seen': institutions_seen,
+        'reason': 'no_albaha_complete_affiliations',
+        'authors': n_authors,
+        'authors_with_institution': n_with_inst,
     }
 
 
@@ -253,17 +257,18 @@ def verify_via_crossref(doi: str) -> tuple[Optional[bool], dict[str, Any]]:
     if not authors:
         return None, {'tier': 'crossref', 'reason': 'crossref_no_authors'}
 
-    # Crossref very often omits affiliations entirely, so only call it
-    # conclusively "not Al-Baha" when at least one affiliation string was
-    # present; otherwise stay inconclusive (None) and fall through to the
-    # HTML/PDF tiers rather than excluding the paper.
-    affiliations_seen = 0
+    # Tier B decides "not Al-Baha" only when COMPLETE — every author carries an
+    # affiliation string. Crossref very often omits affiliations, so a partial
+    # list stays inconclusive (None); only a full author×affiliation list with
+    # no Al-Baha is a verdict.
+    n_authors = len(authors)
+    n_with_aff = 0
     for auth in authors:
         author_name = f"{auth.get('given', '')} {auth.get('family', '')}".strip()
-        for aff in auth.get('affiliation') or []:
-            aff_name = aff.get('name', '') or ''
-            if aff_name:
-                affiliations_seen += 1
+        affs = [a.get('name', '') or '' for a in (auth.get('affiliation') or [])]
+        if any(a.strip() for a in affs):
+            n_with_aff += 1
+        for aff_name in affs:
             match = detect_albaha_in_text(aff_name)
             if match:
                 return True, {
@@ -273,14 +278,14 @@ def verify_via_crossref(doi: str) -> tuple[Optional[bool], dict[str, Any]]:
                     'matched_substring':   match,
                 }
 
-    if affiliations_seen == 0:
-        return None, {'tier': 'crossref', 'reason': 'crossref_no_affiliations'}
-
+    if not (n_authors > 0 and n_with_aff == n_authors):
+        return None, {'tier': 'crossref', 'reason': 'crossref_incomplete_affiliations',
+                      'authors': n_authors, 'authors_with_affiliation': n_with_aff}
     return False, {
         'tier': 'crossref',
-        'reason': 'no_albaha_in_affiliations',
-        'authors_count': len(authors),
-        'affiliations_seen': affiliations_seen,
+        'reason': 'no_albaha_complete_affiliations',
+        'authors': n_authors,
+        'authors_with_affiliation': n_with_aff,
     }
 
 
@@ -1029,25 +1034,34 @@ def verify_paper(
         t0, ev0 = auth_negative[0]
         return _result(False, t0, 'authoritative', ev0, trail, decision_basis=t0, official=True)
 
-    # --- Phase B: supporting — run all for a full trail; evidence only.
-    support_positive: list = []
-    support_negatives: list = []
+    # --- Phase B: FALLBACK — OpenAlex / Crossref may DECIDE, but only on
+    # COMPLETE affiliation data (the tier functions already return False only
+    # when every author carries an affiliation; partial -> None). Tier A always
+    # wins; this runs only when no official source gave a verdict. Confidence is
+    # 'fallback' (below authoritative, well above NULL).
+    fb_positive: list = []
+    fb_negative: list = []
     for t in SUPPORTING_TIERS:
         v, ev = _run_tier(t, doi)
         trail.append(ev)
         if v is True:
-            support_positive.append((t, ev))
-        elif v is False:
-            support_negatives.append(ev)    # EVIDENCE-, never a verdict on its own
-    if support_positive:
-        t0, ev0 = support_positive[0]
-        return _result(True, t0, 'supporting', ev0, trail, decision_basis=t0, official=False)
+            fb_positive.append((t, ev))
+        elif v is False:                    # complete affiliations, no Al-Baha
+            fb_negative.append((t, ev))
+    if fb_positive:
+        t0, ev0 = fb_positive[0]
+        return _result(True, t0, 'fallback', ev0, trail,
+                       decision_basis=f'{t0}_albaha_match', official=False)
+    if fb_negative:
+        t0, ev0 = fb_negative[0]
+        # e.g. "openalex_complete_affiliations" — self-explaining WHY it's a
+        # verdict (complete author×affiliation list, no Al-Baha).
+        return _result(False, t0, 'fallback', ev0, trail,
+                       decision_basis=f'{t0}_complete_affiliations', official=False)
 
-    # No official data + no supporting positive -> NULL (pending-review),
-    # carrying the supporting negatives so a reviewer sees why it's unresolved.
+    # No official verdict + no complete fallback data -> NULL (pending-review).
     return _result(None, 'pending-review', 'none',
-                   {'reason': 'no_authoritative_data',
-                    'supporting_negatives': support_negatives[:4]}, trail,
+                   {'reason': 'no_conclusive_data'}, trail,
                    decision_basis=None, official=False)
 
 
@@ -1166,8 +1180,29 @@ def update_paper_verification(
     conn,
     paper_id: int,
     result: dict[str, Any],
+    existing_verified: Optional[bool] = None,
 ):
-    """Writes the verification decision to the DB. Run inside a transaction."""
+    """Writes the verification decision. MANDATORY guard: an inconclusive re-run
+    (verified is None) must NEVER overwrite an existing True/False verdict — that
+    would silently destroy good data (and undo manual fixes) whenever the
+    official source is temporarily blocked. In that case we keep the verdict and
+    only stamp `verifier_version` (so version-aware resume won't re-process it
+    forever). Run inside a transaction."""
+    if result['verified'] is None and existing_verified is not None:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''
+                UPDATE "ResearchPaper"
+                SET "VerificationDetails" =
+                        COALESCE("VerificationDetails", '{}'::jsonb) || %s::jsonb
+                WHERE "PaperID" = %s
+                ''',
+                [json.dumps({'verifier_version': VERIFIER_VERSION,
+                             'reverify': 'inconclusive_kept_existing'},
+                            ensure_ascii=False),
+                 paper_id],
+            )
+        return
     with conn.cursor() as cur:
         cur.execute(
             '''
@@ -1342,7 +1377,8 @@ def cmd_verify(conn, args):
         # Apply (or dry-run) the result
         if args.apply:
             try:
-                update_paper_verification(conn, paper['PaperID'], result)
+                update_paper_verification(conn, paper['PaperID'], result,
+                                          existing_verified=paper.get('AffiliationVerified'))
                 conn.commit()
             except Exception as e:
                 conn.rollback()
