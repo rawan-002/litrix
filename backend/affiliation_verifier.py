@@ -1134,7 +1134,8 @@ def fetch_pending_papers(
       - resume: skip already-verified rows (default True)
       - re_verify: include ALL papers regardless of current state
       - retry_pending: only re-process papers previously marked pending-review
-      - years: PubYear scope (default: dynamic dashboard window)
+      - years: explicit PubYear scope; default (None) = ALL years + NULL-year
+      - all_years: force ALL years even if `years` is given
       - user_id: restrict to papers authored by this Users.UserID (testing
         a single researcher's profile)
       - department_id: restrict to papers authored by a researcher whose
@@ -1187,13 +1188,17 @@ def fetch_pending_papers(
         )
         params.extend(['verifier_version', '', VERIFIER_VERSION])
 
-    # Year scope. Default: dashboard window (avoids wasting effort). With
-    # --all-years we skip the filter entirely so a full-history migration to a
-    # new VERIFIER_VERSION covers every paper — INCLUDING the ~60 with a NULL
-    # PubYear, which a `PubYear = ANY(list)` clause would silently drop.
-    if not all_years:
+    # Year scope. This is a MAINTENANCE tool, so the default is EVERY paper
+    # (all years + NULL-PubYear) — the whole DB is kept on one verifier
+    # version. Narrowing happens ONLY when the user explicitly passes --years;
+    # --all-years is a self-documenting alias for the default that also
+    # overrides an explicit --years if both are given. A `PubYear = ANY(list)`
+    # clause silently drops the ~60 NULL-PubYear rows, so it's added ONLY when
+    # a scope was actually requested. (default_verification_years() remains the
+    # NCAAA dashboard window for --report --years and callers that want it.)
+    if years and not all_years:
         where.append('rp."PubYear" = ANY(%s)')
-        params.append(years or default_verification_years())
+        params.append(years)
 
     sql = f'''
         SELECT
@@ -1266,16 +1271,18 @@ def update_paper_verification(
 
 
 def cmd_report(conn, years: Optional[list[int]] = None, all_years: bool = False):
-    """Prints per-source verification stats. No API calls."""
-    yrs = years or default_verification_years()
+    """Prints per-source verification stats. No API calls. Defaults to the
+    WHOLE database; scopes to specific years only when `years` is given (and
+    --all-years wasn't)."""
+    scoped = bool(years) and not all_years
     print()
     print('═' * 80)
     print(' VERIFICATION REPORT'.center(80))
-    scope_label = 'ALL YEARS' if all_years else ', '.join(map(str, yrs))
+    scope_label = ', '.join(map(str, years)) if scoped else 'ALL YEARS'
     print(f' (PubYear scope: {scope_label})'.center(80))
     print('═' * 80)
-    year_clause = '' if all_years else 'WHERE rp."PubYear" = ANY(%s)'
-    year_params = [] if all_years else [yrs]
+    year_clause = 'WHERE rp."PubYear" = ANY(%s)' if scoped else ''
+    year_params = [years] if scoped else []
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(f'''
             SELECT
@@ -1491,12 +1498,13 @@ def main():
     parser.add_argument('--retry-pending', action='store_true',
                         help='Only retry papers that were previously marked pending-review')
     parser.add_argument('--years', type=str, default=None,
-                        help='Comma-separated PubYear scope, e.g. "2025,2026,2027" '
-                             '(default: last year through next year, dynamic)')
+                        help='Comma-separated PubYear scope, e.g. "2025,2026,2027". '
+                             'DEFAULT (omitted) = EVERY paper, all years + NULL-year '
+                             '(this is a maintenance tool). Pass this only to narrow.')
     parser.add_argument('--all-years', dest='all_years', action='store_true',
-                        help='Ignore the year filter entirely — verify EVERY paper '
-                             '(all years + NULL-year). Use for a full-history '
-                             'migration to a new VERIFIER_VERSION.')
+                        help='Explicit "every paper" (all years + NULL-year). Same as '
+                             'the default; kept for self-documentation and to override '
+                             'a --years scope if both are given.')
 
     args = parser.parse_args()
 
