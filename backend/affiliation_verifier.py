@@ -100,8 +100,12 @@ USER_AGENT = f'Litrix-AffiliationVerifier/1.0 (mailto:{CONTACT_EMAIL})'
 OPENALEX_DELAY = 0.1   # 10 req/sec — well under the 10/sec limit
 CROSSREF_DELAY = 0.05  # 20 req/sec — under the 50/sec limit
 UNPAYWALL_DELAY = 0.1
-PDF_DOWNLOAD_TIMEOUT = 30
+PDF_DOWNLOAD_TIMEOUT = 10       # was 30 — a landing page that hasn't started
+                               # streaming a PDF in 10s won't in 30 either
 API_TIMEOUT = 15
+PUBLISHER_HTML_TIMEOUT = 8     # publisher landing pages; short so one slow/
+                               # bot-walled host can't stall the batch
+IEEE_BROWSER_TIMEOUT = 12      # headless render budget for the IEEE tier
 
 # Al-Baha detection patterns (case-insensitive regex). Expanded synonym set:
 # covers spacing (Al Baha / Al-Baha / Albaha), common misspellings (Bahah,
@@ -348,6 +352,15 @@ def verify_via_pdf(doi: str) -> tuple[Optional[bool], dict[str, Any]]:
         if pdf_resp.status_code != 200:
             return None, {'reason': f'pdf_http_{pdf_resp.status_code}', 'url': pdf_url[:200]}
 
+        # Guard #1: Content-Type. Many "OA PDF" URLs actually serve an HTML
+        # landing/paywall/interstitial page. Feeding that to pypdf throws
+        # "invalid pdf header b'<!DOC'" — a noisy false failure. Bail early
+        # when the server clearly says it's HTML.
+        content_type = (pdf_resp.headers.get('Content-Type') or '').lower()
+        if 'text/html' in content_type:
+            return None, {'reason': 'pdf_url_served_html',
+                          'content_type': content_type[:60], 'url': pdf_url[:200]}
+
         # Cap at 10 MB to protect memory
         MAX_BYTES = 10 * 1024 * 1024
         chunks = []
@@ -360,6 +373,14 @@ def verify_via_pdf(doi: str) -> tuple[Optional[bool], dict[str, Any]]:
         pdf_bytes = b''.join(chunks)
     except requests.RequestException as e:
         return None, {'reason': 'pdf_download_failed', 'detail': str(e)[:200]}
+
+    # Guard #2: magic bytes. Content-Type can lie (or be absent); the only
+    # reliable signal is the file itself. A real PDF starts with "%PDF".
+    # Anything else (HTML, an error page, a redirect body) is not parseable.
+    if not pdf_bytes.startswith(b'%PDF'):
+        return None, {'reason': 'not_a_pdf',
+                      'first_bytes': pdf_bytes[:8].decode('latin-1', 'replace'),
+                      'url': pdf_url[:200]}
 
     # Step 3: extract text from first 2 pages
     try:
@@ -487,7 +508,7 @@ def verify_via_ieee_browser(doi: str) -> tuple[Optional[bool], dict[str, Any]]:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.get(f'https://doi.org/{clean_doi}')
         try:
-            WebDriverWait(driver, 15).until(
+            WebDriverWait(driver, IEEE_BROWSER_TIMEOUT).until(
                 lambda d: '"authors":[' in d.page_source
                 or 'ieeexplore.ieee.org' not in d.current_url
             )
@@ -582,7 +603,7 @@ def verify_via_publisher_html(doi: str) -> tuple[Optional[bool], dict[str, Any]]
         r = requests.get(
             url,
             allow_redirects=True,
-            timeout=API_TIMEOUT * 2,  # publishers can be slow
+            timeout=PUBLISHER_HTML_TIMEOUT,
             headers={
                 'User-Agent': USER_AGENT,
                 # Some publishers gate-keep on Accept; pretend to be a normal browser
@@ -1060,8 +1081,25 @@ def verify_paper(
                        decision_basis=f'{t0}_complete_affiliations', official=False)
 
     # No official verdict + no complete fallback data -> NULL (pending-review).
+    # Enrich the reason with a per-tier breakdown of WHY each source failed
+    # (e.g. publisher_html=html_http_403, pdf=not_a_pdf, openalex=
+    # openalex_incomplete_affiliations) so a human reviewing the NULL knows
+    # what was actually tried, without re-running anything.
+    per_tier = {}
+    for ev in trail:
+        if not isinstance(ev, dict):
+            continue
+        t = ev.get('tier') or ev.get('source')
+        why = ev.get('reason')
+        if t and why and t not in per_tier:
+            per_tier[t] = why
+    # A single flat summary string, e.g.
+    # "publisher_html:html_http_403 | pdf:not_a_pdf | openalex:no_doi".
+    summary = ' | '.join(f'{t}:{w}' for t, w in per_tier.items()) or 'no_sources_ran'
     return _result(None, 'pending-review', 'none',
-                   {'reason': 'no_conclusive_data'}, trail,
+                   {'reason': 'no_conclusive_data',
+                    'tier_reasons': per_tier,
+                    'summary': summary}, trail,
                    decision_basis=None, official=False)
 
 
