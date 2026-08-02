@@ -1103,18 +1103,6 @@ def verify_paper(
                    decision_basis=None, official=False)
 
 
-def default_verification_years() -> list[int]:
-    """Dashboard-scope years, computed dynamically (last year through next).
-
-    It used to be hard-coded to [2025, 2026], which silently skipped papers
-    in later years — an incremental scrape can pull next-year papers (Scholar
-    lists in-press 2027 items today). Overridable via --years.
-    """
-    from datetime import date
-    y = date.today().year
-    return [y - 1, y, y + 1]
-
-
 def fetch_pending_papers(
     conn,
     source_filter: Optional[str],
@@ -1189,13 +1177,12 @@ def fetch_pending_papers(
         params.extend(['verifier_version', '', VERIFIER_VERSION])
 
     # Year scope. This is a MAINTENANCE tool, so the default is EVERY paper
-    # (all years + NULL-PubYear) — the whole DB is kept on one verifier
-    # version. Narrowing happens ONLY when the user explicitly passes --years;
-    # --all-years is a self-documenting alias for the default that also
-    # overrides an explicit --years if both are given. A `PubYear = ANY(list)`
-    # clause silently drops the ~60 NULL-PubYear rows, so it's added ONLY when
-    # a scope was actually requested. (default_verification_years() remains the
-    # NCAAA dashboard window for --report --years and callers that want it.)
+    # (all years + NULL-PubYear) — the whole DB is kept on one verifier version.
+    # Narrowing happens ONLY when the user explicitly passes --years (which is
+    # mutually exclusive with --all-years at the CLI). A `PubYear = ANY(list)`
+    # clause silently drops the ~60 NULL-PubYear rows, so it's added ONLY when a
+    # scope was actually requested. `all_years` is accepted for explicitness but
+    # is equivalent to the default here.
     if years and not all_years:
         where.append('rp."PubYear" = ANY(%s)')
         params.append(years)
@@ -1497,14 +1484,19 @@ def main():
                         help='Re-run on ALL papers (overrides --resume)')
     parser.add_argument('--retry-pending', action='store_true',
                         help='Only retry papers that were previously marked pending-review')
-    parser.add_argument('--years', type=str, default=None,
-                        help='Comma-separated PubYear scope, e.g. "2025,2026,2027". '
-                             'DEFAULT (omitted) = EVERY paper, all years + NULL-year '
-                             '(this is a maintenance tool). Pass this only to narrow.')
-    parser.add_argument('--all-years', dest='all_years', action='store_true',
-                        help='Explicit "every paper" (all years + NULL-year). Same as '
-                             'the default; kept for self-documentation and to override '
-                             'a --years scope if both are given.')
+    # Year scope: --years and --all-years are mutually exclusive so a
+    # contradictory `--all-years --years 2025` FAILS LOUDLY instead of one
+    # silently winning. Omitting BOTH = the maintenance default (every paper).
+    scope = parser.add_mutually_exclusive_group()
+    scope.add_argument('--years', type=str, default=None,
+                       help='Comma-separated PubYear scope, e.g. "2025,2026,2027". '
+                            'DEFAULT (omitted) = EVERY paper, all years + NULL-year '
+                            '(this is a maintenance tool). Pass this only to narrow. '
+                            'Mutually exclusive with --all-years.')
+    scope.add_argument('--all-years', dest='all_years', action='store_true',
+                       help='Explicit "every paper" (all years + NULL-year) — same as '
+                            'the default; kept for self-documentation. Mutually '
+                            'exclusive with --years.')
 
     args = parser.parse_args()
 
