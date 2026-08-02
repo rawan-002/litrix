@@ -22,7 +22,7 @@ from .serializers import (
 from .stats import (
     CHART_YEAR_FLOOR, FOCUS_YEARS,
     _resolve_years, _hod_scope_department_id, _albaha_only,
-    _cites_expr, _affil_clause,
+    _cites_expr, verified_affil_clause,
     _dept_cards_windowed, _researcher_rows_windowed,
 )
 from .exports import export_excel  # re-exported for urls.py
@@ -383,9 +383,11 @@ def overview(request):
     years = _resolve_years(request)
 
     albaha_only = _albaha_only(request)
-    AFFIL_CLAUSE = _affil_clause(albaha_only, 'rp')
+    # Every consumer of these two is an OFFICIAL KPI (totals, charts, top
+    # researchers, department blocks) -> confirmed-only.
+    AFFIL_CLAUSE = verified_affil_clause(albaha_only, 'rp')
     # Same predicate for the citation CTEs that alias the paper table as rp_all.
-    AFFIL_CLAUSE_RPALL = _affil_clause(albaha_only, 'rp_all')
+    AFFIL_CLAUSE_RPALL = verified_affil_clause(albaha_only, 'rp_all')
 
     # Institutional dashboard data is for roles that may view researchers; a
     # plain Researcher would otherwise fall into the unscoped branch and get the
@@ -498,6 +500,32 @@ def overview(request):
         cur.execute(cit_sql, cit_params)
         citations_row = cur.fetchone()
 
+        # Pending-review indicator: papers in scope whose Al-Baha affiliation is
+        # NOT yet verified (AffiliationVerified IS NULL). These are NOT in the
+        # confirmed Al-Baha totals above (which are TRUE-only) — they're an
+        # INDEPENDENT data-quality metric. Computed WITHOUT the affiliation
+        # filter (and regardless of the toggle) so the reviewer always sees the
+        # size of the unverified backlog. Same scope (year window + HoD dept).
+        pend_sql = (
+            'SELECT COUNT(DISTINCT rp."PaperID") '
+            'FROM "ResearchPaper" rp '
+            'WHERE rp."PubYear" = ANY(%s) '
+            '  AND rp."AffiliationVerified" IS NULL '
+            '  AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"'
+        )
+        pend_params = [years]
+        if hod_dept_id:
+            pend_sql += (
+                ' AND EXISTS (SELECT 1 FROM "Works_In" w2 '
+                '              WHERE w2."UserID" = a."UserID" '
+                '                AND w2."DepartmentID" = %s '
+                '                AND w2."IsCurrentPosition" = TRUE)'
+            )
+            pend_params.append(hod_dept_id)
+        pend_sql += ')'
+        cur.execute(pend_sql, pend_params)
+        pending_review = cur.fetchone()[0] or 0
+
         # paper_count_row is (papers, q1, scopus, isi, q2, q3, q4); splice the
         # citation total in to get (papers, citations, q1, scopus, isi, q2, q3, q4).
         paper_totals = (
@@ -555,7 +583,14 @@ def overview(request):
         # For a HoD, restrict to papers authored by someone currently in their
         # department, else this leaks the institution's most-cited papers onto a
         # department dashboard.
-        top_papers_sql = 'SELECT * FROM v_top_papers WHERE pub_year = ANY(%s)'
+        # Include the per-paper verification state so the UI can badge an
+        # unverified highlight paper as 'Pending' instead of hiding it.
+        top_papers_sql = (
+            'SELECT v_top_papers.*, '
+            '(SELECT rp_af."AffiliationVerified" FROM "ResearchPaper" rp_af '
+            ' WHERE rp_af."PaperID" = v_top_papers.paper_id) AS affiliation_verified '
+            'FROM v_top_papers WHERE pub_year = ANY(%s)'
+        )
         top_papers_params = [years]
         if hod_dept_id is not None:
             top_papers_sql += (
@@ -567,6 +602,10 @@ def overview(request):
             )
             top_papers_params.append(hod_dept_id)
         if albaha_only:
+            # Highlight list (NOT an official count): keep confirmed + unverified
+            # (TRUE+NULL), drop only confirmed-elsewhere (FALSE). Unverified
+            # papers stay visible with a 'Pending' badge (affiliation_verified in
+            # the payload) rather than being hidden — active_affil_clause policy.
             top_papers_sql += (
                 ' AND (SELECT rp_af."AffiliationVerified" FROM "ResearchPaper" rp_af '
                 'WHERE rp_af."PaperID" = v_top_papers.paper_id) IS DISTINCT FROM FALSE'
@@ -736,6 +775,9 @@ def overview(request):
             'book_papers':         (paper_count_row[9] if len(paper_count_row) > 9 else 0) or 0,
             'preprint_papers':     (paper_count_row[10] if len(paper_count_row) > 10 else 0) or 0,
             'avg_h_index':         float(dept_agg['avg_h'] or 0),
+            # Independent data-quality metric: papers in scope not yet verified
+            # for Al-Baha affiliation (NULL). NOT included in 'papers' above.
+            'pending_review':      pending_review,
         },
         'top_researchers': [
             {
@@ -770,7 +812,10 @@ def classified_papers(request):
 
     years = _resolve_years(request)
     albaha_only = _albaha_only(request)
-    affil_rp = _affil_clause(albaha_only, 'rp')
+    # This list is a KPI drill-down: its count MUST equal the donut's KPI, so it
+    # uses the same confirmed-only filter (invariant: the number you click ==
+    # the rows you get).
+    affil_rp = verified_affil_clause(albaha_only, 'rp')
 
     u = request.user
     if not (u and u.is_authenticated and (

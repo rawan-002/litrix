@@ -83,6 +83,9 @@ export interface OverviewPayload {
     conference_papers?: number;
     book_papers?: number;
     preprint_papers?: number;
+    /** Papers in scope not yet verified for Al-Baha affiliation (NULL).
+     *  Independent data-quality metric — NOT included in `papers`. */
+    pending_review?: number;
   };
   top_researchers: any[];
   top_papers: any[];

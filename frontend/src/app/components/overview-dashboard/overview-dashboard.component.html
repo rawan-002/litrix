@@ -158,7 +158,10 @@
       <div class="bg-white rounded-apple shadow-card p-6">
         <div class="text-ink-400 text-xs uppercase tracking-wider mb-2">Publications</div>
         <div class="text-5xl font-semibold text-ink-700">{{ fmt(filteredTotals().papers) }}</div>
-        <div class="text-ink-400 text-sm mt-2">{{ fmt(filteredTotals().q1_papers) }} in Q1 journals</div>
+        <div class="text-ink-400 text-sm mt-2">
+          {{ fmt(filteredTotals().q1_papers) }} in Q1 journals
+          <span class="text-ink-300">· confirmed Al-Baha</span>
+        </div>
       </div>
 
       <div class="bg-white rounded-apple shadow-card p-6">
@@ -167,6 +170,25 @@
         <div class="text-ink-400 text-sm mt-2">avg h-index: {{ filteredTotals().avg_h_index | number:'1.1-1' }}</div>
       </div>
     </section>
+
+    <!-- Independent data-quality indicator: publications whose Al-Baha
+         affiliation is not yet verified (NULL). These are NOT counted in the
+         confirmed Publications total above, so the headline stays defensible;
+         this strip keeps the unverified backlog visible instead of hidden. -->
+    @if ((filteredTotals().pending_review ?? 0) > 0) {
+      <section class="mb-8 -mt-2">
+        <div class="flex items-center gap-3 bg-amber-50 border border-amber-200
+                    rounded-apple px-5 py-3 text-sm">
+          <span class="inline-flex items-center justify-center w-6 h-6 rounded-full
+                       bg-amber-100 text-amber-700 font-semibold shrink-0">!</span>
+          <div class="text-amber-800">
+            <span class="font-semibold">{{ fmt(filteredTotals().pending_review ?? 0) }}</span>
+            publications pending affiliation verification
+            <span class="text-amber-600">— not included in the confirmed totals above.</span>
+          </div>
+        </div>
+      </section>
+    }
 
     <!-- Analytics charts. The 4th cell flips between Top Departments (on "All")
          and a single-department summary otherwise. -->
@@ -706,6 +728,15 @@
                   }
                   @if (p.indexing) {
                     <span class="px-2 py-0.5 bg-ink-200 text-ink-700 rounded text-[10px] font-medium">{{ p.indexing }}</span>
+                  }
+                  <!-- Highlight lists keep unverified papers visible (not hidden
+                       like the KPIs); flag NULL (pending) explicitly. Only NULL,
+                       not FALSE — a FALSE paper (confirmed authored elsewhere,
+                       can appear when the toggle is OFF) is not "pending". -->
+                  @if (p.affiliation_verified === null) {
+                    <span class="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-[10px] font-medium">
+                      Pending review
+                    </span>
                   }
                 </div>
               </div>

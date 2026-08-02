@@ -6,7 +6,7 @@ from django.http import HttpResponse
 
 from .stats import (
     FOCUS_YEARS, _albaha_only,
-    _cites_expr, _affil_clause, _hod_scope_department_id,
+    _cites_expr, verified_affil_clause, _hod_scope_department_id,
 )
 
 # A Scopus Quartile is a JOURNAL ranking: gate Q1-Q4 on venue so a Conference
@@ -105,9 +105,10 @@ def export_excel(request):
     # below drops papers confirmed authored elsewhere, so the workbook matches
     # the screen.
     albaha_only = _albaha_only(request)
-    AFFIL     = _affil_clause(albaha_only, 'rp')
-    AFFIL_RP2 = _affil_clause(albaha_only, 'rp2')
-    AFFIL_RPW = _affil_clause(albaha_only, 'rp_w')
+    # Official workbook -> confirmed-only, matching the dashboard KPIs.
+    AFFIL     = verified_affil_clause(albaha_only, 'rp')
+    AFFIL_RP2 = verified_affil_clause(albaha_only, 'rp2')
+    AFFIL_RPW = verified_affil_clause(albaha_only, 'rp_w')
 
     sheets_param = request.query_params.get('sheets', '').strip()
     if sheets_param:

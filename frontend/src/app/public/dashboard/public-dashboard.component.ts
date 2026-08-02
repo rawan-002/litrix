@@ -81,6 +81,20 @@ Chart.register(...registerables);
             <p class="mt-2 text-xs text-gray-400">{{ kpi.sub }}</p>
           </div>
         </div>
+
+        <!-- Independent data-quality note: papers whose Al-Baha affiliation is
+             not yet verified. NOT counted in "Papers" above, so the headline
+             stays confirmed-only and defensible. -->
+        @if ((overview()?.pending_review ?? 0) > 0) {
+          <div class="mt-6 flex items-center gap-3 rounded-xl bg-amber-50 border border-amber-200 px-5 py-3 text-sm text-amber-800">
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 text-amber-700 font-semibold shrink-0">!</span>
+            <span>
+              <span class="font-semibold">{{ overview()?.pending_review | number }}</span>
+              publications pending affiliation verification
+              <span class="text-amber-600">— not included in the totals above.</span>
+            </span>
+          </div>
+        }
       </section>
 
       <!-- Departments -->
@@ -460,7 +474,7 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
     const o = this.overview();
     if (!o) return [];
     return [
-      { label: 'Papers',      value: o.total_papers,      sub: 'all publications' },
+      { label: 'Papers',      value: o.total_papers,      sub: 'confirmed Al-Baha' },
       { label: 'Researchers', value: o.total_researchers, sub: 'active' },
       { label: 'Citations',   value: o.total_citations,   sub: 'total' },
       { label: 'Q1 Papers',   value: o.q1_papers,         sub: 'top quartile' },

@@ -112,10 +112,45 @@ def _cites_expr(alias, years):
     ) or '0'
 
 
-def _affil_clause(albaha_only, alias):
-    """SQL fragment dropping papers confirmed authored elsewhere, or '' when
-    the filter is off. AffiliationVerified IS DISTINCT FROM FALSE keeps TRUE +
-    not-yet-verified NULL, excludes only confirmed-elsewhere FALSE."""
+# Two INTENT-REVEALING affiliation filters. There used to be one `_affil_clause`
+# doing double duty, which is exactly how a screen ends up silently counting
+# unverified papers as Al-Baha. Splitting it forces every caller to make a
+# conscious choice — "do I want VERIFIED facts, or the ACTIVE working set?" —
+# so the wrong filter can never be picked just because it "looked right".
+#
+# Policy (2026-08-02): AffiliationVerified is a tri-state — TRUE (confirmed
+# Al-Baha), FALSE (confirmed authored elsewhere), NULL (not yet verified =
+# UNKNOWN). NULL is NOT proof of Al-Baha, so it must never inflate an official
+# number.
+#
+#   Component                         Filter
+#   --------------------------------- --------------------------------
+#   KPIs (papers/citations/Q/...)     verified_affil_clause  (TRUE only)
+#   KPI drill-down lists              verified_affil_clause  (must match the KPI)
+#   Official Excel export             verified_affil_clause
+#   Top Papers highlight list         active_affil_clause    (TRUE+NULL, badged)
+#   Verification screen / queue       no filter (shows all three states)
+
+def verified_affil_clause(albaha_only, alias):
+    """CONFIRMED Al-Baha only (AffiliationVerified = TRUE), or '' when the
+    filter is off. Use for every OFFICIAL number: KPIs, their drill-downs, and
+    the official export — so the figure is defensible and a KPI always equals
+    the rows you see when you open it."""
+    if not albaha_only:
+        return ''
+    return f' AND ({alias}."AffiliationVerified" = TRUE)'
+
+
+def active_affil_clause(albaha_only, alias):
+    """The ACTIVE working set: keep TRUE + not-yet-verified NULL, drop only
+    confirmed-elsewhere FALSE. Use for highlight/working lists that should still
+    surface unverified papers WITH a 'Pending' badge rather than hide them.
+    NEVER use this for an official count.
+
+    (The Top Papers list in views.overview() is the current consumer of this
+    policy; it applies the same `IS DISTINCT FROM FALSE` predicate inline as a
+    correlated subquery because it selects from the v_top_papers view, which has
+    no `rp` alias to hang this clause on. New list endpoints should call this.)"""
     if not albaha_only:
         return ''
     return f' AND ({alias}."AffiliationVerified" IS DISTINCT FROM FALSE)'
@@ -136,8 +171,8 @@ def _dept_cards_windowed(years, albaha_only=False):
     from django.db import connection
     year_strs = [str(y) for y in years]
     yk = _cites_expr('rp_all', years)
-    affil_rp    = _affil_clause(albaha_only, 'rp')
-    affil_rpall = _affil_clause(albaha_only, 'rp_all')
+    affil_rp    = verified_affil_clause(albaha_only, 'rp')
+    affil_rpall = verified_affil_clause(albaha_only, 'rp_all')
     # A Scopus Quartile is a JOURNAL ranking: count it only for journal-venue
     # papers (exclude Conference proceedings and Book chapters). Paper-level
     # VenueType wins, journal fallback for safety.
@@ -198,7 +233,7 @@ def _researcher_rows_windowed(years, user_ids, albaha_only=False):
         return {}
     year_strs = [str(y) for y in years]
     yk = _cites_expr('rp', years)
-    affil = _affil_clause(albaha_only, 'rp')
+    affil = verified_affil_clause(albaha_only, 'rp')
     # Quartile is a journal ranking: exclude Conference/Book venues from Q1.
     jelig = ('(rp."VenueType" IS NULL '
              'OR (rp."VenueType" NOT ILIKE \'Conference%%\' AND rp."VenueType" NOT IN (\'Book\', \'Preprint\')))')

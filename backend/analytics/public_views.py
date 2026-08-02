@@ -46,12 +46,14 @@ NOT_RETRACTED_SQL = "NOT (" + " OR ".join(RETRACTION_PATTERNS) + ")"
 # Excludes papers definitively verified as NOT-Al-Baha (set by
 # affiliation_verifier.py). Decision matrix:
 #   TRUE  → include (confirmed Al-Baha)
-#   NULL  → include (unverified — benefit of the doubt, retry later)
+#   NULL  → EXCLUDE (unverified = UNKNOWN, not proof of Al-Baha)
 #   FALSE → exclude (confirmed authored elsewhere)
-# We keep NULL in on purpose: excluding it would drop 119+ papers we just
-# couldn't verify (paywalled PDFs, sparse Scholar metadata) — most of which
-# are legitimately ours.
-AFFILIATION_VERIFIED_SQL = '(rp."AffiliationVerified" IS DISTINCT FROM FALSE)'
+# Policy (2026-08-02): NULL is no longer counted as Al-Baha. Counting unverified
+# papers inflated the institution's numbers without evidence (not defensible for
+# an accreditation body). The public figures are now confirmed-only; the ~389
+# unverified papers are a data-quality backlog surfaced separately, not folded
+# into the headline. See analytics/stats.py::verified_affil_clause for the rule.
+AFFILIATION_VERIFIED_SQL = '(rp."AffiliationVerified" = TRUE)'
 
 
 # Compute h-index live from the paper × citations data rather than trust the
@@ -158,8 +160,17 @@ def overview(request):
                           AND ap."VenueType" NOT IN ('Book', 'Preprint')))    AS q1_papers,
                 (SELECT COALESCE(ROUND(AVG(h_index))::int, 0)
                    FROM ({H_INDEX_PER_USER_SQL}) hi
-                   WHERE h_index > 0)                                          AS avg_h_index
-        ''', [years])
+                   WHERE h_index > 0)                                          AS avg_h_index,
+                -- Independent data-quality metric: attributed papers whose
+                -- Al-Baha affiliation is not yet verified (NULL). NOT counted in
+                -- total_papers above (which is confirmed-only).
+                (SELECT COUNT(DISTINCT rp."PaperID")
+                   FROM "ResearchPaper" rp
+                   JOIN "Authors" a ON a."PaperID" = rp."PaperID"
+                   WHERE rp."PubYear" = ANY(%s)
+                     AND {NOT_RETRACTED_SQL}
+                     AND rp."AffiliationVerified" IS NULL)                     AS pending_review
+        ''', [years, years])
         row = cur.fetchone()
     return response.Response({
         'total_papers':       row[0] or 0,
@@ -167,6 +178,7 @@ def overview(request):
         'total_citations':    row[2] or 0,
         'q1_papers':          row[3] or 0,
         'avg_h_index':        int(row[4] or 0),
+        'pending_review':     row[5] or 0,
     })
 
 

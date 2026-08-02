@@ -14,6 +14,9 @@ export interface OverviewResponse {
   total_citations: number;
   q1_papers: number;
   avg_h_index: number;
+  /** Attributed papers not yet verified for Al-Baha affiliation (NULL).
+   *  Independent data-quality metric — NOT included in total_papers. */
+  pending_review?: number;
 }
 
 export interface DepartmentSummary {

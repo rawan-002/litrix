@@ -132,6 +132,7 @@ export class OverviewDashboardComponent implements OnInit {
         q1_papers: 0, q2_papers: 0, q3_papers: 0, q4_papers: 0,
         scopus_papers: 0, isi_papers: 0, avg_h_index: 0,
         journal_papers: 0, conference_papers: 0, book_papers: 0, preprint_papers: 0,
+        pending_review: 0,
       };
     }
     if (this.selectedDeptId() == null) return d.totals;
@@ -159,6 +160,9 @@ export class OverviewDashboardComponent implements OnInit {
       book_papers:        dept.book_papers         ?? 0,
       preprint_papers:    dept.preprint_papers     ?? 0,
       avg_h_index:        d.totals.avg_h_index,
+      // Pending-review is an institution-wide data-quality metric (not tracked
+      // per department), so carry the institution value through the dept filter.
+      pending_review:     d.totals.pending_review ?? 0,
     };
   });
 
