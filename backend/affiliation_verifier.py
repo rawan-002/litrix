@@ -1126,6 +1126,7 @@ def fetch_pending_papers(
     user_id: Optional[int] = None,
     department_id: Optional[int] = None,
     attributed_only: bool = False,
+    all_years: bool = False,
 ) -> list[dict]:
     """
     Selects papers needing verification.
@@ -1186,9 +1187,13 @@ def fetch_pending_papers(
         )
         params.extend(['verifier_version', '', VERIFIER_VERSION])
 
-    # Only consider papers in dashboard scope to avoid wasting effort
-    where.append('rp."PubYear" = ANY(%s)')
-    params.append(years or default_verification_years())
+    # Year scope. Default: dashboard window (avoids wasting effort). With
+    # --all-years we skip the filter entirely so a full-history migration to a
+    # new VERIFIER_VERSION covers every paper — INCLUDING the ~60 with a NULL
+    # PubYear, which a `PubYear = ANY(list)` clause would silently drop.
+    if not all_years:
+        where.append('rp."PubYear" = ANY(%s)')
+        params.append(years or default_verification_years())
 
     sql = f'''
         SELECT
@@ -1260,16 +1265,19 @@ def update_paper_verification(
         )
 
 
-def cmd_report(conn, years: Optional[list[int]] = None):
+def cmd_report(conn, years: Optional[list[int]] = None, all_years: bool = False):
     """Prints per-source verification stats. No API calls."""
     yrs = years or default_verification_years()
     print()
     print('═' * 80)
     print(' VERIFICATION REPORT'.center(80))
-    print(f' (PubYear scope: {", ".join(map(str, yrs))})'.center(80))
+    scope_label = 'ALL YEARS' if all_years else ', '.join(map(str, yrs))
+    print(f' (PubYear scope: {scope_label})'.center(80))
     print('═' * 80)
+    year_clause = '' if all_years else 'WHERE rp."PubYear" = ANY(%s)'
+    year_params = [] if all_years else [yrs]
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute('''
+        cur.execute(f'''
             SELECT
                 rp."Source"                                              AS source,
                 COUNT(DISTINCT rp."PaperID")                             AS total,
@@ -1279,10 +1287,10 @@ def cmd_report(conn, years: Optional[list[int]] = None):
                 COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."DOI" IS NULL OR rp."DOI" = '') AS no_doi
             FROM "ResearchPaper" rp
             JOIN "Authors" a ON a."PaperID" = rp."PaperID"
-            WHERE rp."PubYear" = ANY(%s)
+            {year_clause}
             GROUP BY rp."Source"
             ORDER BY total DESC
-        ''', [yrs])
+        ''', year_params)
         rows = cur.fetchall()
 
     print(f'\n{"Source":<15} {"Total":>7} {"Al-Baha":>10} {"Not Al-Baha":>13} {"Pending":>9} {"No DOI":>8}')
@@ -1341,6 +1349,7 @@ def cmd_verify(conn, args):
         user_id=getattr(args, 'user', None),
         department_id=getattr(args, 'department', None),
         attributed_only=getattr(args, 'attributed', False),
+        all_years=getattr(args, 'all_years', False),
     )
     log.info(f'Fetched {len(papers)} pending papers')
     if not papers:
@@ -1484,6 +1493,10 @@ def main():
     parser.add_argument('--years', type=str, default=None,
                         help='Comma-separated PubYear scope, e.g. "2025,2026,2027" '
                              '(default: last year through next year, dynamic)')
+    parser.add_argument('--all-years', dest='all_years', action='store_true',
+                        help='Ignore the year filter entirely — verify EVERY paper '
+                             '(all years + NULL-year). Use for a full-history '
+                             'migration to a new VERIFIER_VERSION.')
 
     args = parser.parse_args()
 
@@ -1501,13 +1514,14 @@ def main():
     if getattr(args, 'years', None):
         report_years = [int(y.strip()) for y in args.years.split(',') if y.strip()]
 
+    all_years = getattr(args, 'all_years', False)
     try:
         if args.report:
-            cmd_report(conn, report_years)
+            cmd_report(conn, report_years, all_years=all_years)
         else:
             cmd_verify(conn, args)
             if args.apply:
-                cmd_report(conn, report_years)
+                cmd_report(conn, report_years, all_years=all_years)
     finally:
         conn.close()
 
