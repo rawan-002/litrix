@@ -26,40 +26,76 @@ Write-Host " Litrix deploy" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 
 # ----------------------------------------------------------------------
-# [1/6] Pre-flight validation. Render (backend) and Vercel (frontend) have
-# failed before on errors that only show up in a clean production build:
-# strict-TS slips that 'ng serve' ignores, and committed code referencing
-# files left out of the commit. Building + checking here, before any git
-# op, keeps a broken commit from ever reaching the remote.
+# [1/6] Pre-flight validation - three layers, any failure stops the deploy
+# before any git op so a broken commit never reaches the remote:
+#   (a) backend check      - Django config sanity (no DB).
+#   (b) integration guard  - tools/integration_check.py: the official
+#                            affiliation-policy regression test (SQL/API/
+#                            frontend contract). Read-only; hits the DB the
+#                            root .env points at (prod when DATABASE_URL set).
+#   (c) frontend build     - clean production build; catches strict-TS slips
+#                            that 'ng serve' ignores.
 # Use -SkipChecks for docs-only changes you know are green.
 # ----------------------------------------------------------------------
 if ($SkipChecks) {
     Write-Host "[1/6] Pre-flight checks SKIPPED (-SkipChecks)." -ForegroundColor Yellow
 } else {
-    Write-Host "[1/6] Pre-flight: frontend build + backend check ..." -ForegroundColor Cyan
+    Write-Host "[1/6] Pre-flight validation (backend check -> integration guard -> frontend build):" -ForegroundColor Cyan
 
+    Push-Location backend
+    $prevDebug = $env:DJANGO_DEBUG
+    $env:DJANGO_DEBUG = 'true'   # dev SECRET_KEY fallback; DB config still comes from .env
+
+    # (a) Django system check (cheapest first; no DB).
+    Write-Host ""
+    Write-Host "  (1/3) Backend check ..." -ForegroundColor Cyan
+    python manage.py check
+    $be = $LASTEXITCODE
+    if ($be -ne 0) {
+        if ($null -eq $prevDebug) { Remove-Item Env:\DJANGO_DEBUG } else { $env:DJANGO_DEBUG = $prevDebug }
+        Pop-Location
+        Write-Host "        Backend check          FAILED" -ForegroundColor Red
+        Write-Host ""
+        Write-Host " Deployment aborted (backend check)." -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "        Backend check          OK" -ForegroundColor Green
+
+    # (b) Integration guard - official dashboard invariants (read-only). Runs
+    #     BEFORE the build so a broken data contract fails fast without wasting
+    #     time on npm. Hits the DB the root .env points at (prod when
+    #     DATABASE_URL is set); its own report prints the N/N check tally.
+    Write-Host ""
+    Write-Host "  (2/3) Integration guard ..." -ForegroundColor Cyan
+    python tools\integration_check.py
+    $guard = $LASTEXITCODE
+    if ($null -eq $prevDebug) { Remove-Item Env:\DJANGO_DEBUG } else { $env:DJANGO_DEBUG = $prevDebug }
+    Pop-Location
+    if ($guard -ne 0) {
+        Write-Host "        Integration guard      FAILED" -ForegroundColor Red
+        Write-Host ""
+        Write-Host " Deployment aborted (dashboard invariants broken - see the report above)." -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "        Integration guard      OK" -ForegroundColor Green
+
+    # (c) Frontend production build (last; proves production readiness).
+    Write-Host ""
+    Write-Host "  (3/3) Frontend build ..." -ForegroundColor Cyan
     Push-Location frontend
     npm run build
     $fe = $LASTEXITCODE
     Pop-Location
     if ($fe -ne 0) {
-        Write-Host "  Frontend build FAILED. Fix it before deploying (or use -SkipChecks)." -ForegroundColor Red
+        Write-Host "        Frontend build         FAILED" -ForegroundColor Red
+        Write-Host ""
+        Write-Host " Deployment aborted (frontend build)." -ForegroundColor Red
         exit 1
     }
+    Write-Host "        Frontend build         OK" -ForegroundColor Green
 
-    Push-Location backend
-    $prevDebug = $env:DJANGO_DEBUG
-    $env:DJANGO_DEBUG = 'true'   # dev SECRET_KEY fallback; check never hits the DB
-    python manage.py check
-    $be = $LASTEXITCODE
-    if ($null -eq $prevDebug) { Remove-Item Env:\DJANGO_DEBUG } else { $env:DJANGO_DEBUG = $prevDebug }
-    Pop-Location
-    if ($be -ne 0) {
-        Write-Host "  Backend check FAILED. Fix it before deploying (or use -SkipChecks)." -ForegroundColor Red
-        exit 1
-    }
-
-    Write-Host "  Pre-flight passed." -ForegroundColor Green
+    Write-Host ""
+    Write-Host "  Pre-flight passed (3/3)." -ForegroundColor Green
 }
 
 # [2/6] Clean up any stale git lock files left by crashed/OneDrive-held
