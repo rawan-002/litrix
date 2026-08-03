@@ -1,6 +1,8 @@
 """Excel export for the dashboard (admin + HoD scoped). Builds the .xlsx
 workbook; every number runs through the same stats helpers as the overview so
 the file matches what's on screen."""
+import re
+
 from rest_framework import decorators, response
 from django.http import HttpResponse
 
@@ -8,6 +10,41 @@ from .stats import (
     FOCUS_YEARS, _albaha_only,
     _cites_expr, verified_affil_clause, _hod_scope_department_id,
 )
+from .network_views import _display_name_expr
+
+# Same mapping the site uses (departments.component.ts RANK_EN) so the
+# exported Rank column reads in English instead of the raw Arabic
+# AcademicRank value stored in the DB. Keys are space-stripped + lower-cased.
+_RANK_EN = {
+    'أستاذ': 'Professor',
+    'أستاذمشارك': 'Associate Professor',
+    'أستاذمساعد': 'Assistant Professor',
+    'محاضر': 'Lecturer',
+    'معيد': 'Teaching Assistant',
+    'professor': 'Professor',
+    'associateprofessor': 'Associate Professor',
+    'assistantprofessor': 'Assistant Professor',
+    'lecturer': 'Lecturer',
+    'teachingassistant': 'Teaching Assistant',
+    'demonstrator': 'Teaching Assistant',
+}
+
+
+def _rank_en(rank):
+    if not rank:
+        return rank
+    key = re.sub(r'\s+', '', rank.strip().lower())
+    return _RANK_EN.get(key, rank.strip())
+
+
+# Correlated subquery: the paper's Al-Baha (internal) authors, English name
+# only (ScholarDisplayName -> Latin FirstName+LastName -> email; never
+# FullName_Ar) - same no-Arabic policy as everywhere else on the site.
+_ALBAHA_AUTHORS_EN_SQL = (
+    '(SELECT string_agg(COALESCE({name_expr}, u."Email"), \', \' ORDER BY a."AuthorOrder") '
+    ' FROM "Authors" a JOIN "Users" u ON u."UserID" = a."UserID" '
+    ' WHERE a."PaperID" = v.paper_id)'
+).format(name_expr=_display_name_expr('u'))
 
 # A Scopus Quartile is a JOURNAL ranking: gate Q1-Q4 on venue so a Conference
 # paper / Book chapter linked to a ranked container is not counted as a Q-ranked
@@ -470,7 +507,9 @@ def export_excel(request):
                     cite_window=cite_window_expr, affil_rpw=AFFIL_RPW, dept_filter='')
             cur.execute(researchers_sql, researchers_params)
             for row in cur.fetchall():
-                ws.append(list(row))
+                row = list(row)
+                row[2] = _rank_en(row[2])
+                ws.append(row)
         set_widths(ws, [32, 22, 18, 12, 14, 14, 16, 14, 14, 18, 22])
 
     if 'journals' in sheets:
@@ -493,7 +532,7 @@ def export_excel(request):
                     'SELECT '
                     '    v.department_name, v.title, '
                     '    rp."Abstract" AS abstract, '
-                    '    v.authors_ar, v.all_authors_en, '
+                    f'    {_ALBAHA_AUTHORS_EN_SQL}, v.all_authors_en, '
                     '    v.journal_name, v.quartile, v.impact_factor, v.indexing, '
                     '    v.citations, v.doi '
                     'FROM v_paper_details v '
@@ -528,7 +567,7 @@ def export_excel(request):
                     'SELECT '
                     '    v.department_name, v.title, '
                     '    rp."Abstract" AS abstract, '
-                    '    v.authors_ar, v.all_authors_en, '
+                    f'    {_ALBAHA_AUTHORS_EN_SQL}, v.all_authors_en, '
                     '    v.journal_name, v.indexing, v.citations, v.doi '
                     'FROM v_paper_details v '
                     'LEFT JOIN "ResearchPaper" rp ON '
