@@ -1,40 +1,60 @@
-"""One-off fix: merge duplicate Journal rows created by an ISSN-format
-mismatch during the Scopus migration.
+"""One-off fix: merge duplicate Journal rows created by ISSN-formatting
+mismatches (a leading "ISSN-" tag from Scopus, dashed "NNNN-NNNN" from
+other sources, vs. the DB's dominant plain 8-char form).
 
-Root cause: scopus_attribution_fix.py's upsert_journal() stores the raw
-Scopus ISSN with an "ISSN-" prefix (e.g. "ISSN-20711050") and looks up
+Root cause: scopus_attribution_fix.py's upsert_journal() used to look up
 existing Journals by an EXACT string match on ISSN_Print. The DB's
-dominant existing convention has no prefix (1135 of 1233 rows, e.g.
-"20711050"), so the lookup missed every already-imported journal and
-Scopus quietly INSERTed a second Journal row for it — usually under a
-garbled name, because an earlier/unrelated pipeline had mis-parsed a
-citation string as the journal name for the original row (e.g.
-"Sustainability 14 (22), 15328, 2022" instead of "Sustainability
+dominant existing convention has no prefix/dashes (e.g. "20711050"), so
+any differently-formatted incoming ISSN (Scopus's "ISSN-20711050", or a
+dashed "2071-1050" from elsewhere) missed the already-imported journal
+and a script quietly INSERTed a second Journal row for it — usually
+under a garbled name, because an earlier/unrelated pipeline had
+mis-parsed a citation string as the journal name for one of the two rows
+(e.g. "Sustainability 14 (22), 15328, 2022" instead of "Sustainability
 (Switzerland)").
 
 Net effect per affected journal: papers ended up split across two
-Journal rows, and the canonical SCImago quartile (attached to the OLD,
-garbled-name row) never reaches the papers linked to the NEW,
-correctly-named row — which instead falls back to an inferior
-single-paper, single-year Scopus-derived quartile. First caught via
-PaperID 6287 ("Sustainability (Switzerland)", showing Q4 instead of the
-correct Scimago Q1).
+Journal rows, and the canonical SCImago quartile (attached to whichever
+row happened to hold it) never reaches papers linked to the other row —
+which instead falls back to an inferior single-paper, single-year
+Scopus-derived quartile. First caught via PaperID 6287 ("Sustainability
+(Switzerland)", showing Q4 instead of the correct Scimago Q1); a second,
+wider pass with fuller ISSN normalization (stripping ALL non-alphanumeric
+formatting, not just the "ISSN-" prefix) found 5 more groups the first
+pass missed. 54 groups total fixed across both passes.
 
-For each duplicate ISSN pair:
-  - winner = the "ISSN-"-prefixed row (verified clean-named in all 49
-    groups audited before writing this script).
-  - loser  = the plain-ISSN row (garbled/citation-parsed name).
+For each duplicate ISSN group (matched on the fully normalized ISSN —
+see _NORM_ISSN_SQL, which mirrors normalize_issn() in
+scopus_attribution_fix.py and the unique index in
+migrations/20260804_unique_normalized_issn.sql):
+  - winner = the row with a real journal name, i.e. NOT a mangled
+    citation string (see _looks_like_citation_string); if both/neither
+    qualify, the row with more linked papers wins; final tiebreak is the
+    lower JournalID. Deliberately NOT "whichever row has more papers" —
+    in 2 of the 54 groups the garbled-name row had MORE linked papers,
+    and picking on paper count alone would have kept the wrong name.
+  - loser  = the other row.
   - Move every ResearchPaper + JournalRankings row from loser to winner.
   - On a (winner, RankingYear) collision, keep SCImago over Scopus (the
     project's stated ranking-source policy — see
     scopus_attribution_fix.py's upsert_journal_ranking docstring); drop
-    the losing ranking row.
+    the losing ranking row. Repoint any ISSN_Mapping row that referenced
+    it first (FK constraint) — see scrapers/scholar.py for what
+    ISSN_Mapping is for.
   - Normalize winner's ISSN_Print to the plain 8-char form (the DB's
     dominant convention) so future imports match on the first try.
   - Delete the now-empty loser Journals row.
 
-Idempotent — re-running after a partial run just finds fewer/no
-duplicate groups left. Read-only unless --confirm is passed.
+Idempotent: YES. Safe to rerun: YES. fetch_groups() re-derives duplicate
+groups from live data each run, so a rerun after a partial or fully
+successful run simply finds fewer (or zero) groups and does nothing to
+already-merged journals — there is no persisted "already ran" state to
+go stale, and no group is processed twice. Each group's writes are
+wrapped in a SAVEPOINT/ROLLBACK, so a failure on one group (e.g. an
+unexpected FK reference) leaves that group untouched and does not affect
+the others or require re-running from scratch. Read-only unless
+--confirm is passed; with --confirm, the whole run is one commit at the
+end (or a full rollback on an uncaught error).
 """
 import argparse
 import os
