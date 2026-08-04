@@ -57,6 +57,7 @@ import argparse
 import io
 import json
 import os
+import re
 import sys
 import warnings
 from collections import Counter, defaultdict
@@ -253,6 +254,23 @@ def safe_str(val: Any, max_len: int | None = None) -> str | None:
     return s[:max_len] if max_len else s
 
 
+def normalize_issn(s: str | None) -> str | None:
+    """Strip Scopus's "ISSN-" tag (and any other punctuation) down to the
+    DB's dominant plain 8-char form, so lookups match existing Journals/
+    JournalRankings rows regardless of source formatting.
+
+    Scopus ISSN values come pre-formatted as "ISSN-20711050", but 1135 of
+    1233 pre-existing Journals.ISSN_Print rows are plain "20711050" — an
+    exact-string comparison between the two silently missed every match
+    and created duplicate Journal rows (see fix_duplicate_journal_issn.py).
+    """
+    if not s:
+        return None
+    n = re.sub(r'(?i)^issn[\s-]*', '', s.strip())
+    n = ''.join(c for c in n.upper() if c.isalnum())
+    return n if len(n) == 8 else None
+
+
 def safe_int(val: Any) -> int | None:
     """Normalize to int (None for NaN/empty)."""
     if val is None or (isinstance(val, float) and pd.isna(val)):
@@ -355,7 +373,7 @@ def upsert_journal(cur, row: pd.Series) -> int | None:
     Also: if we find an existing row by name and Scopus gives us an ISSN
     the existing row lacks, we patch it in. Same for Publisher.
     """
-    issn       = safe_str(row.get('ISSN'), 30)
+    issn       = normalize_issn(safe_str(row.get('ISSN'), 30))
     journal_nm = safe_str(row.get('Scopus Source title'), 500)
     publisher  = safe_str(row.get('Publisher'), 300)
     # VenueType is varchar(20) in the schema. Scopus values like
@@ -365,12 +383,17 @@ def upsert_journal(cur, row: pd.Series) -> int | None:
     if not journal_nm and not issn:
         return None  # Nothing useful to store
 
-    # 1. ISSN match (deterministic, preferred)
+    # 1. ISSN match (deterministic, preferred). Compare against a
+    #    normalized form of the stored ISSN too — some existing rows
+    #    still carry an "ISSN-" prefix or dashed NNNN-NNNN formatting.
     if issn:
         cur.execute(
             '''
             SELECT "JournalID" FROM "Journals"
-            WHERE "ISSN_Print" = %s OR "ISSN_Online" = %s
+            WHERE regexp_replace(regexp_replace(upper(COALESCE("ISSN_Print", '')),
+                                                 '^ISSN-?', ''), '[^A-Z0-9]', '', 'g') = %s
+               OR regexp_replace(regexp_replace(upper(COALESCE("ISSN_Online", '')),
+                                                 '^ISSN-?', ''), '[^A-Z0-9]', '', 'g') = %s
             LIMIT 1
             ''',
             (issn, issn),
@@ -438,7 +461,9 @@ def upsert_journal_ranking(cur, journal_id: int | None, row: pd.Series) -> int |
       3. Else, INSERT a new row.
 
     Note: Scopus ISSN values come pre-formatted with the "ISSN-" prefix
-    (e.g. "ISSN-15462218"), matching the existing convention in Litrix DB.
+    (e.g. "ISSN-15462218") and are normalized to the DB's plain 8-char
+    form via normalize_issn() before use, so they compare/store
+    consistently with Scimago-sourced Issn values.
     """
     if not journal_id:
         return None
@@ -453,7 +478,7 @@ def upsert_journal_ranking(cur, journal_id: int | None, row: pd.Series) -> int |
             row.get('CiteScore percentile (publication year) *')
         )
     impact_factor = safe_float(row.get('CiteScore (publication year)'))
-    issn = safe_str(row.get('ISSN'), 30)
+    issn = normalize_issn(safe_str(row.get('ISSN'), 30))
     category = safe_str(
         row.get('All Science Journal Classification (ASJC) field name'),
         500,
