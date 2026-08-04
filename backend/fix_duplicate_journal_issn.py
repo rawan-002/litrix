@@ -38,6 +38,7 @@ duplicate groups left. Read-only unless --confirm is passed.
 """
 import argparse
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -45,18 +46,43 @@ from litrix_db import db, setup_utf8_stdout
 
 SOURCE_RANK = {'scimago': 0, 'SCImago': 0, 'Scopus': 1}
 
+# The full ISSN normalization: strip a leading "ISSN" tag, then drop any
+# remaining non-alphanumeric formatting (dashes, spaces). Mirrors
+# normalize_issn() in scopus_attribution_fix.py and the unique index in
+# migrations/20260804_unique_normalized_issn.sql. An earlier version of
+# this script only stripped the "ISSN-" prefix, which missed groups that
+# differed only by dash formatting (e.g. "2156-5570" vs "21565570").
+_NORM_ISSN_SQL = (
+    "regexp_replace(regexp_replace(upper(COALESCE(\"ISSN_Print\", '')), "
+    "'^ISSN-?', ''), '[^A-Z0-9]', '', 'g')"
+)
+
 
 def fetch_groups(cur):
-    cur.execute('''
-        SELECT regexp_replace("ISSN_Print", '^ISSN-', '') AS norm_issn,
-               array_agg("JournalID" ORDER BY ("ISSN_Print" LIKE 'ISSN-%') DESC) AS jids
+    cur.execute(f'''
+        SELECT {_NORM_ISSN_SQL} AS norm_issn,
+               array_agg("JournalID") AS jids
         FROM "Journals"
         WHERE "ISSN_Print" IS NOT NULL AND "ISSN_Print" != ''
         GROUP BY 1
-        HAVING COUNT(DISTINCT "JournalID") > 1
+        HAVING length({_NORM_ISSN_SQL}) = 8 AND COUNT(DISTINCT "JournalID") > 1
         ORDER BY 1
     ''')
     return cur.fetchall()
+
+
+def _looks_like_citation_string(name):
+    """Heuristic for the garbled "Journal 13 (5), 2022"-style names an
+    earlier/unrelated pipeline bug produced instead of a real journal name."""
+    if not name:
+        return True
+    if re.search(r'\d+\s*\(\d+\)', name):
+        return True
+    if re.search(r',\s*\d{4}\s*$', name):
+        return True
+    if '…' in name:
+        return True
+    return False
 
 
 def merge_group(cur, norm_issn, jids, confirm):
@@ -64,17 +90,29 @@ def merge_group(cur, norm_issn, jids, confirm):
         print(f"  SKIP {norm_issn}: {len(jids)}-way duplicate — needs manual review")
         return False
 
-    winner, loser = jids  # array_agg ordered ISSN-prefixed first
     cur.execute(
-        'SELECT "JournalID", "JournalName", "ISSN_Print" FROM "Journals" '
-        'WHERE "JournalID" = ANY(%s)', ([winner, loser],)
+        'SELECT "JournalID", "JournalName", "ISSN_Print", '
+        '       (SELECT COUNT(*) FROM "ResearchPaper" WHERE "JournalID" = j."JournalID") AS papers '
+        'FROM "Journals" j WHERE "JournalID" = ANY(%s)', (jids,)
     )
-    info = {r[0]: (r[1], r[2]) for r in cur.fetchall()}
-    w_name, w_issn = info[winner]
-    l_name, l_issn = info[loser]
+    rows = {r[0]: {'name': r[1], 'issn': r[2], 'papers': r[3]} for r in cur.fetchall()}
+    a, b = jids
 
-    cur.execute('SELECT COUNT(*) FROM "ResearchPaper" WHERE "JournalID" = %s', (loser,))
-    loser_papers = cur.fetchone()[0]
+    # Winner = the one with a real journal name (not a mangled citation
+    # string); if both/neither qualify, prefer whichever has more linked
+    # papers; final tiebreak is the lower JournalID for determinism.
+    a_bad = _looks_like_citation_string(rows[a]['name'])
+    b_bad = _looks_like_citation_string(rows[b]['name'])
+    if a_bad != b_bad:
+        winner, loser = (b, a) if a_bad else (a, b)
+    elif rows[a]['papers'] != rows[b]['papers']:
+        winner, loser = (a, b) if rows[a]['papers'] > rows[b]['papers'] else (b, a)
+    else:
+        winner, loser = (a, b) if a < b else (b, a)
+
+    w_name, w_issn = rows[winner]['name'], rows[winner]['issn']
+    l_name = rows[loser]['name']
+    loser_papers = rows[loser]['papers']
 
     print(f"ISSN {norm_issn}: winner={winner} {w_name!r} <- loser={loser} {l_name!r} "
           f"({loser_papers} papers to move)")
