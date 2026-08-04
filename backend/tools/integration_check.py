@@ -7,7 +7,7 @@ and asserts the CONTRACT across SQL <-> API <-> frontend, so a future edit that
 points a consumer at the wrong filter breaks CI here instead of silently
 inflating an official number after release.
 
-Six checks:
+Six affiliation-policy checks, plus a data-quality health check (7):
   1. Overview     — endpoint returns the official metrics (papers/citations/Q1-Q4).
   2. Drill-down   — classified-papers row count == the Publications KPI.
   3. Excel        — each summary sheet's values match the endpoint that feeds it
@@ -20,6 +20,17 @@ Six checks:
   6. Triangulation— a direct SQL COUNT (AffiliationVerified = TRUE, same scope)
                     == the KPI == the drill-down count. Proves SQL, API, and the
                     frontend contract all use the SAME policy.
+  7. Data quality — regression checks for the two classes of bug this project
+                    has actually hit in production: duplicate identifiers that
+                    should be unique (DOI, normalized ISSN, researcher Scopus_ID)
+                    and orphaned rows a broken ingestion step can leave behind
+                    (papers with zero authors, journal rankings pointing at a
+                    dead JournalID). The uq_paper_doi_normalized / on ResearchPaper
+                    (DOI) and uq_journals_normalized_issn_print / on Journals
+                    (ISSN_Print) already enforce the first two at the DB level
+                    (migrations/20260804_*.sql) — these checks make a violation
+                    visible in CI output instead of only surfacing as an insert
+                    failure deep in a pipeline run.
 
 Run (from backend/, uses the same .env / DATABASE_URL as everything else):
     python tools/integration_check.py
@@ -153,6 +164,63 @@ def main():
     check(sql_count == kpi_papers == dd_count,
           'SQL COUNT(TRUE) == KPI == drill-down (one policy end-to-end)',
           f'sql={sql_count} kpi={kpi_papers} drill={dd_count}')
+
+    # ---- 7. Data quality health check ----
+    with connection.cursor() as cur:
+        cur.execute('''
+            SELECT COUNT(*) FROM (
+                SELECT lower(trim("DOI")) FROM "ResearchPaper"
+                WHERE "DOI" IS NOT NULL AND trim("DOI") != ''
+                GROUP BY 1 HAVING COUNT(*) > 1
+            ) x
+        ''')
+        dup_doi = cur.fetchone()[0]
+        check(dup_doi == 0, 'No duplicate DOI (case/whitespace-normalized)',
+              f'groups={dup_doi}')
+
+        cur.execute('''
+            SELECT COUNT(*) FROM (
+                SELECT regexp_replace(regexp_replace(upper(COALESCE("ISSN_Print", '')),
+                                                       '^ISSN-?', ''), '[^A-Z0-9]', '', 'g') AS n
+                FROM "Journals"
+                WHERE "ISSN_Print" IS NOT NULL AND "ISSN_Print" != ''
+                GROUP BY 1
+                HAVING length(regexp_replace(regexp_replace(upper(COALESCE("ISSN_Print", '')),
+                                                              '^ISSN-?', ''), '[^A-Z0-9]', '', 'g')) = 8
+                   AND COUNT(*) > 1
+            ) x
+        ''')
+        dup_issn = cur.fetchone()[0]
+        check(dup_issn == 0, 'No duplicate Journal ISSN (format-normalized)',
+              f'groups={dup_issn}')
+
+        cur.execute('''
+            SELECT COUNT(*) FROM (
+                SELECT "Scopus_ID" FROM "Researcher"
+                WHERE "Scopus_ID" IS NOT NULL AND trim("Scopus_ID") != ''
+                GROUP BY 1 HAVING COUNT(*) > 1
+            ) x
+        ''')
+        dup_scopus = cur.fetchone()[0]
+        check(dup_scopus == 0, 'No duplicate researcher Scopus_ID',
+              f'groups={dup_scopus}')
+
+        cur.execute('''
+            SELECT COUNT(*) FROM "ResearchPaper" p
+            WHERE NOT EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = p."PaperID")
+        ''')
+        orphan_papers = cur.fetchone()[0]
+        check(orphan_papers == 0, 'No orphan ResearchPaper (zero linked Authors)',
+              f'orphans={orphan_papers}')
+
+        cur.execute('''
+            SELECT COUNT(*) FROM "JournalRankings" jr
+            WHERE jr."JournalID" IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM "Journals" j WHERE j."JournalID" = jr."JournalID")
+        ''')
+        orphan_rankings = cur.fetchone()[0]
+        check(orphan_rankings == 0, 'No orphan JournalRankings (dead JournalID)',
+              f'orphans={orphan_rankings}')
 
     # ---- Report ----
     print('=' * 70)
