@@ -1,14 +1,32 @@
-"""Detect and merge duplicate ResearchPaper rows.
+"""Detect duplicate ResearchPaper rows and merge them from a reviewed plan.
 
 backend/find_duplicate_papers.py only detects exact DOI/NormalizedTitle dups;
-this also catches near-identical titles (preprint vs published, punctuation)
-via fuzzy matching, and actually merges. --dry-run writes a reviewable
-JSON+CSV report; --apply merges each group inside one atomic transaction after
-dumping a full snapshot to data/dedup_audit/snapshot_<ts>.json.
+this also catches near-identical titles (a leading "Research Article"/
+"Review Article" tag, preprint vs published, punctuation) via fuzzy
+matching -- blocked on significant title words (not a raw character
+prefix, which a boilerplate tag defeats) and gated on shared authorship.
 
-Recovery is queryable: every merged loser leaves an AuditLog row
-(Action='paper.merge.dedup'). Feed a hand-edited report back with --report-in
-to merge exactly the groups you approved, and --limit-groups 1 on the first run.
+Two-stage pipeline, deliberately separated so execution never re-derives a
+decision it should just be replaying:
+
+    detect --dry-run --> merge_plan_<ts>.json/.csv --> human review (edit
+    the JSON if you disagree with a group) --> apply --plan <file>
+
+Every group in the plan is tagged confidence 'high' or 'review'
+(group_confidence()): 'high' only for the narrow, checked-safe profile --
+shared author, >=95% title similarity, a compatible pub year, and EXACTLY
+one side carrying a DOI. A Corrigendum/Erratum/Retraction is NEVER 'high'
+regardless of those signals (it's a formally distinct scholarly record,
+not a duplicate). --apply reads confidence straight from the plan file and
+ONLY ever merges 'high' groups -- it does not recompute confidence or
+re-run choose_keep() against live data, so what you reviewed in the plan
+is exactly what gets executed. 'review' groups stay in the plan for a
+human to resolve separately; nothing merges them automatically, ever.
+
+Merges run inside one atomic transaction per --apply call, after dumping a
+full pre-merge snapshot to data/dedup_audit/snapshot_<ts>.json. Recovery is
+queryable: every merged loser leaves an AuditLog row
+(Action='paper.merge.dedup'). Use --limit-groups 1 on your first --apply.
 """
 import os
 import sys
@@ -29,7 +47,7 @@ try:
 except Exception:
     pass
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 BACKEND_DIR = PROJECT_ROOT / "backend"
 sys.path.insert(0, str(BACKEND_DIR))
 
@@ -57,6 +75,26 @@ CITATIONS_EXPR = '''COALESCE(
     0)'''
 
 
+# Leading boilerplate that scrapers sometimes fold into the title itself
+# (Scholar PDF-header noise, journal section labels). Stripped so it can't
+# shift a blocking key and hide a real duplicate -- caught via the Nizar
+# Alsharif case (PaperID 6086/6088: "Research Article Prediction
+# Approaches..." vs "Prediction approaches..." never got compared because
+# the old blocking key was just the first 8 chars).
+_BOILERPLATE_PREFIXES = (
+    "research article", "review article", "original article",
+    "conference paper", "short communication", "case report",
+    "technical note", "brief report", "editorial", "letter",
+    "corrigendum to", "erratum to", "erratum", "retraction of",
+    "retraction:", "commentary",
+)
+
+_STOPWORDS = {
+    "a", "an", "the", "of", "in", "on", "for", "and", "to", "using",
+    "with", "from", "by", "into", "via", "towards", "toward",
+}
+
+
 # Ported from the Excel pipeline's norm_title (NFKD + strip accents + drop
 # parenthesised text). Deliberately distinct from the DB NormalizedTitle column.
 def norm_title(s):
@@ -66,7 +104,30 @@ def norm_title(s):
     s = "".join(c for c in s if not unicodedata.combining(c))
     s = re.sub(r"\(.*?\)", "", s.lower())
     s = re.sub(r"[^a-z0-9 ]+", " ", s)
-    return re.sub(r"\s+", " ", s).strip()
+    s = re.sub(r"\s+", " ", s).strip()
+    # Strip ONE leading boilerplate tag at a time -- a title could in theory
+    # carry more than one, though that hasn't been observed in practice.
+    changed = True
+    while changed:
+        changed = False
+        for prefix in _BOILERPLATE_PREFIXES:
+            if s.startswith(prefix + " "):
+                s = s[len(prefix):].strip()
+                changed = True
+                break
+    return s
+
+
+def block_key(fuzzy_key, n=3):
+    """Blocking key for the fuzzy pass: the first N non-stopword words of
+    the (boilerplate-stripped) normalized title, not a raw character
+    prefix. A raw fuzzy_key[:8] prefix is brittle -- any leading noise
+    (a boilerplate tag norm_title() didn't know about, an extra word)
+    shifts every character after it and the two titles land in different
+    buckets, so they're never even compared. Blocking on significant WORDS
+    survives a stray leading word much better than blocking on characters."""
+    words = [w for w in fuzzy_key.split() if w not in _STOPWORDS]
+    return " ".join(words[:n])
 
 
 def load_papers(cur, user_id):
@@ -96,7 +157,37 @@ def load_papers(cur, user_id):
             "is_verified": bool(verified), "source": source,
             "citations": int(cit or 0),
             "fuzzy_key": norm_title(title),
+            "authors": frozenset(),
+            "first_author": None,
         }
+
+    if papers:
+        cur.execute(
+            'SELECT "PaperID", "UserID" FROM "Authors" WHERE "PaperID" = ANY(%s)',
+            (list(papers),),
+        )
+        by_paper = defaultdict(set)
+        for pid, uid in cur.fetchall():
+            by_paper[pid].add(uid)
+        for pid, uids in by_paper.items():
+            if pid in papers:
+                papers[pid]["authors"] = frozenset(uids)
+
+        # First author by AuthorOrder -- NULLS LAST (matches the convention
+        # in migrations/20260615_fix_journalrankings_duplicate_rows.sql's
+        # first_author CTE), since AuthorOrder isn't always populated.
+        cur.execute(
+            '''
+            SELECT DISTINCT ON ("PaperID") "PaperID", "UserID"
+            FROM "Authors" WHERE "PaperID" = ANY(%s)
+            ORDER BY "PaperID", "AuthorOrder", "UserID"
+            ''',
+            (list(papers),),
+        )
+        for pid, uid in cur.fetchall():
+            if pid in papers:
+                papers[pid]["first_author"] = uid
+
     return papers
 
 
@@ -141,12 +232,16 @@ def detect_groups(papers, threshold):
                 union(ids[0], other, reason, reasons)
 
     # -- fuzzy blocks (residual, bounded) --
-    # Block by the first 8 chars of the Excel-style normalized title so
-    # SequenceMatcher only runs inside tiny buckets, never across all papers.
+    # Block by the first few significant WORDS of the (boilerplate-stripped)
+    # normalized title, not a raw character prefix -- see block_key()'s
+    # docstring for why the old fuzzy_key[:8] scheme silently missed real
+    # duplicates.
     blocks = defaultdict(list)
     for pid, p in papers.items():
         if len(p["fuzzy_key"]) >= 15:
-            blocks[p["fuzzy_key"][:8]].append(pid)
+            bk = block_key(p["fuzzy_key"])
+            if bk:
+                blocks[bk].append(pid)
     n_pairs = 0
     for ids in blocks.values():
         for i in range(len(ids)):
@@ -154,6 +249,14 @@ def detect_groups(papers, threshold):
                 a, b = ids[i], ids[j]
                 if find(idx[a]) == find(idx[b]):
                     continue        # already grouped by an exact rule
+                # Require overlapping authorship before even considering a
+                # fuzzy title match -- two papers on a similar topic with NO
+                # shared author are almost never the same publication, and
+                # this cheaply rules out most of the false positives a pure
+                # text-similarity check finds (e.g. a journal's "Acknowledgment
+                # to the Reviewers" notice recurring across different years).
+                if not (papers[a]["authors"] & papers[b]["authors"]):
+                    continue
                 score = SequenceMatcher(
                     None, papers[a]["fuzzy_key"], papers[b]["fuzzy_key"]).ratio()
                 n_pairs += 1
@@ -187,6 +290,123 @@ def choose_keep(group_pids, papers):
         reverse=True,
     )
     return ranked[0], ranked[1:]
+
+
+def choose_keep_reason(keep, losers, papers):
+    """Which choose_keep() tie-break factor actually decided, against the
+    strongest runner-up -- the merge plan's audit trail records this as
+    'سبب الاختيار', not just which paper won."""
+    if not losers:
+        return "only_member"
+    k = papers[keep]
+    r = papers[losers[0]]  # ranked[1], i.e. the closest contender
+    if bool(k["doi"]) != bool(r["doi"]):
+        return "has_doi"
+    if k["citations"] != r["citations"]:
+        return "citations"
+    if len(k["title"]) != len(r["title"]):
+        return "title_length"
+    if k["is_verified"] != r["is_verified"]:
+        return "is_verified"
+    return "lowest_paper_id"
+
+
+# Unlike "Research Article"/"Review Article" (cosmetic scraper noise with
+# no independent existence -- safe to strip and treat as pure duplicates),
+# these denote a FORMALLY DISTINCT scholarly record even when it's about
+# the same underlying paper. Auto-merging one away would delete real
+# correction/retraction history. Force manual review regardless of any
+# other signal (a corrigendum missing its own DOI in our data is still a
+# corrigendum, not "the same paper without a DOI yet").
+_DISTINCT_RECORD_PREFIXES = ("corrigendum", "erratum", "retraction")
+
+
+def _is_distinct_record(title):
+    t = (title or "").strip().lower()
+    return any(t.startswith(p) for p in _DISTINCT_RECORD_PREFIXES)
+
+
+def _years_compatible(y1, y2):
+    """Same year, or one/both missing (can't contradict what isn't there),
+    or off by exactly one (handles a preprint-year vs published-year gap)."""
+    if y1 is None or y2 is None:
+        return True
+    return abs(y1 - y2) <= 1
+
+
+def _year_gap_exceeds(y1, y2, max_gap):
+    if y1 is None or y2 is None:
+        return False
+    return abs(y1 - y2) > max_gap
+
+
+def hard_exclusion_reason(keep, loser, papers):
+    """Named, independently-testable guardrails against merging
+    'evolutionary papers' -- genuinely different, independently registered
+    works that can still score >=95% on raw title/abstract similarity (a
+    conference paper and its later, separately-DOI'd journal extension; two
+    narrow papers by an overlapping team a few years apart). High text
+    similarity alone was never sufficient -- DOI, publication year, and
+    first author settle it immediately once you look.
+
+    Both rules require DOIs that are BOTH present and DIFFERENT, not just
+    one side missing one -- two distinct, real DOIs is the strongest signal
+    two catalog entries are actually separate publications:
+      1. different DOI + pub year gap > 2  -> never auto-merge
+      2. different DOI + different first author -> force manual review
+
+    Checked first in pair_confidence(), ahead of the softer similarity
+    scoring, so a future retune of that scoring can't accidentally let an
+    evolutionary-papers pair back into [HIGH]. Returns the reason string if
+    a rule fires, else None -- see test_dedup_papers.py for the regression
+    case this codifies."""
+    k, l = papers[keep], papers[loser]
+    if not (k["doi"] and l["doi"] and k["doi"] != l["doi"]):
+        return None
+    if _year_gap_exceeds(k["pub_year"], l["pub_year"], max_gap=2):
+        return "different_doi_and_year_gap_gt_2"
+    if k["first_author"] and l["first_author"] and k["first_author"] != l["first_author"]:
+        return "different_doi_and_different_first_author"
+    return None
+
+
+def pair_confidence(keep, loser, papers):
+    """'high' only for the exact auto-mergeable profile: shared author,
+    >=95% title similarity, a compatible pub year, and EXACTLY one side
+    carrying a DOI (the asymmetry that says "same paper, one copy just
+    hasn't been enriched yet" -- two DIFFERENT real DOIs, or neither
+    side having one, isn't that signal and goes to manual review instead.
+    Everything else -- a real venue/edition difference, a year that
+    doesn't line up -- also goes to 'review'. This is deliberately
+    stricter than the fuzzy-match threshold that puts a pair in a group
+    at all: grouping casts a wide net for a human to look at, confidence
+    decides what's safe to merge unattended."""
+    k, l = papers[keep], papers[loser]
+    if _is_distinct_record(k["title"]) or _is_distinct_record(l["title"]):
+        return "review"
+    if hard_exclusion_reason(keep, loser, papers):
+        return "review"
+    if not (k["authors"] & l["authors"]):
+        return "review"
+    sim = SequenceMatcher(None, k["fuzzy_key"], l["fuzzy_key"]).ratio()
+    if sim < 0.95:
+        return "review"
+    if not _years_compatible(k["pub_year"], l["pub_year"]):
+        return "review"
+    if bool(k["doi"]) == bool(l["doi"]):
+        return "review"
+    return "high"
+
+
+def group_confidence(keep, losers, match_reasons, papers):
+    """Exact-identifier groups (same DOI / same normalized title) are
+    unambiguous regardless of author/year/DOI shape -- only groups that
+    include a fuzzy-title edge go through the stricter per-pair check."""
+    if not any(r.startswith("fuzzy_title_") for r in match_reasons):
+        return "high"
+    return "high" if all(
+        pair_confidence(keep, l, papers) == "high" for l in losers
+    ) else "review"
 
 
 def existing_child_tables(cur):
@@ -379,12 +599,20 @@ def merge_group(cur, keep, losers, papers_meta, child_tables, a_cols):
 
 
 def build_report(groups, papers):
+    """Produces the merge PLAN, not just a report -- every field a human
+    (or a later --apply run) needs to trust the decision without re-deriving
+    it: which paper is kept and WHY (keep_reason), why the group was formed
+    (match_reasons), and how confident the plan is in auto-merging it
+    (confidence). --apply executes exactly this plan; it never re-runs
+    group_confidence() or choose_keep() against live data."""
     out = []
     for i, g in enumerate(groups, 1):
         keep, losers = choose_keep(g["members"], papers)
         entry = {
             "group_id": i,
             "match_reasons": g["match_reasons"],
+            "keep_reason": choose_keep_reason(keep, losers, papers),
+            "confidence": group_confidence(keep, losers, g["match_reasons"], papers),
             "kept": {k: papers[keep][k] for k in
                      ("paper_id", "title", "doi", "pub_year", "citations",
                       "is_verified", "source")},
@@ -399,28 +627,34 @@ def build_report(groups, papers):
     return out
 
 
-def write_reports(report, ts):
+def write_merge_plan(report, ts):
+    """Writes the merge plan (JSON + CSV) -- the frozen, reviewable record
+    of exactly what --apply --plan will do. Not a log of what happened;
+    a plan of what WILL happen, to be reviewed (and hand-edited if needed)
+    before that."""
     AUDIT_DIR.mkdir(parents=True, exist_ok=True)
-    json_path = AUDIT_DIR / f"groups_{ts}.json"
+    json_path = AUDIT_DIR / f"merge_plan_{ts}.json"
     json_path.write_text(
         json.dumps({"generated_at": ts, "groups": report},
                    ensure_ascii=False, indent=2, default=str),
         encoding="utf-8",
     )
-    csv_path = AUDIT_DIR / f"groups_{ts}.csv"
+    csv_path = AUDIT_DIR / f"merge_plan_{ts}.csv"
     with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f)
-        w.writerow(["group_id", "role", "paper_id", "title", "doi",
-                    "pub_year", "citations", "source", "match_reasons"])
+        w.writerow(["group_id", "confidence", "role", "paper_id", "title", "doi",
+                    "pub_year", "citations", "source", "keep_reason", "match_reasons"])
         for g in report:
-            w.writerow([g["group_id"], "KEEP", g["kept"]["paper_id"],
+            conf = g.get("confidence", "review")
+            w.writerow([g["group_id"], conf, "KEEP", g["kept"]["paper_id"],
                         g["kept"]["title"][:80], g["kept"]["doi"] or "",
                         g["kept"]["pub_year"], g["kept"]["citations"],
-                        g["kept"]["source"], "; ".join(g["match_reasons"])])
+                        g["kept"]["source"], g.get("keep_reason", ""),
+                        "; ".join(g["match_reasons"])])
             for l in g["losers"]:
-                w.writerow([g["group_id"], "loser", l["paper_id"],
+                w.writerow([g["group_id"], conf, "MERGE", l["paper_id"],
                             l["title"][:80], l["doi"] or "",
-                            l["pub_year"], l["citations"], l["source"], ""])
+                            l["pub_year"], l["citations"], l["source"], "", ""])
     return json_path, csv_path
 
 
@@ -429,19 +663,25 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     mode = ap.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true",
-                      help="Detect + report only. No DB writes.")
+                      help="Detect duplicates and write a merge plan. No DB writes.")
     mode.add_argument("--apply", action="store_true",
-                      help="Merge duplicate groups (snapshot + AuditLog first).")
+                      help="Execute a merge plan from --plan (snapshot + AuditLog first). "
+                           "Never re-detects or re-decides -- requires --plan.")
     ap.add_argument("--user", type=int, default=None,
                     help="Scope detection to one researcher's papers.")
     ap.add_argument("--title-threshold", type=float, default=0.90,
                     help="Fuzzy title similarity threshold (default 0.90).")
-    ap.add_argument("--report-in", type=str, default=None,
-                    help="Reviewed groups JSON from a previous --dry-run; "
-                         "--apply merges exactly these groups.")
+    ap.add_argument("--plan", type=str, default=None,
+                    help="A merge_plan_*.json from a previous --dry-run. Required for "
+                         "--apply: execution always comes from a reviewed plan file, "
+                         "never straight from a fresh detection run.")
     ap.add_argument("--limit-groups", type=int, default=None,
                     help="Merge at most N groups this run (use 1 first).")
     args = ap.parse_args()
+
+    if args.apply and not args.plan:
+        ap.error("--apply requires --plan <merge_plan.json>. Run --dry-run first, "
+                 "review the plan it writes, then --apply --plan <that file>.")
 
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 
@@ -450,10 +690,14 @@ def main():
         papers = load_papers(cur, args.user)
         print(f"  {len(papers)} papers in scope")
 
-        if args.report_in:
-            data = json.loads(Path(args.report_in).read_text(encoding="utf-8"))
+        if args.plan:
+            data = json.loads(Path(args.plan).read_text(encoding="utf-8"))
             report = data["groups"]
-            # Drop papers that no longer exist (already merged in a prior run)
+            # The ONLY thing checked against live data is whether a paper
+            # still exists (it may have been merged away by a prior partial
+            # run). The plan's "confidence" and "keep_reason" are NOT
+            # recomputed -- the plan is the frozen decision; --apply
+            # executes it, it doesn't re-decide it.
             valid = []
             for g in report:
                 members = [g["kept"]["paper_id"]] + [l["paper_id"] for l in g["losers"]]
@@ -462,7 +706,7 @@ def main():
                     g["losers"] = [l for l in g["losers"] if l["paper_id"] in papers]
                     valid.append(g)
             report = valid
-            print(f"  groups from {args.report_in}: {len(report)} still mergeable")
+            print(f"  groups from {args.plan}: {len(report)} still mergeable")
         else:
             print(f"Detecting duplicates (fuzzy threshold {args.title_threshold})...")
             groups = detect_groups(papers, args.title_threshold)
@@ -473,26 +717,51 @@ def main():
         print("No duplicate groups. Nothing to do.")
         return
 
+    if not args.dry_run:
+        # --apply NEVER auto-merges a [REVIEW] group -- those are the ones
+        # that turned out, on inspection, to sometimes be genuinely
+        # different papers (see group_confidence's docstring). A human
+        # decides those separately; this tool only executes what the plan
+        # already marked [HIGH].
+        skipped = [g for g in report if g.get("confidence") != "high"]
+        report = [g for g in report if g.get("confidence") == "high"]
+        if skipped:
+            print(f"Skipping {len(skipped)} [REVIEW] group(s) from the plan -- not auto-merged:")
+            for g in skipped:
+                print(f"  group {g['group_id']}: kept={g['kept']['paper_id']} "
+                      f"losers={[l['paper_id'] for l in g['losers']]} "
+                      f"({'; '.join(g['match_reasons'])})")
+        if not report:
+            print("No [HIGH]-confidence groups left to merge. Nothing to do.")
+            return
+
     if args.limit_groups:
         report = report[:args.limit_groups]
 
     if args.dry_run:
-        json_path, csv_path = write_reports(report, ts)
+        json_path, csv_path = write_merge_plan(report, ts)
         n_losers = sum(len(g["losers"]) for g in report)
-        print(f"\n[DRY-RUN] {len(report)} groups / {n_losers} papers would be merged away.")
+        n_high = sum(1 for g in report if g.get("confidence") == "high")
+        print(f"\n[MERGE PLAN] {len(report)} groups / {n_losers} papers would be merged away "
+              f"({n_high} high-confidence, {len(report) - n_high} need manual review).")
         for g in report[:10]:
-            print(f"\n  Group {g['group_id']} ({'; '.join(g['match_reasons'])}):")
+            conf = g.get("confidence", "review")
+            print(f"\n  Group {g['group_id']} [{conf.upper()}] "
+                  f"keep_reason={g.get('keep_reason', '?')} "
+                  f"({'; '.join(g['match_reasons'])}):")
             print(f"    KEEP  {g['kept']['paper_id']}  cit={g['kept']['citations']}  "
                   f"doi={g['kept']['doi'] or '-'}  {g['kept']['title'][:60]}")
             for l in g["losers"]:
                 print(f"    drop  {l['paper_id']}  cit={l['citations']}  "
                       f"doi={l['doi'] or '-'}  {l['title'][:60]}")
         if len(report) > 10:
-            print(f"\n  ... and {len(report) - 10} more groups (see report)")
-        print(f"\nReview then apply:")
+            print(f"\n  ... and {len(report) - 10} more groups (see plan)")
+        print(f"\n--apply only ever merges [HIGH] groups from this plan; [REVIEW] ones are "
+              f"recorded for a human to resolve and are never auto-merged, even by --apply.")
+        print(f"\nReview the plan (hand-edit it if you disagree with a decision), then:")
         print(f"  JSON : {json_path}")
         print(f"  CSV  : {csv_path}")
-        print(f"  python tools/dedup_papers.py --apply --report-in \"{json_path}\" --limit-groups 1")
+        print(f"  python tools/dedup_papers.py --apply --plan \"{json_path}\" --limit-groups 1")
         return
 
     # --apply: everything below runs in one transaction

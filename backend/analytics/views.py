@@ -22,7 +22,7 @@ from .serializers import (
 from .stats import (
     CHART_YEAR_FLOOR, FOCUS_YEARS,
     _resolve_years, _hod_scope_department_id, _albaha_only,
-    _cites_expr, verified_affil_clause,
+    _cites_expr, verified_affil_clause, active_affil_clause,
     _dept_cards_windowed, _researcher_rows_windowed,
 )
 from .exports import export_excel  # re-exported for urls.py
@@ -927,6 +927,13 @@ def universal_search(request):
     if len(q) < 2:
         return response.Response({'profiles': [], 'papers': []})
 
+    # Same header toggle every other list uses (?affiliation=albaha). Search
+    # results are a browsing/discovery list like Top Papers, not an official
+    # KPI, so this uses active_affil_clause (keep confirmed-Al-Baha AND
+    # not-yet-verified, drop only confirmed-elsewhere) rather than the
+    # stricter verified_affil_clause reserved for official numbers.
+    albaha_only = _albaha_only(request)
+
     # has_litrix_perm lives on accounts.User; getattr keeps this safe when
     # SimpleJWT hands us an AnonymousUser-like object — we default to False.
     user = getattr(request, 'user', None)
@@ -1026,12 +1033,13 @@ def universal_search(request):
         # Authors row has a NULL UserID) leak into results — they aren't tied to
         # any researcher on the platform. This holds for every role, admins
         # included; full access widens which profiles you see, not which papers.
-        paper_filter = '''
+        paper_filter = f'''
             AND EXISTS (
                 SELECT 1 FROM "Authors" a
                 WHERE a."PaperID" = rp."PaperID"
                   AND a."UserID" IS NOT NULL
             )
+            {active_affil_clause(albaha_only, 'rp')}
         '''
 
 

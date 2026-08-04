@@ -4,7 +4,7 @@
 // is limited to system-authored papers.
 import {
   Component, OnInit, OnDestroy, AfterViewInit,
-  inject, signal, ViewChild, ElementRef,
+  inject, signal, effect, untracked, ViewChild, ElementRef,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -13,6 +13,7 @@ import {
   Subject, debounceTime, distinctUntilChanged, switchMap, of, catchError,
 } from 'rxjs';
 import { LitrixApiService } from '../../services/litrix-api.service';
+import { AffiliationService } from '../../core/services/affiliation.service';
 import { researcherPrimaryName } from '../../shared/utils/researcher-name';
 import {
   SearchProfileResult, SearchPaperResult,
@@ -33,6 +34,8 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly api = inject(LitrixApiService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  private readonly affiliation = inject(AffiliationService);
+  readonly albahaOnly = this.affiliation.albahaOnly;
 
   readonly PAGE = 10;
 
@@ -50,6 +53,20 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly selectedPaperId = signal<number | null>(null);
 
   private input$ = new Subject<string>();
+
+  constructor() {
+    // Header's Al-Baha toggle re-runs the current query through the same
+    // pipeline as typing does, so results refresh live without retyping.
+    // Guarded to a real query (empty at construction time, before ngOnInit
+    // even subscribes to input$) so this never fires a spurious search.
+    effect(() => {
+      this.affiliation.albahaOnly();
+      untracked(() => {
+        const q = this.query().trim();
+        if (q.length >= 2) this.input$.next(q);
+      });
+    });
+  }
 
   ngOnInit() {
     // catchError lives inside switchMap so a backend error never kills the
@@ -71,7 +88,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
           this.error.set(null);
           // Every fresh query restarts paging from the first page.
           this.paperLimit.set(this.PAGE);
-          return this.api.search(q, this.PAGE).pipe(
+          return this.api.search(q, this.PAGE, this.albahaOnly()).pipe(
             catchError(err => {
               this.error.set(
                 err?.error?.error ||
@@ -141,7 +158,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     const next = this.paperLimit() + this.PAGE;
     this.paperLimit.set(next);
     this.loadingMore.set(true);
-    this.api.search(q, next).pipe(
+    this.api.search(q, next, this.albahaOnly()).pipe(
       catchError(() => of(null)),
     ).subscribe(res => {
       this.loadingMore.set(false);
