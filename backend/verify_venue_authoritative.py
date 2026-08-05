@@ -9,9 +9,14 @@ Per paper we gather independent opinions and combine them by authority:
      venue_classifiers package). Wiley book chapters mint DOIs as
      10.1002/<13-digit ISBN>.ch<N> - unambiguous by construction, so this
      alone settles VenueType='BookChapter' even when Crossref/OpenAlex have
-     no record or disagree. NOT extended to Springer's shared 10.1007/978-...
-     prefix (also used by legitimate LNCS/CCIS proceedings) - new publisher
-     rules go in venue_classifiers/publishers.py, not here.
+     no record or disagree. Frontiers "Research Topic" ebook compilations
+     (10.3389/<ISBN>, e.g. 10.3389/978-2-8325-6894-1) get the opposite
+     override: Crossref correctly calls the compilation itself an
+     edited-book, but it's a repackaging of already-counted journal articles,
+     not new book content, so this settles VenueType='Journal' instead. NOT
+     extended to Springer's shared 10.1007/978-... prefix (also used by
+     legitimate LNCS/CCIS proceedings) - new publisher rules go in
+     venue_classifiers/publishers.py, not here.
   2. SERIAL-CONFERENCE NAME OVERRIDE. Procedia, LNCS, "Journal
      of Physics: Conference Series", IOP/E3S/MATEC/SHS Web of Conferences, CCIS,
      AISC, WIT Transactions, CEUR, AIP Conf. Proc. are conference proceedings
@@ -53,13 +58,19 @@ import psycopg2
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from litrix_db import db, setup_utf8_stdout
 from venue_classifiers import BOOK as DOI_BOOK, BOOK_CHAPTER as DOI_BOOK_CHAPTER
+from venue_classifiers import CONFERENCE as DOI_CONFERENCE, JOURNAL as DOI_JOURNAL
 from venue_classifiers import classify_from_doi
 
 setup_utf8_stdout()
 
 # venue_classifiers' verdicts -> the VenueType strings actually stored in
 # ResearchPaper.VenueType.
-_DOI_VERDICT_TO_VENUE_TYPE = {DOI_BOOK: 'Book', DOI_BOOK_CHAPTER: 'BookChapter'}
+_DOI_VERDICT_TO_VENUE_TYPE = {
+    DOI_BOOK: 'Book',
+    DOI_BOOK_CHAPTER: 'BookChapter',
+    DOI_JOURNAL: 'Journal',
+    DOI_CONFERENCE: 'Conference',
+}
 
 UA = 'Litrix/1.0 (mailto:litrix@bu.edu.sa)'
 CHECKPOINT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'venue_verify_checkpoint.jsonl')
