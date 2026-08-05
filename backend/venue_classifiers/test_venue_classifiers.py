@@ -8,7 +8,7 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from venue_classifiers import BOOK_CHAPTER, JOURNAL, UNKNOWN, classify_from_doi
+from venue_classifiers import BOOK_CHAPTER, UNKNOWN, classify_from_doi
 
 
 class WileyBookChapters(unittest.TestCase):
@@ -21,25 +21,31 @@ class WileyBookChapters(unittest.TestCase):
         self.assertEqual(classify_from_doi('10.1002/widm.1249'), UNKNOWN)
 
 
-class FrontiersResearchTopicEbooks(unittest.TestCase):
-    def test_matches_isbn_shaped_ebook_doi(self):
-        # PaperID 5526 - "Neuro-detection..." Research Topic compilation,
-        # Crossref type='edited-book' but it's a repackaging of already-
-        # counted journal articles, not new book content.
-        self.assertEqual(classify_from_doi('10.3389/978-2-8325-6894-1'), JOURNAL)
-
-    def test_does_not_match_regular_frontiers_article_doi(self):
-        # Real Frontiers articles use a journal-code prefix, never digits.
-        self.assertEqual(classify_from_doi('10.3389/fnins.2021.1234567'), UNKNOWN)
-        self.assertEqual(classify_from_doi('10.3389/fcomp.2025.1685174'), UNKNOWN)
-
-
 class SpringerDeliberatelyUnregistered(unittest.TestCase):
     def test_shared_prefix_not_classified_by_pattern_alone(self):
         # 10.1007/978-... is shared with legitimate LNCS/CCIS conference
         # proceedings - must fall through to the Crossref/OpenAlex opinion
         # path in verify_venue_authoritative.py, never a bare DOI-shape rule.
         self.assertEqual(classify_from_doi('10.1007/978-3-030-12345-6_5'), UNKNOWN)
+
+
+class FrontiersDeliberatelyUnregistered(unittest.TestCase):
+    def test_isbn_shaped_ebook_doi_not_classified_by_pattern_alone(self):
+        # 10.3389/978-... (PaperID 5526, "Neuro-detection..." Research Topic)
+        # is an ISBN-shaped Frontiers ebook DOI. Crossref consistently types
+        # it 'edited-book' - Frontiers genuinely dual-publishes a Research
+        # Topic as both a web collection and a print-on-demand ebook - but
+        # only one such row exists in the whole DB, not enough evidence to
+        # justify a standing override rule. Falls through to the Crossref/
+        # OpenAlex opinion path (currently flagged for manual review), same
+        # as Springer above.
+        self.assertEqual(classify_from_doi('10.3389/978-2-8325-6894-1'), UNKNOWN)
+
+    def test_does_not_match_regular_frontiers_article_doi(self):
+        # Real Frontiers articles use a journal-code prefix, never digits -
+        # this was never at risk of matching, kept as a sanity check.
+        self.assertEqual(classify_from_doi('10.3389/fnins.2021.1234567'), UNKNOWN)
+        self.assertEqual(classify_from_doi('10.3389/fcomp.2025.1685174'), UNKNOWN)
 
 
 class EdgeCases(unittest.TestCase):
