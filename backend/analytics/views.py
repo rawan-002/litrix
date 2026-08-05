@@ -315,10 +315,12 @@ def yearly_breakdown(request):
             SELECT
                 department_id,
                 department_name,
-                COUNT(*) FILTER (WHERE venue_type = 'Journal')    AS journal_papers,
-                COUNT(*) FILTER (WHERE venue_type = 'Conference') AS conference_papers,
-                COUNT(*)                                          AS total_papers,
-                COALESCE(SUM(citations), 0)                       AS total_citations
+                COUNT(*) FILTER (WHERE venue_type = 'Journal')     AS journal_papers,
+                COUNT(*) FILTER (WHERE venue_type = 'Conference')  AS conference_papers,
+                COUNT(*) FILTER (WHERE venue_type = 'Book')        AS book_papers,
+                COUNT(*) FILTER (WHERE venue_type = 'BookChapter') AS book_chapter_papers,
+                COUNT(*)                                           AS total_papers,
+                COALESCE(SUM(citations), 0)                        AS total_citations
             FROM v_paper_details
             WHERE pub_year = %s
               AND department_id IS NOT NULL{dept_clause}
@@ -328,12 +330,14 @@ def yearly_breakdown(request):
         dept_rows = cur.fetchall()
         departments = [
             {
-                'department_id':     r[0],
-                'department_name':   r[1],
-                'journal_papers':    r[2],
-                'conference_papers': r[3],
-                'total_papers':      r[4],
-                'total_citations':   r[5],
+                'department_id':      r[0],
+                'department_name':    r[1],
+                'journal_papers':     r[2],
+                'conference_papers':  r[3],
+                'book_papers':        r[4],
+                'book_chapter_papers': r[5],
+                'total_papers':       r[6],
+                'total_citations':    r[7],
             }
             for r in dept_rows
         ]
@@ -440,7 +444,7 @@ def overview(request):
         # populated; NULL -> journal-eligible). scopus/isi are NOT gated.
         # %% because kpi_sql is passed to execute() with params.
         jelig = (' AND (rp."VenueType" IS NULL OR (rp."VenueType" NOT ILIKE '
-                 '\'Conference%%\' AND rp."VenueType" NOT IN (\'Book\', \'Preprint\')))')
+                 '\'Conference%%\' AND rp."VenueType" NOT IN (\'Book\', \'BookChapter\', \'Preprint\')))')
         kpi_sql = (
             'SELECT COUNT(DISTINCT rp."PaperID") AS papers, '
             '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = \'Q1\'' + jelig + ') AS q1, '
@@ -452,6 +456,7 @@ def overview(request):
             '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."VenueType" = \'Journal\') AS journal, '
             '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."VenueType" ILIKE \'Conference%%\') AS conference, '
             '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."VenueType" = \'Book\') AS book, '
+            '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."VenueType" = \'BookChapter\') AS book_chapter, '
             '       COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."VenueType" = \'Preprint\') AS preprint '
             'FROM "ResearchPaper" rp '
             'LEFT JOIN LATERAL (SELECT "Quartile","ImpactFactor" FROM "JournalRankings" '
@@ -625,7 +630,7 @@ def overview(request):
         # paper-level VenueType wins, Journals fallback. %% -> % (execute params).
         jelig = ('AND (COALESCE(rp."VenueType", j."VenueType") IS NULL '
                  'OR (COALESCE(rp."VenueType", j."VenueType") NOT ILIKE \'Conference%%\' '
-                 'AND COALESCE(rp."VenueType", j."VenueType") NOT IN (\'Book\', \'Preprint\')))')
+                 'AND COALESCE(rp."VenueType", j."VenueType") NOT IN (\'Book\', \'BookChapter\', \'Preprint\')))')
         cur.execute(f'''
             WITH dept_citations AS (
                 SELECT dept AS "DepartmentID", SUM(cites) AS total_citations
@@ -665,9 +670,11 @@ def overview(request):
                     FILTER (WHERE rp."PaperID" IS NOT NULL
                             AND (COALESCE(rp."VenueType", j."VenueType") IS NULL
                                  OR (COALESCE(rp."VenueType", j."VenueType") NOT ILIKE 'Conference%%'
-                                     AND COALESCE(rp."VenueType", j."VenueType") NOT IN ('Book', 'Preprint')))) AS journal_papers,
+                                     AND COALESCE(rp."VenueType", j."VenueType") NOT IN ('Book', 'BookChapter', 'Preprint')))) AS journal_papers,
                 COUNT(DISTINCT rp."PaperID")
                     FILTER (WHERE COALESCE(rp."VenueType", j."VenueType") = 'Book') AS book_papers,
+                COUNT(DISTINCT rp."PaperID")
+                    FILTER (WHERE COALESCE(rp."VenueType", j."VenueType") = 'BookChapter') AS book_chapter_papers,
                 COUNT(DISTINCT rp."PaperID")
                     FILTER (WHERE COALESCE(rp."VenueType", j."VenueType") = 'Preprint') AS preprint_papers
             FROM "Department" d
@@ -773,7 +780,8 @@ def overview(request):
             'journal_papers':      (paper_count_row[7] if len(paper_count_row) > 7 else 0) or 0,
             'conference_papers':   (paper_count_row[8] if len(paper_count_row) > 8 else 0) or 0,
             'book_papers':         (paper_count_row[9] if len(paper_count_row) > 9 else 0) or 0,
-            'preprint_papers':     (paper_count_row[10] if len(paper_count_row) > 10 else 0) or 0,
+            'book_chapter_papers': (paper_count_row[10] if len(paper_count_row) > 10 else 0) or 0,
+            'preprint_papers':     (paper_count_row[11] if len(paper_count_row) > 11 else 0) or 0,
             'avg_h_index':         float(dept_agg['avg_h'] or 0),
             # Independent data-quality metric: papers in scope not yet verified
             # for Al-Baha affiliation (NULL). NOT included in 'papers' above.
@@ -834,7 +842,7 @@ def classified_papers(request):
 
     tier_filter = (request.query_params.get('tier') or '').strip().lower()
     # Optional venue-type filter for the venue donut's "view all" modal:
-    # journal / conference / book / preprint / unclassified.
+    # journal / conference / book / bookchapter / preprint / unclassified.
     venue_filter = (request.query_params.get('venue') or '').strip().lower()
     yk = _cites_expr('rp', years)
 
@@ -876,7 +884,7 @@ def classified_papers(request):
         if not venue_type:
             return True
         v = venue_type.lower()
-        return not v.startswith('conference') and v != 'book'
+        return not v.startswith('conference') and v not in ('book', 'bookchapter')
 
     with connection.cursor() as cur:
         cur.execute(sql, params)
@@ -1033,6 +1041,31 @@ def universal_search(request):
         # Authors row has a NULL UserID) leak into results — they aren't tied to
         # any researcher on the platform. This holds for every role, admins
         # included; full access widens which profiles you see, not which papers.
+        # Optional ?venue_type=Journal|Conference|Book|BookChapter chip
+        # filter, comma-separated for a tab that spans more than one type
+        # (the Books tab wants Book+BookChapter together, the Publications
+        # tab wants Journal+Conference together). 'Journal' follows the same
+        # NULL-defaults-to-Journal convention as jelig elsewhere in this file
+        # (a paper with no VenueType and no Journal fallback is treated as a
+        # journal paper, not excluded).
+        def _single_venue_clause(vt):
+            if vt == 'Conference':
+                return ''' COALESCE(rp."VenueType", j."VenueType") ILIKE 'Conference%%' '''
+            if vt == 'Book':
+                return ''' COALESCE(rp."VenueType", j."VenueType") = 'Book' '''
+            if vt == 'BookChapter':
+                return ''' COALESCE(rp."VenueType", j."VenueType") = 'BookChapter' '''
+            if vt == 'Journal':
+                return (''' (COALESCE(rp."VenueType", j."VenueType") IS NULL '''
+                        '''OR (COALESCE(rp."VenueType", j."VenueType") NOT ILIKE 'Conference%%' '''
+                        '''AND COALESCE(rp."VenueType", j."VenueType") NOT IN ('Book', 'BookChapter', 'Preprint'))) ''')
+            return None
+
+        venue_types = [v.strip() for v in
+                        (request.query_params.get('venue_type') or '').split(',') if v.strip()]
+        venue_parts = [c for c in (_single_venue_clause(vt) for vt in venue_types) if c]
+        venue_clause = f' AND ({" OR ".join(venue_parts)}) ' if venue_parts else ''
+
         paper_filter = f'''
             AND EXISTS (
                 SELECT 1 FROM "Authors" a
@@ -1040,6 +1073,7 @@ def universal_search(request):
                   AND a."UserID" IS NOT NULL
             )
             {active_affil_clause(albaha_only, 'rp')}
+            {venue_clause}
         '''
 
 
@@ -1072,7 +1106,9 @@ def universal_search(request):
                         ORDER BY a2."AuthorOrder" NULLS LAST
                         LIMIT 3
                     ) u2
-                ) AS authors_summary
+                ) AS authors_summary,
+                COALESCE(rp."VenueType", j."VenueType") AS venue_type,
+                j."Publisher" AS publisher
             FROM "ResearchPaper" rp
             LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
             LEFT JOIN LATERAL (    SELECT "Quartile", "ImpactFactor"    FROM "JournalRankings"    WHERE "JournalID" = rp."JournalID"    ORDER BY "RankingYear" DESC NULLS LAST, "Source"    LIMIT 1) jr ON TRUE
@@ -1103,6 +1139,8 @@ def universal_search(request):
                 'quartile':        r[7],
                 'citations':       r[8],
                 'authors_summary': r[9],
+                'venue_type':      r[10],
+                'publisher':       r[11],
             }
             for r in rows[:PAPER_LIMIT]
         ]

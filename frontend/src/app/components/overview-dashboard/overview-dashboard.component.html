@@ -612,6 +612,12 @@
                     <div class="text-xs text-ink-400 mt-1 flex gap-3">
                       <span>{{ dept.journal_papers }} Journal</span><span>·</span>
                       <span>{{ dept.conference_papers }} Conference</span><span>·</span>
+                      @if (dept.book_papers > 0) {
+                        <span>{{ dept.book_papers }} Book</span><span>·</span>
+                      }
+                      @if (dept.book_chapter_papers > 0) {
+                        <span>{{ dept.book_chapter_papers }} Book Chapter</span><span>·</span>
+                      }
                       <span>{{ fmt(dept.total_citations) }} citations</span>
                     </div>
                   </div>
@@ -699,6 +705,76 @@
                         }
                       }
                     </div>
+
+                    @if (dept.book_papers > 0) {
+                      <div>
+                        <h3 class="text-xs uppercase tracking-wider text-ink-400 mb-3">
+                          Books ({{ dept.book_papers }})
+                        </h3>
+                        <ul class="space-y-3">
+                          @for (p of papersForLimited(dept.department_id, 'Book'); track p.paper_id) {
+                            <li class="bg-white rounded p-3 shadow-card">
+                              <button (click)="openPaper(p)"
+                                      class="text-sm font-medium text-ink-700 line-clamp-2
+                                             text-left hover:text-accent transition-colors cursor-pointer">{{ p.title }}</button>
+                              @if (p.authors_en) {
+                                <div class="text-xs text-ink-500 mt-1" dir="ltr">{{ p.authors_en }}</div>
+                              } @else if (p.authors_ar) {
+                                <div class="text-xs text-ink-500 mt-1" dir="rtl">{{ p.authors_ar }}</div>
+                              }
+                              <div class="text-xs text-ink-400 mt-2 flex items-center flex-wrap gap-2">
+                                <span>{{ p.journal_name || '-' }}</span>
+                                <span class="ml-auto text-ink-500">{{ fmt(p.citations) }} citations</span>
+                              </div>
+                            </li>
+                          }
+                        </ul>
+                        @if (hasMore(dept.department_id, 'Book')) {
+                          <div class="text-center mt-3">
+                            <button (click)="loadMore(dept.department_id, 'Book')"
+                                    class="text-xs text-accent hover:text-accent-hover font-medium px-4 py-2 rounded-full hover:bg-accent-light transition-colors">
+                              Load More
+                              ({{ papersFor(dept.department_id, 'Book').length - visibleCount(dept.department_id, 'Book') }} remaining)
+                            </button>
+                          </div>
+                        }
+                      </div>
+                    }
+
+                    @if (dept.book_chapter_papers > 0) {
+                      <div>
+                        <h3 class="text-xs uppercase tracking-wider text-ink-400 mb-3">
+                          Book Chapters ({{ dept.book_chapter_papers }})
+                        </h3>
+                        <ul class="space-y-3">
+                          @for (p of papersForLimited(dept.department_id, 'BookChapter'); track p.paper_id) {
+                            <li class="bg-white rounded p-3 shadow-card">
+                              <button (click)="openPaper(p)"
+                                      class="text-sm font-medium text-ink-700 line-clamp-2
+                                             text-left hover:text-accent transition-colors cursor-pointer">{{ p.title }}</button>
+                              @if (p.authors_en) {
+                                <div class="text-xs text-ink-500 mt-1" dir="ltr">{{ p.authors_en }}</div>
+                              } @else if (p.authors_ar) {
+                                <div class="text-xs text-ink-500 mt-1" dir="rtl">{{ p.authors_ar }}</div>
+                              }
+                              <div class="text-xs text-ink-400 mt-2 flex items-center flex-wrap gap-2">
+                                <span>{{ p.journal_name || '-' }}</span>
+                                <span class="ml-auto text-ink-500">{{ fmt(p.citations) }} citations</span>
+                              </div>
+                            </li>
+                          }
+                        </ul>
+                        @if (hasMore(dept.department_id, 'BookChapter')) {
+                          <div class="text-center mt-3">
+                            <button (click)="loadMore(dept.department_id, 'BookChapter')"
+                                    class="text-xs text-accent hover:text-accent-hover font-medium px-4 py-2 rounded-full hover:bg-accent-light transition-colors">
+                              Load More
+                              ({{ papersFor(dept.department_id, 'BookChapter').length - visibleCount(dept.department_id, 'BookChapter') }} remaining)
+                            </button>
+                          </div>
+                        }
+                      </div>
+                    }
                   </div>
                 }
               </li>

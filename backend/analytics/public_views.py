@@ -157,7 +157,7 @@ def overview(request):
                                             AND jr."Quartile" = 'Q1'
                    WHERE ap."VenueType" IS NULL
                       OR (ap."VenueType" NOT ILIKE 'Conference%%'
-                          AND ap."VenueType" NOT IN ('Book', 'Preprint')))    AS q1_papers,
+                          AND ap."VenueType" NOT IN ('Book', 'BookChapter', 'Preprint')))    AS q1_papers,
                 (SELECT COALESCE(ROUND(AVG(h_index))::int, 0)
                    FROM ({H_INDEX_PER_USER_SQL}) hi
                    WHERE h_index > 0)                                          AS avg_h_index,
@@ -231,7 +231,7 @@ def departments_list(request):
                               AND rp."PubYear" = ANY(%s)
                               AND (rp."VenueType" IS NULL
                                    OR (rp."VenueType" NOT ILIKE 'Conference%%'
-                                       AND rp."VenueType" NOT IN ('Book', 'Preprint'))))   AS q1_papers,
+                                       AND rp."VenueType" NOT IN ('Book', 'BookChapter', 'Preprint'))))   AS q1_papers,
                 COALESCE(
                     (SELECT SUM(cites) FROM dept_papers dp
                      WHERE dp."DepartmentID" = d."DepartmentID"),
@@ -409,7 +409,7 @@ def researcher_profile(request, litrix_id: str):
                     FILTER (WHERE jr."Quartile" = 'Q1'
                               AND (rp."VenueType" IS NULL
                                    OR (rp."VenueType" NOT ILIKE 'Conference%%'
-                                       AND rp."VenueType" NOT IN ('Book', 'Preprint')))) AS q1_papers,
+                                       AND rp."VenueType" NOT IN ('Book', 'BookChapter', 'Preprint')))) AS q1_papers,
                 MIN(rp."PubYear")                                    AS first_year,
                 MAX(rp."PubYear")                                    AS last_year
             FROM "ResearchPaper" rp
@@ -1101,7 +1101,7 @@ def export_excel(request):
                                                 AND jr."Quartile" = 'Q1'
                        WHERE ap."VenueType" IS NULL
                           OR (ap."VenueType" NOT ILIKE 'Conference%%'
-                              AND ap."VenueType" NOT IN ('Book', 'Preprint'))),
+                              AND ap."VenueType" NOT IN ('Book', 'BookChapter', 'Preprint'))),
                     (SELECT COALESCE(SUM(cites), 0) FROM attributed_papers),
                     (SELECT COALESCE(ROUND(AVG(h_index)::numeric, 1), 0)
                        FROM ({H_INDEX_PER_USER_SQL}) hi WHERE h_index > 0)

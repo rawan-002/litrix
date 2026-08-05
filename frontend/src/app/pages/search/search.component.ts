@@ -39,6 +39,67 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   readonly PAGE = 10;
 
+  // Top-level result tabs. Publications = Journal + Conference, Books =
+  // Book + Book Chapter, Researchers = profiles. Kept as one /api/search/
+  // call (not three separate endpoints) - the backend's venue_type param
+  // takes a comma list, so switching tabs just changes which types we ask
+  // for; profiles come back regardless and are simply not shown outside the
+  // Researchers tab.
+  readonly tabs = [
+    { key: 'publications' as const, label: 'Publications' },
+    { key: 'books'        as const, label: 'Books' },
+    { key: 'researchers'  as const, label: 'Researchers' },
+  ];
+  readonly activeTab = signal<'publications' | 'books' | 'researchers'>('publications');
+
+  // Sub-filter within the Publications tab.
+  readonly pubTypes = [
+    { key: 'all'        as const, label: 'All' },
+    { key: 'Journal'    as const, label: 'Journal' },
+    { key: 'Conference' as const, label: 'Conference' },
+  ];
+  readonly pubType = signal<'all' | 'Journal' | 'Conference'>('all');
+
+  // Sub-filter within the Books tab.
+  readonly bookTypes = [
+    { key: 'all'         as const, label: 'All' },
+    { key: 'Book'        as const, label: 'Book' },
+    { key: 'BookChapter' as const, label: 'Book Chapter' },
+  ];
+  readonly bookType = signal<'all' | 'Book' | 'BookChapter'>('all');
+
+  /** venue_type param actually sent to the API for the active tab. */
+  private venueTypeParam(): string | undefined {
+    if (this.activeTab() === 'books') {
+      return this.bookType() === 'all' ? 'Book,BookChapter' : this.bookType();
+    }
+    if (this.activeTab() === 'publications') {
+      return this.pubType() === 'all' ? 'Journal,Conference' : this.pubType();
+    }
+    return undefined;
+  }
+
+  setTab(t: 'publications' | 'books' | 'researchers') {
+    this.activeTab.set(t);
+  }
+  setPubType(v: 'all' | 'Journal' | 'Conference') {
+    this.pubType.set(v);
+  }
+  setBookType(v: 'all' | 'Book' | 'BookChapter') {
+    this.bookType.set(v);
+  }
+
+  /** Small emoji marker so Journal/Conference/Book/Book Chapter read apart
+   *  at a glance in a mixed results list. */
+  venueIcon(vt: string | null | undefined): string {
+    switch ((vt || '').toLowerCase()) {
+      case 'journal':      return '📄';
+      case 'book':         return '📘';
+      case 'bookchapter':  return '📖';
+      default:             return vt?.toLowerCase().startsWith('conf') ? '🎤' : '';
+    }
+  }
+
   readonly query    = signal<string>('');
   readonly loading  = signal<boolean>(false);
   readonly loadingMore = signal<boolean>(false);
@@ -55,12 +116,16 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private input$ = new Subject<string>();
 
   constructor() {
-    // Header's Al-Baha toggle re-runs the current query through the same
-    // pipeline as typing does, so results refresh live without retyping.
-    // Guarded to a real query (empty at construction time, before ngOnInit
-    // even subscribes to input$) so this never fires a spurious search.
+    // Header's Al-Baha toggle, the active tab, and each tab's own sub-filter
+    // all re-run the current query through the same pipeline as typing does,
+    // so results refresh live without retyping. Guarded to a real query
+    // (empty at construction time, before ngOnInit even subscribes to
+    // input$) so this never fires a spurious search.
     effect(() => {
       this.affiliation.albahaOnly();
+      this.activeTab();
+      this.pubType();
+      this.bookType();
       untracked(() => {
         const q = this.query().trim();
         if (q.length >= 2) this.input$.next(q);
@@ -88,7 +153,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
           this.error.set(null);
           // Every fresh query restarts paging from the first page.
           this.paperLimit.set(this.PAGE);
-          return this.api.search(q, this.PAGE, this.albahaOnly()).pipe(
+          return this.api.search(q, this.PAGE, this.albahaOnly(), this.venueTypeParam()).pipe(
             catchError(err => {
               this.error.set(
                 err?.error?.error ||
@@ -158,7 +223,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     const next = this.paperLimit() + this.PAGE;
     this.paperLimit.set(next);
     this.loadingMore.set(true);
-    this.api.search(q, next, this.albahaOnly()).pipe(
+    this.api.search(q, next, this.albahaOnly(), this.venueTypeParam()).pipe(
       catchError(() => of(null)),
     ).subscribe(res => {
       this.loadingMore.set(false);

@@ -178,7 +178,7 @@ def _dept_cards_windowed(years, albaha_only=False):
     # VenueType wins, journal fallback for safety.
     jelig = ('(COALESCE(rp."VenueType", j."VenueType") IS NULL '
              'OR (COALESCE(rp."VenueType", j."VenueType") NOT ILIKE \'Conference%%\' '
-             'AND COALESCE(rp."VenueType", j."VenueType") NOT IN (\'Book\', \'Preprint\')))')
+             'AND COALESCE(rp."VenueType", j."VenueType") NOT IN (\'Book\', \'BookChapter\', \'Preprint\')))')
     sql = f'''
         WITH dept_citations AS (
             SELECT dept AS did, SUM(cites) AS total_citations FROM (
@@ -236,7 +236,7 @@ def _researcher_rows_windowed(years, user_ids, albaha_only=False):
     affil = verified_affil_clause(albaha_only, 'rp')
     # Quartile is a journal ranking: exclude Conference/Book venues from Q1.
     jelig = ('(rp."VenueType" IS NULL '
-             'OR (rp."VenueType" NOT ILIKE \'Conference%%\' AND rp."VenueType" NOT IN (\'Book\', \'Preprint\')))')
+             'OR (rp."VenueType" NOT ILIKE \'Conference%%\' AND rp."VenueType" NOT IN (\'Book\', \'BookChapter\', \'Preprint\')))')
     sql = f'''
         SELECT a."UserID" AS uid,
             COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."PubYear" = ANY(%s)) AS total_papers,

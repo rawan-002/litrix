@@ -54,7 +54,7 @@ _ALBAHA_AUTHORS_EN_SQL = (
 _JELIG = (
     ' AND (COALESCE(rp."VenueType", j."VenueType") IS NULL'
     ' OR (COALESCE(rp."VenueType", j."VenueType") NOT ILIKE \'Conference%%\''
-    ' AND COALESCE(rp."VenueType", j."VenueType") NOT IN (\'Book\', \'Preprint\')))'
+    ' AND COALESCE(rp."VenueType", j."VenueType") NOT IN (\'Book\', \'BookChapter\', \'Preprint\')))'
 )
 
 

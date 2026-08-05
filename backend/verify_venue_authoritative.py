@@ -5,15 +5,22 @@ review sheet for the handful no automated source can settle.
 
 Per paper we gather independent opinions and combine them by authority:
 
-  0. SERIAL-CONFERENCE NAME OVERRIDE (top authority). Procedia, LNCS, "Journal
+  0. PUBLISHER DOI-PATTERN OVERRIDE (top authority, no API call; see the
+     venue_classifiers package). Wiley book chapters mint DOIs as
+     10.1002/<13-digit ISBN>.ch<N> - unambiguous by construction, so this
+     alone settles VenueType='BookChapter' even when Crossref/OpenAlex have
+     no record or disagree. NOT extended to Springer's shared 10.1007/978-...
+     prefix (also used by legitimate LNCS/CCIS proceedings) - new publisher
+     rules go in venue_classifiers/publishers.py, not here.
+  2. SERIAL-CONFERENCE NAME OVERRIDE. Procedia, LNCS, "Journal
      of Physics: Conference Series", IOP/E3S/MATEC/SHS Web of Conferences, CCIS,
      AISC, WIT Transactions, CEUR, AIP Conf. Proc. are conference proceedings
      that EVERY api mislabels as journal / book-series - so the venue NAME
      (stored, or the source name returned by OpenAlex/Crossref) wins outright.
      "Proceedings of the IEEE / National Academy" -> Journal the same way.
-  1. OpenAlex (by DOI): work type + source.type (journal/conference/book series).
-  2. Crossref (by DOI): work type + container (proceedings-article is decisive).
-  3. Name keyword rule (conference/journal words).
+  3. OpenAlex (by DOI): work type + source.type (journal/conference/book series).
+  4. Crossref (by DOI): work type + container (proceedings-article is decisive).
+  5. Name keyword rule (conference/journal words).
   -> if the available opinions AGREE: assign, high confidence.
   -> if they DISAGREE: consult DBLP (authoritative for CS via conf/ vs journals/
      key); DBLP breaks the tie. No DBLP match -> FLAG for review.
@@ -45,8 +52,14 @@ import psycopg2
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from litrix_db import db, setup_utf8_stdout
+from venue_classifiers import BOOK as DOI_BOOK, BOOK_CHAPTER as DOI_BOOK_CHAPTER
+from venue_classifiers import classify_from_doi
 
 setup_utf8_stdout()
+
+# venue_classifiers' verdicts -> the VenueType strings actually stored in
+# ResearchPaper.VenueType.
+_DOI_VERDICT_TO_VENUE_TYPE = {DOI_BOOK: 'Book', DOI_BOOK_CHAPTER: 'BookChapter'}
 
 UA = 'Litrix/1.0 (mailto:litrix@bu.edu.sa)'
 CHECKPOINT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'venue_verify_checkpoint.jsonl')
@@ -188,6 +201,14 @@ def classify(title, doi, stored_name, dblp_sleep):
     sn = stored_name or ''
     info = dict(oa='', cr='', names=sn, dblp='')
 
+    # 0. Publisher DOI-pattern authority (highest confidence, no API call).
+    # Delegates to venue_classifiers so new publisher rules are added there,
+    # not as more branches here.
+    doi_verdict = classify_from_doi(doi)
+    if doi_verdict in _DOI_VERDICT_TO_VENUE_TYPE:
+        return dict(verdict=_DOI_VERDICT_TO_VENUE_TYPE[doi_verdict], review=False,
+                     reason='doi-pattern', **info)
+
     # 1. STORED-name authority.
     if SERIAL_CONF.search(sn):
         return dict(verdict='Conference', review=False, reason='stored-serial', **info)
@@ -229,7 +250,13 @@ def classify(title, doi, stored_name, dblp_sleep):
         return dict(verdict=(oa_v or cr_v or an_v), review=True, reason='conflict', **info)
 
     if book:
-        return dict(verdict=None, review=True, reason='book-chapter', **info)
+        # Crossref/OpenAlex agree it's a book of some kind, but "book" still
+        # needs a human before it's trusted (unlike the DOI-pattern override
+        # above) - 'chapter' vs standalone volume is worth flagging in the
+        # suggested verdict so the review sheet doesn't need re-deriving it.
+        is_chapter = 'chapter' in (oa_t or '') or 'chapter' in (cr_t or '')
+        suggestion = 'BookChapter' if is_chapter else 'Book'
+        return dict(verdict=suggestion, review=True, reason='book-review', **info)
 
     d = dblp(title, doi, dblp_sleep)
     info['dblp'] = d or '(no match)'

@@ -82,6 +82,7 @@ export interface OverviewPayload {
     journal_papers?: number;
     conference_papers?: number;
     book_papers?: number;
+    book_chapter_papers?: number;
     preprint_papers?: number;
     /** Papers in scope not yet verified for Al-Baha affiliation (NULL).
      *  Independent data-quality metric — NOT included in `papers`. */
@@ -107,7 +108,7 @@ export interface PaperDetail {
   doi: string | null;
   citations: number;
   journal_name: string | null;
-  venue_type: 'Journal' | 'Conference' | 'Book' | 'Preprint' | null;
+  venue_type: 'Journal' | 'Conference' | 'Book' | 'BookChapter' | 'Preprint' | null;
   quartile: string | null;
   impact_factor: number | null;
   indexing: string | null;
@@ -122,6 +123,8 @@ export interface YearlyDepartmentSummary {
   department_name: string;
   journal_papers: number;
   conference_papers: number;
+  book_papers: number;
+  book_chapter_papers: number;
   total_papers: number;
   total_citations: number;
 }
@@ -179,7 +182,7 @@ export interface ProfilePaper {
   citations: number;
   journal_name: string | null;
   issn_print: string | null;
-  venue_type: 'Journal' | 'Conference' | null;
+  venue_type: 'Journal' | 'Conference' | 'Book' | 'BookChapter' | 'Preprint' | null;
   quartile: string | null;
   impact_factor: number | null;
   // Al-Baha affiliation verification: true = confirmed Al-Baha,
@@ -231,6 +234,8 @@ export interface SearchPaperResult {
   quartile: string | null;
   citations: number;
   authors_summary: string | null;
+  venue_type: 'Journal' | 'Conference' | 'Book' | 'BookChapter' | 'Preprint' | null;
+  publisher: string | null;
 }
 
 // Backs the overview dashboard's Quartile & Indexing donut "view all" modal.

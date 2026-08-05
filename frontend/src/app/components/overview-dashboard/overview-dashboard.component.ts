@@ -131,7 +131,8 @@ export class OverviewDashboardComponent implements OnInit {
         researchers: 0, active_researchers: 0, papers: 0, citations: 0,
         q1_papers: 0, q2_papers: 0, q3_papers: 0, q4_papers: 0,
         scopus_papers: 0, isi_papers: 0, avg_h_index: 0,
-        journal_papers: 0, conference_papers: 0, book_papers: 0, preprint_papers: 0,
+        journal_papers: 0, conference_papers: 0, book_papers: 0,
+        book_chapter_papers: 0, preprint_papers: 0,
         pending_review: 0,
       };
     }
@@ -158,6 +159,7 @@ export class OverviewDashboardComponent implements OnInit {
       journal_papers:     dept.journal_papers      ?? 0,
       conference_papers:  dept.conference_papers   ?? 0,
       book_papers:        dept.book_papers         ?? 0,
+      book_chapter_papers: dept.book_chapter_papers ?? 0,
       preprint_papers:    dept.preprint_papers     ?? 0,
       avg_h_index:        d.totals.avg_h_index,
       // Pending-review is an institution-wide data-quality metric (not tracked
@@ -272,26 +274,29 @@ export class OverviewDashboardComponent implements OnInit {
     return { slices, total, circumference: circ, radius };
   });
 
-  /** Venue-type donut: Journal / Conference / Book / Preprint / Unclassified.
-   *  Distinct categorical hues (unlike the ordinal grayscale quartile donut). */
+  /** Venue-type donut: Journal / Conference / Book / Book Chapter / Preprint /
+   *  Unclassified. Distinct categorical hues (unlike the ordinal grayscale
+   *  quartile donut). */
   readonly chartVenue = computed(() => {
     const t = this.filteredTotals();
-    const journal    = t.journal_papers    || 0;
-    const conference = t.conference_papers || 0;
-    const book       = t.book_papers       || 0;
-    const preprint   = t.preprint_papers   || 0;
-    const total      = t.papers || 0;
-    const other = Math.max(0, total - journal - conference - book - preprint);
+    const journal     = t.journal_papers      || 0;
+    const conference  = t.conference_papers   || 0;
+    const book        = t.book_papers         || 0;
+    const bookChapter = t.book_chapter_papers || 0;
+    const preprint    = t.preprint_papers     || 0;
+    const total       = t.papers || 0;
+    const other = Math.max(0, total - journal - conference - book - bookChapter - preprint);
     if (total === 0) return null;
 
     // Same stone grayscale as the Quartile donut above, so the two charts read
     // as one system (darkest = the primary category).
     const order: { label: string; venue: string; value: number; color: string }[] = [
-      { label: 'Journal',      venue: 'journal',      value: journal,    color: '#1c1917' },
-      { label: 'Conference',   venue: 'conference',   value: conference, color: '#57534e' },
-      { label: 'Book',         venue: 'book',         value: book,       color: '#a8a29e' },
-      { label: 'Preprint',     venue: 'preprint',     value: preprint,   color: '#d6d3d1' },
-      { label: 'Unclassified', venue: 'unclassified', value: other,      color: '#e7e5e4' },
+      { label: 'Journal',      venue: 'journal',      value: journal,     color: '#1c1917' },
+      { label: 'Conference',   venue: 'conference',   value: conference,  color: '#57534e' },
+      { label: 'Book',         venue: 'book',         value: book,        color: '#78716c' },
+      { label: 'Book Chapter', venue: 'bookchapter', value: bookChapter, color: '#a8a29e' },
+      { label: 'Preprint',     venue: 'preprint',     value: preprint,    color: '#d6d3d1' },
+      { label: 'Unclassified', venue: 'unclassified', value: other,       color: '#e7e5e4' },
     ].filter(s => s.value > 0);
 
     const radius = 56;
@@ -398,7 +403,7 @@ export class OverviewDashboardComponent implements OnInit {
   }
 
   /** Opens the modal filtered to one venue type (from the venue donut).
-   *  `venue` is a slice key: journal/conference/book/preprint/unclassified. */
+   *  `venue` is a slice key: journal/conference/book/bookchapter/preprint/unclassified. */
   openVenueModal(venue?: string) {
     this.classifiedSearch.set('');
     this.classifiedTier.set(null);
@@ -598,7 +603,7 @@ export class OverviewDashboardComponent implements OnInit {
   openPaper(p: { paper_id: number }) { this.selectedPaperId.set(p.paper_id); }
   closePaper()                       { this.selectedPaperId.set(null); }
 
-  papersFor(deptId: number, venueType: 'Journal' | 'Conference'): PaperDetail[] {
+  papersFor(deptId: number, venueType: 'Journal' | 'Conference' | 'Book' | 'BookChapter'): PaperDetail[] {
     const papers = this.yearlyData()?.papers ?? [];
     return papers.filter(p =>
       p.department_id === deptId && p.venue_type === venueType
@@ -608,21 +613,21 @@ export class OverviewDashboardComponent implements OnInit {
   readonly LOAD_BATCH = 10;
   visibleCounts: Record<string, number> = {};
 
-  visibleCount(deptId: number, venueType: 'Journal' | 'Conference'): number {
+  visibleCount(deptId: number, venueType: 'Journal' | 'Conference' | 'Book' | 'BookChapter'): number {
     return this.visibleCounts[`${deptId}-${venueType}`] || this.LOAD_BATCH;
   }
 
-  loadMore(deptId: number, venueType: 'Journal' | 'Conference'): void {
+  loadMore(deptId: number, venueType: 'Journal' | 'Conference' | 'Book' | 'BookChapter'): void {
     const key = `${deptId}-${venueType}`;
     this.visibleCounts[key] = this.visibleCount(deptId, venueType) + this.LOAD_BATCH;
   }
 
-  papersForLimited(deptId: number, venueType: 'Journal' | 'Conference'): PaperDetail[] {
+  papersForLimited(deptId: number, venueType: 'Journal' | 'Conference' | 'Book' | 'BookChapter'): PaperDetail[] {
     return this.papersFor(deptId, venueType)
       .slice(0, this.visibleCount(deptId, venueType));
   }
 
-  hasMore(deptId: number, venueType: 'Journal' | 'Conference'): boolean {
+  hasMore(deptId: number, venueType: 'Journal' | 'Conference' | 'Book' | 'BookChapter'): boolean {
     return this.papersFor(deptId, venueType).length > this.visibleCount(deptId, venueType);
   }
 

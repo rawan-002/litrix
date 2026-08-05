@@ -49,17 +49,29 @@ export class ResearcherProfileComponent implements OnInit {
   // Quartile filter - multi-select. Empty Set = no filter (show all).
   readonly activeQuartiles = signal<Set<string>>(new Set());
 
-  // Journals vs Conferences. Same rule as the dashboard/export: a venue
-  // starting with "conf" is a conference, everything else is a journal.
-  readonly activeVenue = signal<'all' | 'journal' | 'conference'>('all');
+  // Journal Articles vs Conference Papers vs Books vs Book Chapters. Same
+  // rule as the dashboard/export: a venue starting with "conf" is a
+  // conference, exactly "book"/"bookchapter" are their own types, everything
+  // else (incl. preprints) falls under journal.
+  readonly activeVenue = signal<'all' | 'journal' | 'conference' | 'book' | 'bookChapter'>('all');
   readonly venueTabs = [
-    { key: 'all'        as const, label: 'All' },
-    { key: 'journal'    as const, label: 'Journals' },
-    { key: 'conference' as const, label: 'Conferences' },
+    { key: 'all'         as const, label: 'All' },
+    { key: 'journal'     as const, label: 'Journal Articles' },
+    { key: 'conference'  as const, label: 'Conference Papers' },
+    { key: 'book'        as const, label: 'Books' },
+    { key: 'bookChapter' as const, label: 'Book Chapters' },
   ];
 
   private isConference(p: ProfilePaper): boolean {
     return (p.venue_type || '').toLowerCase().startsWith('conf');
+  }
+
+  private isBook(p: ProfilePaper): boolean {
+    return (p.venue_type || '').toLowerCase() === 'book';
+  }
+
+  private isBookChapter(p: ProfilePaper): boolean {
+    return (p.venue_type || '').toLowerCase() === 'bookchapter';
   }
 
   /** Paper counts per venue tab (respecting the affiliation filter). */
@@ -69,11 +81,20 @@ export class ResearcherProfileComponent implements OnInit {
       papers = papers.filter(p => this.isAlbahaFor(p));
     }
     let conf = 0;
-    for (const p of papers) if (this.isConference(p)) conf++;
-    return { all: papers.length, conference: conf, journal: papers.length - conf };
+    let book = 0;
+    let bookChapter = 0;
+    for (const p of papers) {
+      if (this.isConference(p)) conf++;
+      else if (this.isBook(p)) book++;
+      else if (this.isBookChapter(p)) bookChapter++;
+    }
+    return {
+      all: papers.length, conference: conf, book, bookChapter,
+      journal: papers.length - conf - book - bookChapter,
+    };
   });
 
-  setVenue(v: 'all' | 'journal' | 'conference') {
+  setVenue(v: 'all' | 'journal' | 'conference' | 'book' | 'bookChapter') {
     this.activeVenue.set(v);
     this.visibleCount.set(this.LOAD_BATCH);
   }
@@ -288,9 +309,13 @@ export class ResearcherProfileComponent implements OnInit {
 
     const venue = this.activeVenue();
     if (venue === 'journal') {
-      all = all.filter(p => !this.isConference(p));
+      all = all.filter(p => !this.isConference(p) && !this.isBook(p) && !this.isBookChapter(p));
     } else if (venue === 'conference') {
       all = all.filter(p => this.isConference(p));
+    } else if (venue === 'book') {
+      all = all.filter(p => this.isBook(p));
+    } else if (venue === 'bookChapter') {
+      all = all.filter(p => this.isBookChapter(p));
     }
 
     // Empty Set = no quartile filter.

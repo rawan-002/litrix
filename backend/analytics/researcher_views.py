@@ -264,7 +264,7 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                         FILTER (WHERE jr."Quartile" = 'Q1'
                                    AND (rp."VenueType" IS NULL
                                         OR (rp."VenueType" NOT ILIKE 'Conference%%'
-                                            AND rp."VenueType" NOT IN ('Book', 'Preprint'))))  AS q1_papers,
+                                            AND rp."VenueType" NOT IN ('Book', 'BookChapter', 'Preprint'))))  AS q1_papers,
                     COUNT(DISTINCT rp."PaperID")
                         FILTER (WHERE rp."Indexing" = 'Scopus'
                                    OR jr."Quartile" IS NOT NULL)         AS scopus_papers,
