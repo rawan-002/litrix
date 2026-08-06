@@ -35,28 +35,46 @@ def _system_prompt():
     # constant, so a long-running worker process doesn't go stale at
     # midnight on Dec 31.
     from datetime import datetime
-    today = datetime.now().strftime('%Y-%m-%d')
+    now = datetime.now()
+    today = now.strftime('%Y-%m-%d')
+    year = now.year
     return (
         f"You are Litrix AI, a research-analytics assistant for Al-Baha "
-        f"University's College of Computing & IT. Today's date is {today} - "
-        f"use this for any 'this year' / 'last N years' / 'recent' question, "
-        f"never a guess from your training data. Answer using ONLY the tools "
+        f"University's College of Computing & IT. Today's date is {today}. "
+        f"Spelled out exactly so there's no ambiguity: 'this year' or 'this "
+        f"year's papers' means you MUST call get_overview_stats with "
+        f"years=[{year}] (or get_publication_trend for a range) - calling a "
+        f"tool with no year filter answers 'all time', not 'this year', and "
+        f"those are different numbers. 'Last N years' means "
+        f"years=[{year - 4}, {year - 3}, {year - 2}, {year - 1}, {year}] for "
+        f"N=5 (adjust the count for other N). Never guess a year from your "
+        f"training data. Answer using ONLY the tools "
         f"provided - never invent a number. Call a tool ONLY when the user's "
         f"LATEST message actually asks for data (paper counts, citations, top "
-        f"researchers, department stats, publication trends). For a greeting, "
+        f"researchers, department stats, publication trends), and call the "
+        f"SINGLE most relevant tool for that specific question - do not call "
+        f"additional unrelated tools just because they exist. The instant "
+        f"the result answers the question, respond with that answer; do not "
+        f"keep calling more tools 'for completeness' or pad the reply with "
+        f"unrelated numbers the user didn't ask for. For a greeting, "
         f"thanks, small talk, or anything not asking for new data, reply "
         f"normally in plain text WITHOUT calling a tool, even if the "
         f"conversation history above mentions data - a short reply like 'hi' "
-        f"is not a request to repeat or re-fetch the previous answer. If a "
-        f"tool result includes a 'scope' note (e.g. affiliation policy), "
-        f"mention it when it materially affects the answer. Keep answers "
-        f"concise. Reply in the same language as the question."
+        f"is not a request to repeat or re-fetch the previous answer. ALWAYS "
+        f"state the actual number/answer first, as a direct sentence - never "
+        f"skip it. Only after that, if the tool result includes a 'scope' "
+        f"note (e.g. affiliation policy), add ONE short second sentence for "
+        f"it - the scope note is a footnote, never a replacement for the "
+        f"answer itself. Keep answers concise. Reply in the same language as "
+        f"the question."
     )
 
 # Tool-call rounds are capped so a confused model can't loop forever burning
 # free-tier quota - 3 is enough for any realistic multi-tool question.
 MAX_TOOL_ROUNDS = 3
-HISTORY_TURNS = 10  # most recent turns kept as context, oldest dropped first
+HISTORY_TURNS = 6  # most recent turns kept as context, oldest dropped first - most
+# follow-up questions only need the last exchange or two; every extra turn is
+# tokens spent on every future message in the conversation, not a one-time cost.
 
 
 def _tool_schema():
@@ -73,7 +91,7 @@ def _tool_schema():
     ]
 
 
-def _call_groq(messages):
+def _call_groq(messages, force_final=False):
     resp = requests.post(
         GROQ_URL,
         headers={
@@ -84,8 +102,18 @@ def _call_groq(messages):
             'model': GROQ_MODEL,
             'messages': messages,
             'tools': _tool_schema(),
-            'tool_choice': 'auto',
+            # 'none' on the last allowed round forces a text answer instead
+            # of yet another tool call - smaller models (llama-3.1-8b) call
+            # tools more liberally than needed, and without this, hitting
+            # MAX_TOOL_ROUNDS just abandoned the conversation with no reply
+            # at all, discarding every real tool result already gathered.
+            'tool_choice': 'none' if force_final else 'auto',
             'temperature': 0.2,
+            # Answers are meant to be a sentence or two (system prompt says
+            # "keep answers concise") - capping output tokens enforces that
+            # instead of just asking nicely, and directly reduces daily
+            # token spend since output tokens count the same as input ones.
+            'max_tokens': 400,
         },
         timeout=45,
     )
@@ -103,7 +131,7 @@ def _groq_error_code(exc):
         return None
 
 
-def _call_groq_with_retry(messages, attempts=2):
+def _call_groq_with_retry(messages, attempts=2, force_final=False):
     """One retry before giving up. Logs every failure with the real
     exception - `except requests.RequestException` alone hid this entirely,
     showing only a generic "temporarily unavailable" with nothing in the
@@ -122,7 +150,7 @@ def _call_groq_with_retry(messages, attempts=2):
     last_exc = None
     for attempt in range(1, attempts + 1):
         try:
-            return _call_groq(msgs)
+            return _call_groq(msgs, force_final=force_final)
         except requests.RequestException as e:
             last_exc = e
             code = _groq_error_code(e)
@@ -189,8 +217,8 @@ def answer_question(question, history, user):
                     'tool_call_id': call['id'],
                     'content': json.dumps(_run_tool_call(call)),
                 })
-            choice = _call_groq_with_retry(messages)['choices'][0]['message']
             rounds += 1
+            choice = _call_groq_with_retry(messages, force_final=(rounds >= MAX_TOOL_ROUNDS))['choices'][0]['message']
         reply = choice.get('content') or "I couldn't find an answer to that."
     except requests.RequestException as e:
         logger.exception('Litrix AI: Groq call failed after retry')
