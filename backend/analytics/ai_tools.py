@@ -121,6 +121,76 @@ def get_top_researchers(department=None, limit=10):
     }
 
 
+def find_researcher(name):
+    """Look up a specific researcher by (partial) name - department, papers,
+    citations, litrix_id. Every word in `name` must match somewhere across
+    the name fields (Scholar display name, first/last, Arabic name), so
+    'nizar alsharif' or just 'alsharif' both work; a genuinely misspelled
+    surname (edit-distance, not substring) will not match - there's no
+    fuzzy/phonetic matching here, only ILIKE substrings.
+    """
+    words = [w for w in (name or '').strip().split() if w]
+    if not words:
+        return {'error': 'name is required', 'researchers': []}
+    conditions = []
+    params = []
+    for w in words:
+        conditions.append(
+            '(u."ScholarDisplayName" ILIKE %s OR u."FirstName" ILIKE %s '
+            'OR u."LastName" ILIKE %s OR u."FullName_Ar" ILIKE %s)'
+        )
+        like = f'%{w}%'
+        params.extend([like, like, like, like])
+    where = ' AND '.join(conditions)
+    with connection.cursor() as cur:
+        cur.execute(f'''
+            SELECT
+                u."Litrix_ID",
+                COALESCE(NULLIF(u."ScholarDisplayName", ''),
+                         TRIM(CONCAT_WS(' ', u."FirstName", u."LastName")),
+                         u."FullName_Ar") AS name,
+                u."FullName_Ar",
+                d."DepartmentName",
+                COALESCE((
+                    SELECT SUM(v::int) FROM jsonb_each_text(
+                        COALESCE(r."CitationsByYear", '{{}}'::jsonb)) AS kv(k, v)
+                    WHERE v ~ '^[0-9]+$'
+                ), 0) AS citations,
+                (SELECT COUNT(*) FROM "Authors" a
+                  JOIN "ResearchPaper" rp2 ON rp2."PaperID" = a."PaperID"
+                  WHERE a."UserID" = u."UserID"
+                    AND rp2."AffiliationVerified" = TRUE) AS papers
+            FROM "Users" u
+            JOIN "Researcher" r ON r."UserID" = u."UserID"
+            LEFT JOIN LATERAL (
+                SELECT w."DepartmentID" FROM "Works_In" w
+                WHERE w."UserID" = u."UserID" AND w."IsCurrentPosition" = TRUE
+                ORDER BY w."StartDate" ASC NULLS LAST LIMIT 1
+            ) w ON TRUE
+            LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
+            WHERE u."UserType" = 'Researcher' AND ({where})
+            ORDER BY citations DESC NULLS LAST
+            LIMIT 5
+        ''', params)
+        rows = cur.fetchall()
+    return {
+        'query': name,
+        'researchers': [
+            {
+                'litrix_id': r[0], 'name': r[1], 'name_ar': r[2],
+                'department': r[3], 'citations': int(r[4]), 'papers': r[5],
+            }
+            for r in rows
+        ],
+        'note': (
+            'Empty result means no name field matched, NOT that the '
+            'researcher does not exist - only substring matching is '
+            'available, no fuzzy/phonetic matching for misspellings.'
+        ) if not rows else None,
+        'scope': 'Al-Baha-affiliated papers only for the "papers" count; citations are lifetime totals from each researcher\'s own Scholar profile',
+    }
+
+
 def get_department_stats():
     """Per-department totals: researchers, papers, citations, Scopus papers."""
     with connection.cursor() as cur:
@@ -200,6 +270,26 @@ TOOLS = {
                     ),
                 },
             },
+        },
+    },
+    'find_researcher': {
+        'fn': find_researcher,
+        'description': (
+            "Look up ONE SPECIFIC named researcher (e.g. 'which department "
+            "does Dr. Nizar Alsharif work in', 'who is Abdulkareem Alzahrani') "
+            "- returns their department, paper count, and citations. Use "
+            "this for any question naming a specific person, NOT "
+            "get_top_researchers (that's only for ranked lists). If the "
+            "result list is empty, tell the user you couldn't find that name "
+            "in Litrix rather than guessing - do not answer from general "
+            "knowledge about people, only from this tool's result."
+        ),
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'name': {'type': 'string', 'description': "The researcher's name, as much of it as given."},
+            },
+            'required': ['name'],
         },
     },
     'get_top_researchers': {
