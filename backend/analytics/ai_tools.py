@@ -183,15 +183,21 @@ TOOLS = {
         'description': (
             "Institution-wide totals: paper count, citations, Q1-Q4 counts, "
             "Scopus/ISI counts, and the Journal/Conference/Book/BookChapter/"
-            "Preprint venue split. Optional 'years' list to scope a window; "
-            "defaults to all years (2011-present)."
+            "Preprint venue split. For 'all years' / 'all Q1 papers' / any "
+            "unscoped question, call this with NO arguments at all - do not "
+            "pass years as the string \"all\" or similar, only ever as an "
+            "array of integers, e.g. [2024, 2025]."
         ),
         'parameters': {
             'type': 'object',
             'properties': {
                 'years': {
                     'type': 'array', 'items': {'type': 'integer'},
-                    'description': 'Optional list of publication years to scope to.',
+                    'description': (
+                        'Specific publication years to scope to, e.g. '
+                        '[2024, 2025]. Omit this parameter entirely for all '
+                        'years (2011-present) - never pass a string here.'
+                    ),
                 },
             },
         },
