@@ -1,0 +1,228 @@
+"""Read-only data functions the Litrix AI chat can call as "tools" (function
+calling). Each one wraps a real, direct SQL query against the same tables and
+policy the rest of the dashboard uses - the chat never invents numbers, it
+only ever reports what one of these functions actually returned.
+
+Scoped to the same default as every OFFICIAL KPI in the app (see stats.py's
+policy table): AffiliationVerified = TRUE only (verified_affil_clause), not
+the wider active/all set. A chat answer should be exactly as defensible as
+the dashboard number it's describing.
+
+Every function returns a plain JSON-serializable dict - that's what gets
+serialized back to the model as the tool result.
+"""
+from django.db import connection
+
+from .stats import _cites_expr, _default_focus_years, verified_affil_clause
+
+AAV = verified_affil_clause(True, 'rp')  # AffiliationVerified = TRUE, fixed on for chat
+
+
+def get_overview_stats(years=None):
+    """Institution-wide totals: papers, citations, Q1-4, Scopus/ISI, venue
+    split. `years` defaults to the full institutional window (2011-current).
+
+    Two separate queries by design, matching views.py::overview() exactly:
+    paper counts are papers PUBLISHED in `years`, but citations are citations
+    RECEIVED in `years` summed across ALL papers regardless of when they were
+    published (an old paper cited this year still counts this year). Merging
+    these into one PubYear-filtered query would quietly under-count citations.
+    """
+    years = years or _default_focus_years()
+    jelig = (' AND (rp."VenueType" IS NULL OR (rp."VenueType" NOT ILIKE '
+             '\'Conference%%\' AND rp."VenueType" NOT IN (\'Book\', \'BookChapter\', \'Preprint\')))')
+    with connection.cursor() as cur:
+        cur.execute(f'''
+            SELECT
+                COUNT(DISTINCT rp."PaperID") AS papers,
+                COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q1'{jelig}) AS q1,
+                COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q2'{jelig}) AS q2,
+                COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q3'{jelig}) AS q3,
+                COUNT(DISTINCT rp."PaperID") FILTER (WHERE jr."Quartile" = 'Q4'{jelig}) AS q4,
+                COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = 'Scopus' OR jr."Quartile" IS NOT NULL) AS scopus,
+                COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."Indexing" = 'ISI') AS isi,
+                COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."VenueType" = 'Journal') AS journal,
+                COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."VenueType" ILIKE 'Conference%%') AS conference,
+                COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."VenueType" = 'Book') AS book,
+                COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."VenueType" = 'BookChapter') AS book_chapter,
+                COUNT(DISTINCT rp."PaperID") FILTER (WHERE rp."VenueType" = 'Preprint') AS preprint
+            FROM "ResearchPaper" rp
+            LEFT JOIN LATERAL (SELECT "Quartile" FROM "JournalRankings"
+                WHERE "JournalID" = rp."JournalID"
+                ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1) jr ON TRUE
+            WHERE rp."PubYear" = ANY(%s)
+              AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"){AAV}
+        ''', [years])
+        r = cur.fetchone()
+
+        cites_expr = _cites_expr('rp', years)
+        cur.execute(f'''
+            SELECT COALESCE(SUM({cites_expr}), 0)
+            FROM "ResearchPaper" rp
+            WHERE EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"){AAV}
+        ''', [str(y) for y in years])
+        citations = cur.fetchone()[0]
+
+    return {
+        'years': f'{min(years)}-{max(years)}', 'papers': r[0], 'citations': citations,
+        'q1_papers': r[1], 'q2_papers': r[2], 'q3_papers': r[3], 'q4_papers': r[4],
+        'scopus_papers': r[5], 'isi_papers': r[6],
+        'journal_papers': r[7], 'conference_papers': r[8],
+        'book_papers': r[9], 'book_chapter_papers': r[10], 'preprint_papers': r[11],
+        'scope': 'Al-Baha affiliation confirmed (AffiliationVerified = TRUE) only',
+    }
+
+
+def get_top_researchers(department=None, limit=10):
+    """Top researchers by lifetime citations (Researcher.CitationsByYear sum),
+    optionally filtered to one department (case-insensitive substring)."""
+    limit = max(1, min(int(limit or 10), 25))
+    dept_clause = ''
+    params = []
+    if department:
+        dept_clause = ' AND d."DepartmentName" ILIKE %s'
+        params.append(f'%{department}%')
+    with connection.cursor() as cur:
+        cur.execute(f'''
+            SELECT
+                COALESCE(NULLIF(u."ScholarDisplayName", ''),
+                         TRIM(CONCAT_WS(' ', u."FirstName", u."LastName")),
+                         u."FullName_Ar") AS name,
+                d."DepartmentName",
+                COALESCE((
+                    SELECT SUM(v::int) FROM jsonb_each_text(
+                        COALESCE(r."CitationsByYear", '{{}}'::jsonb)) AS kv(k, v)
+                    WHERE v ~ '^[0-9]+$'
+                ), 0) AS citations,
+                (SELECT COUNT(*) FROM "Authors" a
+                  JOIN "ResearchPaper" rp2 ON rp2."PaperID" = a."PaperID"
+                  WHERE a."UserID" = u."UserID"
+                    AND rp2."AffiliationVerified" = TRUE) AS papers
+            FROM "Users" u
+            JOIN "Researcher" r ON r."UserID" = u."UserID"
+            LEFT JOIN LATERAL (
+                SELECT w."DepartmentID" FROM "Works_In" w
+                WHERE w."UserID" = u."UserID" AND w."IsCurrentPosition" = TRUE
+                ORDER BY w."StartDate" ASC NULLS LAST LIMIT 1
+            ) w ON TRUE
+            LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
+            WHERE u."UserType" = 'Researcher'{dept_clause}
+            ORDER BY citations DESC NULLS LAST
+            LIMIT %s
+        ''', params + [limit])
+        rows = cur.fetchall()
+    return {
+        'department_filter': department,
+        'researchers': [
+            {'name': r[0], 'department': r[1], 'citations': int(r[2]), 'papers': r[3]}
+            for r in rows
+        ],
+        'scope': 'Al-Baha-affiliated papers only for the "papers" count; citations are lifetime totals from each researcher\'s own Scholar profile',
+    }
+
+
+def get_department_stats():
+    """Per-department totals: researchers, papers, citations, Scopus papers."""
+    with connection.cursor() as cur:
+        cur.execute(f'''
+            SELECT
+                d."DepartmentName",
+                COUNT(DISTINCT u."UserID") AS researchers,
+                COUNT(DISTINCT rp."PaperID") AS papers,
+                COUNT(DISTINCT rp."PaperID") FILTER (
+                    WHERE rp."Indexing" = 'Scopus' OR jr."Quartile" IS NOT NULL) AS scopus_papers
+            FROM "Department" d
+            LEFT JOIN "Works_In" w ON w."DepartmentID" = d."DepartmentID" AND w."IsCurrentPosition" = TRUE
+            LEFT JOIN "Users" u ON u."UserID" = w."UserID" AND u."UserType" = 'Researcher'
+            LEFT JOIN "Authors" a ON a."UserID" = u."UserID"
+            LEFT JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"{AAV}
+            LEFT JOIN LATERAL (SELECT "Quartile" FROM "JournalRankings"
+                WHERE "JournalID" = rp."JournalID"
+                ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1) jr ON TRUE
+            GROUP BY d."DepartmentName"
+            ORDER BY papers DESC NULLS LAST
+        ''')
+        rows = cur.fetchall()
+    return {
+        'departments': [
+            {'department': r[0], 'researchers': r[1], 'papers': r[2], 'scopus_papers': r[3]}
+            for r in rows
+        ],
+        'scope': 'Al-Baha affiliation confirmed only',
+    }
+
+
+def get_publication_trend(num_years=5):
+    """Papers published per year for the last `num_years` years (incl. current)."""
+    from datetime import datetime
+    num_years = max(1, min(int(num_years or 5), 15))
+    current = datetime.now().year
+    years = list(range(current - num_years + 1, current + 1))
+    with connection.cursor() as cur:
+        cur.execute(f'''
+            SELECT rp."PubYear", COUNT(DISTINCT rp."PaperID")
+            FROM "ResearchPaper" rp
+            WHERE rp."PubYear" = ANY(%s)
+              AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"){AAV}
+            GROUP BY rp."PubYear"
+            ORDER BY rp."PubYear"
+        ''', [years])
+        rows = dict(cur.fetchall())
+    return {
+        'by_year': [{'year': y, 'papers': rows.get(y, 0)} for y in years],
+        'scope': 'Al-Baha affiliation confirmed only',
+    }
+
+
+# Registry the chat loop walks to build the tool-call schema + dispatch a
+# model-requested call. Add a new tool by adding one entry here - never as
+# more inline branches in ai_views.py.
+TOOLS = {
+    'get_overview_stats': {
+        'fn': get_overview_stats,
+        'description': (
+            "Institution-wide totals: paper count, citations, Q1-Q4 counts, "
+            "Scopus/ISI counts, and the Journal/Conference/Book/BookChapter/"
+            "Preprint venue split. Optional 'years' list to scope a window; "
+            "defaults to all years (2011-present)."
+        ),
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'years': {
+                    'type': 'array', 'items': {'type': 'integer'},
+                    'description': 'Optional list of publication years to scope to.',
+                },
+            },
+        },
+    },
+    'get_top_researchers': {
+        'fn': get_top_researchers,
+        'description': (
+            "Top researchers ranked by lifetime citations. Optionally filter "
+            "to one department by name (partial match, e.g. 'Computer Science')."
+        ),
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'department': {'type': 'string', 'description': 'Department name filter (optional).'},
+                'limit': {'type': 'integer', 'description': 'How many to return (default 10, max 25).'},
+            },
+        },
+    },
+    'get_department_stats': {
+        'fn': get_department_stats,
+        'description': 'Per-department totals: researcher count, paper count, Scopus-indexed paper count.',
+        'parameters': {'type': 'object', 'properties': {}},
+    },
+    'get_publication_trend': {
+        'fn': get_publication_trend,
+        'description': 'Papers published per year for the last N years (default 5).',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'num_years': {'type': 'integer', 'description': 'How many recent years (default 5, max 15).'},
+            },
+        },
+    },
+}
