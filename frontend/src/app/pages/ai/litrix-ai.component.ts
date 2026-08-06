@@ -46,6 +46,19 @@ import { AiService, ChatTurn } from './ai.service';
             </div>
           </div>
         }
+
+        @if (showSuggestions()) {
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+            @for (q of suggestedQuestions; track q) {
+              <button (click)="askSuggested(q)"
+                      class="text-start px-4 py-3 rounded-xl border border-ink-100
+                             bg-white hover:border-accent hover:bg-accent-light
+                             transition-colors text-sm text-ink-700">
+                {{ q }}
+              </button>
+            }
+          </div>
+        }
       </div>
 
       <div class="pt-3 border-t border-ink-100">
@@ -89,6 +102,22 @@ export class LitrixAiComponent {
 
   readonly canSend = computed(() => this.draft.trim().length > 0 && !this.thinking());
 
+  // Quick-start prompts covering the platform's actual data surfaces (KPIs,
+  // Q1-4, departments, top researchers, trends, venue types) - shown only
+  // before the first real question so a blank chat doesn't feel like a dead
+  // end. Hidden once the conversation has started to avoid clutter.
+  readonly suggestedQuestions = [
+    'How many papers were published this year?',
+    'Who are the top-cited researchers in Computer Science?',
+    'Show me all Q1 journal papers',
+    "What's the publication trend over the last 5 years?",
+    'Which department has the most Scopus-indexed papers?',
+    'How many books and book chapters do we have?',
+  ];
+  readonly showSuggestions = computed(() =>
+    !this.messages().some(m => m.role === 'user'),
+  );
+
   constructor() {
     effect(() => {
       this.messages();
@@ -98,6 +127,12 @@ export class LitrixAiComponent {
         if (el) el.scrollTop = el.scrollHeight;
       });
     });
+  }
+
+  askSuggested(question: string) {
+    if (this.thinking()) return;
+    this.draft = question;
+    this.send();
   }
 
   onEnter(ev: Event) {
