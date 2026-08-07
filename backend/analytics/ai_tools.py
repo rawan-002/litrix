@@ -11,11 +11,15 @@ the dashboard number it's describing.
 Every function returns a plain JSON-serializable dict - that's what gets
 serialized back to the model as the tool result.
 """
+import re
+
 from django.db import connection
 
 from .stats import _cites_expr, _default_focus_years, verified_affil_clause
 
 AAV = verified_affil_clause(True, 'rp')  # AffiliationVerified = TRUE, fixed on for chat
+
+_TITLE_PREFIX = re.compile(r'^(dr\.?|prof\.?|professor|mr\.?|mrs\.?|ms\.?)\s+', re.I)
 
 
 def get_overview_stats(years=None):
@@ -123,25 +127,34 @@ def get_top_researchers(department=None, limit=10):
 
 def find_researcher(name):
     """Look up a specific researcher by (partial) name - department, papers,
-    citations, litrix_id. Every word in `name` must match somewhere across
-    the name fields (Scholar display name, first/last, Arabic name), so
-    'nizar alsharif' or just 'alsharif' both work; a genuinely misspelled
-    surname (edit-distance, not substring) will not match - there's no
-    fuzzy/phonetic matching here, only ILIKE substrings.
+    citations, litrix_id.
+
+    Matches the (title-stripped) query as a CONTIGUOUS PHRASE against one
+    combined name field (Scholar display name, "First Last", or the Arabic
+    name) - not "every word matches somewhere across the name independently".
+
+    That distinction is load-bearing, not stylistic: an earlier per-word
+    version matched 'Abdulkarim Alzahrani' to a COMPLETELY DIFFERENT real
+    person ("Hanaa Abdulkarim Mohammed Alzahrani") purely because her middle
+    name happens to be Abdulkarim and Alzahrani is a common family name (14+
+    researchers share it) - a real misidentification, not a near-miss,
+    surfaced by live testing. Per this project's non-negotiable attribution
+    rule (see CLAUDE.md: no name-based fuzzy matching, after the 602-paper
+    cross-contamination incident), a wrong person is worse than no answer -
+    so this deliberately returns EMPTY rather than a loose word-scatter
+    guess. A genuinely misspelled surname (edit distance, not substring)
+    will not match either - there's no fuzzy/phonetic matching here.
     """
-    words = [w for w in (name or '').strip().split() if w]
-    if not words:
+    cleaned = _TITLE_PREFIX.sub('', (name or '').strip()).strip()
+    if not cleaned:
         return {'error': 'name is required', 'researchers': []}
-    conditions = []
-    params = []
-    for w in words:
-        conditions.append(
-            '(u."ScholarDisplayName" ILIKE %s OR u."FirstName" ILIKE %s '
-            'OR u."LastName" ILIKE %s OR u."FullName_Ar" ILIKE %s)'
-        )
-        like = f'%{w}%'
-        params.extend([like, like, like, like])
-    where = ' AND '.join(conditions)
+    phrase = f'%{cleaned}%'
+    where = (
+        '(u."ScholarDisplayName" ILIKE %s '
+        'OR TRIM(CONCAT_WS(\' \', u."FirstName", u."LastName")) ILIKE %s '
+        'OR u."FullName_Ar" ILIKE %s)'
+    )
+    params = [phrase, phrase, phrase]
     with connection.cursor() as cur:
         cur.execute(f'''
             SELECT
@@ -183,9 +196,11 @@ def find_researcher(name):
             for r in rows
         ],
         'note': (
-            'Empty result means no name field matched, NOT that the '
-            'researcher does not exist - only substring matching is '
-            'available, no fuzzy/phonetic matching for misspellings.'
+            'Empty result means the query did not match as a phrase in any '
+            'researcher\'s name - NOT proof the person does not exist. Try '
+            'asking the user for the correctly-spelled full name rather '
+            'than guessing who they might mean from a partial/misspelled '
+            'match; this tool never returns a weak or ambiguous match.'
         ) if not rows else None,
         'scope': 'Al-Baha-affiliated papers only for the "papers" count; citations are lifetime totals from each researcher\'s own Scholar profile',
     }
