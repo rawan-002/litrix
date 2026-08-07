@@ -11,6 +11,7 @@ the dashboard number it's describing.
 Every function returns a plain JSON-serializable dict - that's what gets
 serialized back to the model as the tool result.
 """
+import json
 import re
 
 from django.db import connection
@@ -172,7 +173,8 @@ def find_researcher(name):
                 (SELECT COUNT(*) FROM "Authors" a
                   JOIN "ResearchPaper" rp2 ON rp2."PaperID" = a."PaperID"
                   WHERE a."UserID" = u."UserID"
-                    AND rp2."AffiliationVerified" = TRUE) AS papers
+                    AND rp2."AffiliationVerified" = TRUE) AS papers,
+                r."ResearchInterests"
             FROM "Users" u
             JOIN "Researcher" r ON r."UserID" = u."UserID"
             LEFT JOIN LATERAL (
@@ -192,6 +194,10 @@ def find_researcher(name):
             {
                 'litrix_id': r[0], 'name': r[1], 'name_ar': r[2],
                 'department': r[3], 'citations': int(r[4]), 'papers': r[5],
+                # jsonb comes back from this raw cursor as text, not an
+                # already-parsed list - decode it so the tool result is a
+                # real JSON array, not a double-encoded string.
+                'research_interests': json.loads(r[6]) if isinstance(r[6], str) else (r[6] or []),
             }
             for r in rows
         ],
@@ -291,9 +297,12 @@ TOOLS = {
         'fn': find_researcher,
         'description': (
             "Look up ONE SPECIFIC named researcher (e.g. 'which department "
-            "does Dr. Nizar Alsharif work in', 'who is Abdulkareem Alzahrani') "
-            "- returns their department, paper count, and citations. Use "
-            "this for any question naming a specific person, NOT "
+            "does Dr. Nizar Alsharif work in', 'who is Abdulkareem Alzahrani', "
+            "'what are his research interests') - returns their department, "
+            "paper count, citations, and research_interests (a list of "
+            "topics, empty list if none recorded - say so plainly rather "
+            "than 'not specified' if it's empty). Use this for any question "
+            "naming a specific person, NOT "
             "get_top_researchers (that's only for ranked lists). If the "
             "result list is empty, tell the user you couldn't find that name "
             "in Litrix rather than guessing - do not answer from general "
