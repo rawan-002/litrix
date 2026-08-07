@@ -171,6 +171,11 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'auth_anon':  '5/min',
         'auth_user': '60/min',
+        # Groq's daily token budget is shared across the WHOLE platform, not
+        # per-user - one account looping or hammering the chat can exhaust
+        # it for everyone (this happened during development testing itself).
+        # 10/min bounds how fast any single account can burn through it.
+        'ai_chat':    '10/min',
     },
 }
 

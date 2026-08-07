@@ -23,7 +23,23 @@ AAV = verified_affil_clause(True, 'rp')  # AffiliationVerified = TRUE, fixed on 
 _TITLE_PREFIX = re.compile(r'^(dr\.?|prof\.?|professor|mr\.?|mrs\.?|ms\.?)\s+', re.I)
 
 
-def get_overview_stats(years=None):
+def _dept_author_exists_clause(alias, department_id, params):
+    """EXISTS clause restricting `alias`'s paper to one department's current
+    authors. Appends its own param(s) to `params` in place and returns the
+    SQL fragment - caller inlines it right after the existing Authors-exists
+    check. `department_id` is NEVER model-supplied - see ai_views.py's
+    scope resolution; this is the backend-enforced HoD department fence."""
+    if not department_id:
+        return ''
+    params.append(department_id)
+    return (
+        f' AND EXISTS (SELECT 1 FROM "Authors" a3 '
+        f'JOIN "Works_In" w3 ON w3."UserID" = a3."UserID" AND w3."IsCurrentPosition" = TRUE '
+        f'WHERE a3."PaperID" = {alias}."PaperID" AND w3."DepartmentID" = %s)'
+    )
+
+
+def get_overview_stats(years=None, department_id=None):
     """Institution-wide totals: papers, citations, Q1-4, Scopus/ISI, venue
     split. `years` defaults to the full institutional window (2011-current).
 
@@ -32,11 +48,16 @@ def get_overview_stats(years=None):
     RECEIVED in `years` summed across ALL papers regardless of when they were
     published (an old paper cited this year still counts this year). Merging
     these into one PubYear-filtered query would quietly under-count citations.
+
+    `department_id` is a backend-only scope fence (never in the tool's
+    model-facing schema) - see ai_views.py's per-role scope resolution.
     """
     years = years or _default_focus_years()
     jelig = (' AND (rp."VenueType" IS NULL OR (rp."VenueType" NOT ILIKE '
              '\'Conference%%\' AND rp."VenueType" NOT IN (\'Book\', \'BookChapter\', \'Preprint\')))')
     with connection.cursor() as cur:
+        params1 = [years]
+        dept_clause1 = _dept_author_exists_clause('rp', department_id, params1)
         cur.execute(f'''
             SELECT
                 COUNT(DISTINCT rp."PaperID") AS papers,
@@ -56,16 +77,18 @@ def get_overview_stats(years=None):
                 WHERE "JournalID" = rp."JournalID"
                 ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1) jr ON TRUE
             WHERE rp."PubYear" = ANY(%s)
-              AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"){AAV}
-        ''', [years])
+              AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"){AAV}{dept_clause1}
+        ''', params1)
         r = cur.fetchone()
 
         cites_expr = _cites_expr('rp', years)
+        params2 = [str(y) for y in years]
+        dept_clause2 = _dept_author_exists_clause('rp', department_id, params2)
         cur.execute(f'''
             SELECT COALESCE(SUM({cites_expr}), 0)
             FROM "ResearchPaper" rp
-            WHERE EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"){AAV}
-        ''', [str(y) for y in years])
+            WHERE EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"){AAV}{dept_clause2}
+        ''', params2)
         citations = cur.fetchone()[0]
 
     return {
@@ -78,13 +101,22 @@ def get_overview_stats(years=None):
     }
 
 
-def get_top_researchers(department=None, limit=10):
+def get_top_researchers(department=None, limit=10, department_id=None):
     """Top researchers by lifetime citations (Researcher.CitationsByYear sum),
-    optionally filtered to one department (case-insensitive substring)."""
+    optionally filtered to one department (case-insensitive substring).
+
+    `department_id` is a backend-only scope fence (never in the tool's
+    model-facing schema) - when set it OVERRIDES `department` entirely, so a
+    HoD-scoped caller can't be redirected to another department just because
+    the model was asked/tricked into passing a different `department` string.
+    """
     limit = max(1, min(int(limit or 10), 25))
     dept_clause = ''
     params = []
-    if department:
+    if department_id:
+        dept_clause = ' AND w."DepartmentID" = %s'
+        params.append(department_id)
+    elif department:
         dept_clause = ' AND d."DepartmentName" ILIKE %s'
         params.append(f'%{department}%')
     with connection.cursor() as cur:
@@ -212,8 +244,14 @@ def find_researcher(name):
     }
 
 
-def get_department_stats():
-    """Per-department totals: researchers, papers, citations, Scopus papers."""
+def get_department_stats(department_id=None):
+    """Per-department totals: researchers, papers, citations, Scopus papers.
+
+    `department_id` is a backend-only scope fence (never in the tool's
+    model-facing schema) - restricts the result to that one department, for
+    a HoD-scoped caller."""
+    where = ' WHERE d."DepartmentID" = %s' if department_id else ''
+    params = [department_id] if department_id else []
     with connection.cursor() as cur:
         cur.execute(f'''
             SELECT
@@ -230,9 +268,10 @@ def get_department_stats():
             LEFT JOIN LATERAL (SELECT "Quartile" FROM "JournalRankings"
                 WHERE "JournalID" = rp."JournalID"
                 ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1) jr ON TRUE
+            {where}
             GROUP BY d."DepartmentName"
             ORDER BY papers DESC NULLS LAST
-        ''')
+        ''', params)
         rows = cur.fetchall()
     return {
         'departments': [
@@ -243,21 +282,26 @@ def get_department_stats():
     }
 
 
-def get_publication_trend(num_years=5):
-    """Papers published per year for the last `num_years` years (incl. current)."""
+def get_publication_trend(num_years=5, department_id=None):
+    """Papers published per year for the last `num_years` years (incl. current).
+
+    `department_id` is a backend-only scope fence (never in the tool's
+    model-facing schema) - see ai_views.py's per-role scope resolution."""
     from datetime import datetime
     num_years = max(1, min(int(num_years or 5), 15))
     current = datetime.now().year
     years = list(range(current - num_years + 1, current + 1))
     with connection.cursor() as cur:
+        params = [years]
+        dept_clause = _dept_author_exists_clause('rp', department_id, params)
         cur.execute(f'''
             SELECT rp."PubYear", COUNT(DISTINCT rp."PaperID")
             FROM "ResearchPaper" rp
             WHERE rp."PubYear" = ANY(%s)
-              AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"){AAV}
+              AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"){AAV}{dept_clause}
             GROUP BY rp."PubYear"
             ORDER BY rp."PubYear"
-        ''', [years])
+        ''', params)
         rows = dict(cur.fetchall())
     return {
         'by_year': [{'year': y, 'papers': rows.get(y, 0)} for y in years],
@@ -332,7 +376,17 @@ TOOLS = {
     },
     'get_department_stats': {
         'fn': get_department_stats,
-        'description': 'Per-department totals: researcher count, paper count, Scopus-indexed paper count.',
+        'description': (
+            'Per-department breakdown: researcher count, paper count, '
+            'Scopus-indexed paper count, ONE ROW PER DEPARTMENT - for '
+            'comparing departments against each other, not for an '
+            'institution-wide total. Do NOT sum these rows yourself to '
+            'answer a "total across the university" question - a '
+            'researcher or paper linked to more than one department is '
+            'counted once per department here, so summing double-counts. '
+            'For any institution-wide total, call get_overview_stats '
+            'instead (with no years argument for all-time).'
+        ),
         'parameters': {'type': 'object', 'properties': {}},
     },
     'get_publication_trend': {
