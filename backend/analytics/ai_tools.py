@@ -13,6 +13,7 @@ serialized back to the model as the tool result.
 """
 import json
 import re
+from datetime import date
 
 from django.db import connection
 
@@ -21,6 +22,29 @@ from .stats import _cites_expr, _default_focus_years, verified_affil_clause
 AAV = verified_affil_clause(True, 'rp')  # AffiliationVerified = TRUE, fixed on for chat
 
 _TITLE_PREFIX = re.compile(r'^(dr\.?|prof\.?|professor|mr\.?|mrs\.?|ms\.?)\s+', re.I)
+
+
+def _scope_meta(department_id):
+    """Explicit scope metadata every tool result carries, so the model (and
+    a human reading the raw tool output) can never mix up a department-level
+    number with a university-level one just because both look like a plain
+    int. Added after live testing showed the model both (a) summing
+    get_department_stats' per-department rows into a fake "university"
+    total, and (b) echoing a HoD's department-only number back using the
+    question's own "across the university" phrasing - neither mistake is
+    possible if every number is stamped with what it actually covers."""
+    dept_name = None
+    if department_id:
+        with connection.cursor() as cur:
+            cur.execute('SELECT "DepartmentName" FROM "Department" WHERE "DepartmentID" = %s', [department_id])
+            row = cur.fetchone()
+            dept_name = row[0] if row else None
+    return {
+        'data_scope': 'department' if department_id else 'university',
+        'department': dept_name,
+        'department_id': department_id,
+        'as_of': date.today().isoformat(),
+    }
 
 
 def _dept_author_exists_clause(alias, department_id, params):
@@ -98,6 +122,7 @@ def get_overview_stats(years=None, department_id=None):
         'journal_papers': r[7], 'conference_papers': r[8],
         'book_papers': r[9], 'book_chapter_papers': r[10], 'preprint_papers': r[11],
         'scope': 'Al-Baha affiliation confirmed (AffiliationVerified = TRUE) only',
+        **_scope_meta(department_id),
     }
 
 
@@ -155,6 +180,7 @@ def get_top_researchers(department=None, limit=10, department_id=None):
             for r in rows
         ],
         'scope': 'Al-Baha-affiliated papers only for the "papers" count; citations are lifetime totals from each researcher\'s own Scholar profile',
+        **_scope_meta(department_id),
     }
 
 
@@ -279,6 +305,7 @@ def get_department_stats(department_id=None):
             for r in rows
         ],
         'scope': 'Al-Baha affiliation confirmed only',
+        **_scope_meta(department_id),
     }
 
 
@@ -306,6 +333,76 @@ def get_publication_trend(num_years=5, department_id=None):
     return {
         'by_year': [{'year': y, 'papers': rows.get(y, 0)} for y in years],
         'scope': 'Al-Baha affiliation confirmed only',
+        **_scope_meta(department_id),
+    }
+
+
+def compare_departments():
+    """Ranks every department across several metrics - ALL computed here in
+    Python, never by the model combining numbers from separate tool calls
+    or from get_department_stats' raw rows itself. Live testing showed the
+    model doing its own cross-department arithmetic (summing rows into a
+    fake university total) and asserting a department was "the best" from
+    one raw number with no comparison at all - this tool exists so ranking
+    and comparison are never something the model has to compute by hand.
+
+    University-scope only (see ai_views.py's _ALL_ONLY_TOOLS) - ranking
+    departments against each other inherently exposes every department's
+    numbers, which a HoD-scoped caller must never receive.
+    """
+    with connection.cursor() as cur:
+        cur.execute(f'''
+            SELECT
+                d."DepartmentID", d."DepartmentName",
+                COUNT(DISTINCT u."UserID") AS researchers,
+                COUNT(DISTINCT rp."PaperID") AS papers,
+                COUNT(DISTINCT rp."PaperID") FILTER (
+                    WHERE rp."Indexing" = 'Scopus' OR jr."Quartile" IS NOT NULL) AS scopus_papers
+            FROM "Department" d
+            LEFT JOIN "Works_In" w ON w."DepartmentID" = d."DepartmentID" AND w."IsCurrentPosition" = TRUE
+            LEFT JOIN "Users" u ON u."UserID" = w."UserID" AND u."UserType" = 'Researcher'
+            LEFT JOIN "Authors" a ON a."UserID" = u."UserID"
+            LEFT JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"{AAV}
+            LEFT JOIN LATERAL (SELECT "Quartile" FROM "JournalRankings"
+                WHERE "JournalID" = rp."JournalID"
+                ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1) jr ON TRUE
+            GROUP BY d."DepartmentID", d."DepartmentName"
+        ''')
+        rows = cur.fetchall()
+
+    depts = []
+    for did, name, researchers, papers, scopus in rows:
+        depts.append({
+            'department_id': did, 'department': name,
+            'researchers': researchers, 'papers': papers, 'scopus_papers': scopus,
+            'papers_per_researcher': round(papers / researchers, 2) if researchers else None,
+            'scopus_rate': round(scopus / papers, 3) if papers else None,
+        })
+
+    # Rank each metric independently (1 = highest) - the ONLY ranking the
+    # model is ever allowed to cite as "top"/"highest"/"best" comes from
+    # here, never from eyeballing raw numbers across tool calls.
+    for metric in ('papers', 'researchers', 'scopus_papers', 'papers_per_researcher', 'scopus_rate'):
+        ranked = sorted((d for d in depts if d[metric] is not None), key=lambda d: d[metric], reverse=True)
+        for i, d in enumerate(ranked, start=1):
+            d[f'{metric}_rank'] = i
+
+    depts.sort(key=lambda d: d.get('papers_rank') or 999)
+
+    return {
+        'departments': depts,
+        'total_departments': len(depts),
+        'data_scope': 'university',
+        'as_of': date.today().isoformat(),
+        'note': (
+            'Every "_rank" field (e.g. papers_rank) is computed here, not by '
+            'you - rank 1 means highest for that specific metric. Only use '
+            '"top"/"best"/"highest" if you cite the rank and metric backing '
+            'it (e.g. "rank 1 of {n} by papers_per_researcher"). A '
+            'department can rank #1 on one metric and low on another - '
+            'never imply one metric proves overall superiority without '
+            'naming which metric.'
+        ).format(n=len(depts)),
     }
 
 
@@ -398,5 +495,20 @@ TOOLS = {
                 'num_years': {'type': 'integer', 'description': 'How many recent years (default 5, max 15).'},
             },
         },
+    },
+    'compare_departments': {
+        'fn': compare_departments,
+        'description': (
+            "Ranks EVERY department across multiple metrics (papers, "
+            "researchers, scopus_papers, papers_per_researcher, "
+            "scopus_rate), each with its own precomputed rank. Use this "
+            "for ANY comparative or superlative question ('best', 'top', "
+            "'highest', 'which department...', 'how does X compare to "
+            "Y') - never call get_department_stats and compare the raw "
+            "numbers yourself, and never call this to answer a "
+            "single-department or university-total question (use "
+            "get_department_stats or get_overview_stats for those)."
+        ),
+        'parameters': {'type': 'object', 'properties': {}},
     },
 }

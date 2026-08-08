@@ -50,11 +50,18 @@ class AiChatThrottle(UserRateThrottle):
 
 # Tools that return institution- or department-scale aggregates, as opposed
 # to a single named person's public-equivalent info (find_researcher isn't
-# here on purpose - see _resolve_scope's docstring).
+# here on purpose - see _resolve_scope's docstring). Available to 'dept' and
+# 'all' scope, forcibly department-fenced for 'dept' via _run_tool_call.
 _SCOPED_TOOLS = {
     'get_overview_stats', 'get_top_researchers',
     'get_department_stats', 'get_publication_trend',
 }
+
+# Tools that inherently compare EVERY department against every other -
+# there's no way to department-fence a comparison without defeating its own
+# purpose, so these are 'all'-scope only, unlike _SCOPED_TOOLS above which
+# 'dept' can still use (fenced to their own department).
+_ALL_ONLY_TOOLS = {'compare_departments'}
 
 
 def _resolve_scope(request):
@@ -144,7 +151,21 @@ def _system_prompt(scope_level='all'):
         f"one department - call get_overview_stats for that instead). If "
         f"no single tool call returns the exact number asked for, say what "
         f"the data does show rather than deriving a new number by "
-        f"arithmetic. Call a tool ONLY when the user's "
+        f"arithmetic. Every tool result carries 'data_scope' "
+        f"('university' or 'department') and 'department' - before writing "
+        f"a number into your answer, check it came from the scope the "
+        f"question actually asked about; never present a department-level "
+        f"figure as a university one or vice versa. Never say "
+        f"'top'/'best'/'highest'/'strongest' about a department or "
+        f"researcher unless you're citing an explicit rank from "
+        f"compare_departments (for departments) or a citation count from "
+        f"get_top_researchers (for people) - a single raw number like "
+        f"'212 papers' is not evidence of being 'the best' anything, only "
+        f"evidence of what it literally says. If the data doesn't cover "
+        f"what's needed to answer (e.g. no growth-over-time data was "
+        f"retrieved but the question asks about growth), say plainly you "
+        f"don't have enough data for that rather than inferring an answer. "
+        f"Call a tool ONLY when the user's "
         f"LATEST message actually asks for data (paper counts, citations, top "
         f"researchers, department stats, publication trends), and call the "
         f"SINGLE most relevant tool for that specific question - do not call "
@@ -173,13 +194,16 @@ HISTORY_TURNS = 6  # most recent turns kept as context, oldest dropped first - m
 
 
 def _tool_schema(scope_level='all'):
-    tools = TOOLS
+    # The model is never TOLD a restricted tool exists - it can't call what
+    # it doesn't know about. This is the actual enforcement point, not the
+    # system-prompt wording above (that's just so a refusal reads
+    # intentionally rather than like a missing feature).
     if scope_level == 'none':
-        # The model is never TOLD these tools exist - it can't call what it
-        # doesn't know about. This is the actual enforcement point, not the
-        # system-prompt wording above (that's just so the refusal reads
-        # intentionally rather than like a missing feature).
-        tools = {k: v for k, v in TOOLS.items() if k not in _SCOPED_TOOLS}
+        tools = {k: v for k, v in TOOLS.items() if k not in _SCOPED_TOOLS and k not in _ALL_ONLY_TOOLS}
+    elif scope_level == 'dept':
+        tools = {k: v for k, v in TOOLS.items() if k not in _ALL_ONLY_TOOLS}
+    else:
+        tools = TOOLS
     return [
         {
             'type': 'function',
