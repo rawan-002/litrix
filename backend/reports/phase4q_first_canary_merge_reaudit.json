@@ -1,0 +1,116 @@
+{
+  "phase": "4Q",
+  "title": "First Canary Merge Re-Audit",
+  "strictly_read_only": true,
+  "merge_executed": false,
+  "approval_id_1": {
+    "read_only": true,
+    "modified": false,
+    "survivor_paper_id": 5232,
+    "loser_paper_id": 5482,
+    "plan_id": "phase4p-canary-5232-5482",
+    "plan_fingerprint": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb",
+    "status": "APPROVED",
+    "reviewed_by_user_id": 221,
+    "total_merge_approval_rows_in_production": 1,
+    "orphaned_or_conflicting_rows_for_pair": 0
+  },
+  "self_merge_check": {"ok": true, "reason": null},
+  "fingerprint_reaudit": {
+    "django_live_fingerprint": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb",
+    "raw_psycopg2_live_fingerprint": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb",
+    "byte_identical": true,
+    "django_matches_stored_approval": true,
+    "raw_matches_stored_approval": true,
+    "django_matches_expected_reference": true,
+    "raw_matches_expected_reference": true,
+    "recomputed_fresh_this_phase": true,
+    "reused_from_prior_phase": false
+  },
+  "drift_audit": {
+    "both_papers_exist": true,
+    "tenant_id_compatible": true,
+    "title_doi_journal_id_unchanged": true,
+    "pair_confidence": "high",
+    "hard_exclusion_reason": null,
+    "doi_claimed_elsewhere": false,
+    "journal_state": "WINNER_ONLY",
+    "journal_execution_permitted": true,
+    "author_content_conflicts": [],
+    "drift_found": false
+  },
+  "executor_preconditions": {
+    "reject_self_merge": "pass",
+    "permission_precondition": {"result": "pass", "checked_read_only": true, "method": "can_approve_merge() internally issues only a SELECT via has_litrix_perm(); verified for admin@litrix.com"},
+    "approval_verification": "pass",
+    "deterministic_lock_order": {"result": "correct", "value": [5232, 5482], "verified_without_acquiring_lock": true, "method": "build_lock_order() pure function only; lock_pair_rows() never called"},
+    "fingerprint_verification": "pass",
+    "validate_against_plan": {"status": "OK", "passed": true},
+    "duplicate_safety": "pass",
+    "doi_safety": "pass",
+    "idempotency_verdict": "NOT_PREVIOUSLY_EXECUTED",
+    "journal_id_decision": "execution_permitted=True",
+    "author_name_raw_conflicts": [],
+    "dependency_gaps": [],
+    "prior_audit_log_merge_record": "none"
+  },
+  "dependency_results": [
+    {"table": "Authors", "fk": "PaperID", "action": "REMAP", "winner_rows": 1, "loser_rows": 1},
+    {"table": "Citations", "fk": "PaperID", "action": "REMAP", "winner_rows": 0, "loser_rows": 0},
+    {"table": "ExternalAuthors", "fk": "PaperID", "action": "REMAP", "winner_rows": 0, "loser_rows": 0},
+    {"table": "CitationsHistory", "fk": "PaperID", "action": "REMAP", "winner_rows": 0, "loser_rows": 0},
+    {"table": "ReportPaperDecision", "fk": "PaperID", "action": "REMAP", "winner_rows": 0, "loser_rows": 0},
+    {"table": "ReportPaperDecision", "fk": "MissingResolvedToPaperID", "action": "BLOCK_IF_NONZERO", "loser_rows": 0},
+    {"table": "AuthorReviewQueue", "fk": "PaperID", "action": "BLOCK_IF_NONZERO", "loser_rows": 0},
+    {"table": "PaperKeywords", "fk": "PaperID", "action": "REMAP", "note": "Phase 4K schema-drift finding, table exists, 0 rows for this pair", "loser_rows": 0}
+  ],
+  "schema_fk_results": {
+    "merge_approval_column_count": 18,
+    "survivor_paper_id_fk": {"references": "ResearchPaper.PaperID", "on_delete": "NO ACTION", "unchanged": true},
+    "loser_paper_id_fk_present": false,
+    "other_fks_unchanged": true,
+    "approval_can_survive_loser_deletion": true,
+    "schema_drift_found": false
+  },
+  "audit_log_prior_execution": {
+    "rows_for_pair": 0,
+    "action_checked": "paper.merge.dedup"
+  },
+  "environment_safety": {
+    "concurrent_active_sessions_excluding_self": 0,
+    "locks_on_relevant_tables_excluding_self": 0,
+    "locks_written_by_this_phase": 0,
+    "execution_transaction_opened": false,
+    "backup_pitr_rechecked": false,
+    "backup_pitr_recheck_reason": "no evidence found this phase of any Neon configuration change since the pre-Phase-4O snapshot; not re-verified per instructions, recommend explicit confirmation at actual execution time"
+  },
+  "regression": {
+    "test_dedup_papers.py": {"passed": 18, "total": 18},
+    "test_merge_plan_generator.py": {"passed": 43, "total": 43},
+    "test_merge_execution_safety.py": {"passed": 79, "total": 79},
+    "test_merge_approval.py": {"passed": 45, "total": 45},
+    "test_merge_executor.py": {"passed": 39, "total": 39},
+    "test_fk_lifecycle.py": {"passed": 11, "total": 11},
+    "total": {"passed": 235, "total": 235, "regressions": 0, "expected_matched": true}
+  },
+  "accounting": {
+    "code_files_modified": 0,
+    "code_files_created": 0,
+    "test_files_modified": 0,
+    "migration_files_modified": 0,
+    "report_files_created": 2,
+    "production_db_writes": 0,
+    "merge_approval_writes": 0,
+    "research_paper_writes": 0,
+    "child_table_writes": 0,
+    "doi_changes": 0,
+    "records_merged": 0,
+    "execute_approved_merge_executions": 0,
+    "merge_group_executions": 0,
+    "network_calls": 0
+  },
+  "final_decision": "A",
+  "final_decision_label": "READY_FOR_ONE_CONTROLLED_LIVE_CANARY_MERGE",
+  "execution_authorized_by_this_report": false,
+  "phase_4r_or_next_started": false
+}

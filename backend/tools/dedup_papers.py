@@ -803,5 +803,96 @@ def main():
                   f"+ snapshot {snap_path.name}")
 
 
+# ---------------------------------------------------------------------------
+# Phase 4E -- narrow merge-SAFETY planning helpers (detection only, no
+# execution). Added to close two silent-data-loss paths the Phase 4D
+# execution-readiness audit found in merge_group()'s current, unmodified
+# behavior: JournalID is never backfilled from the loser, and an Authors
+# row that shares a UserID with the loser can have its AuthorNameRaw
+# variant silently discarded by the existing ON CONFLICT (UserID,PaperID)
+# DO NOTHING remap (see uq_authors_user_paper). Both functions below are
+# pure and read-only -- they decide/detect what a future, still-unbuilt
+# executor would need to do; neither writes anything, and merge_group()
+# itself is unchanged by this addition.
+# ---------------------------------------------------------------------------
+
+JOURNAL_NO_JOURNAL = "NO_JOURNAL"
+JOURNAL_WINNER_ONLY = "WINNER_ONLY"
+JOURNAL_LOSER_ONLY_BACKFILL = "LOSER_ONLY_BACKFILL"
+JOURNAL_EQUAL = "EQUAL"
+JOURNAL_CONFLICT = "CONFLICT"
+
+
+def journal_id_decision(winner_journal_id, loser_journal_id):
+    """Pure decision model for ResearchPaper.JournalID during a future
+    merge. merge_group() does not call this today -- it never touches
+    JournalID at all; this only plans what a future executor would need
+    to do, it does not perform the backfill itself.
+
+    Returns (state, action_description):
+      NO_JOURNAL           -- both empty, nothing to plan
+      WINNER_ONLY           -- winner already has a value, loser has none
+      LOSER_ONLY_BACKFILL   -- winner empty, loser populated: the one
+                               deterministic case, no ambiguity about
+                               which value to use
+      EQUAL                 -- both populated and identical
+      CONFLICT               -- both populated and DIFFERENT: never
+                               auto-resolved, a future executor must not
+                               silently pick one and must block automatic
+                               execution for the pair
+    """
+    w_empty = winner_journal_id is None
+    l_empty = loser_journal_id is None
+
+    if w_empty and l_empty:
+        return JOURNAL_NO_JOURNAL, "no action -- neither side has a JournalID"
+    if not w_empty and l_empty:
+        return JOURNAL_WINNER_ONLY, "no action -- winner already has a JournalID, loser has none"
+    if w_empty and not l_empty:
+        return JOURNAL_LOSER_ONLY_BACKFILL, "copy/backfill loser's JournalID onto winner before loser removal"
+    if winner_journal_id == loser_journal_id:
+        return JOURNAL_EQUAL, "no action -- both sides already agree"
+    return JOURNAL_CONFLICT, "no automatic action -- both sides have different, real JournalIDs; do not silently choose one"
+
+
+def author_content_conflicts(winner_authors, loser_authors):
+    """Pure detection of same-author-relationship content conflicts that
+    merge_group()'s Authors remap (INSERT ... ON CONFLICT (UserID,PaperID)
+    DO NOTHING, then DELETE the loser's row) would otherwise silently
+    discard without any error, log line, or flag.
+
+    Identity key matches the repository's own existing identity logic for
+    this table exactly -- merge_group()'s own ON CONFLICT clause is keyed
+    on (UserID, PaperID) (see the uq_authors_user_paper unique index), so
+    two rows are "the same author relationship" here precisely when they
+    share a UserID. No fuzzy matching, no name normalization, no new
+    identity concept invented.
+
+    winner_authors / loser_authors: iterables of dicts with at least
+    "UserID" and "AuthorNameRaw" (Authors table columns) -- callers decide
+    how to fetch them; this function never queries the DB itself.
+
+    Returns a list of conflict dicts, one per colliding UserID whose
+    AuthorNameRaw differs, in the exact raw values with no normalization
+    applied. A UserID present on only one side is not a conflict (nothing
+    to lose from the missing side). Identical AuthorNameRaw values on a
+    shared UserID are never reported."""
+    winner_by_uid = {a["UserID"]: a for a in winner_authors}
+    loser_by_uid = {a["UserID"]: a for a in loser_authors}
+    shared_uids = set(winner_by_uid) & set(loser_by_uid)
+
+    conflicts = []
+    for uid in sorted(shared_uids):
+        w_raw = winner_by_uid[uid].get("AuthorNameRaw")
+        l_raw = loser_by_uid[uid].get("AuthorNameRaw")
+        if w_raw != l_raw:
+            conflicts.append({
+                "UserID": uid,
+                "winner_author_name_raw": w_raw,
+                "loser_author_name_raw": l_raw,
+            })
+    return conflicts
+
+
 if __name__ == "__main__":
     main()

@@ -1,0 +1,117 @@
+{
+  "phase": "4O",
+  "title": "Controlled MergeApproval Migration Application",
+  "migration_applied": true,
+  "migration_file": {
+    "path": "backend/analytics/migrations/sprint11_merge_approval.sql",
+    "sha256": "5b7500cdef5220551b05e86f32479e77d03d94bed8790b31b7833382a01dfe31",
+    "hash_matched_phase_4n_audit": true,
+    "line_count": 135,
+    "modified_this_phase": false
+  },
+  "pre_write_gates": [
+    {"gate": "Migration file content re-inspected", "status": "PASS"},
+    {"gate": "Hash matches Phase 4N audited hash", "status": "PASS", "value": "5b7500cdef5220551b05e86f32479e77d03d94bed8790b31b7833382a01dfe31"},
+    {"gate": "MergeApproval still does not exist", "status": "PASS"},
+    {"gate": "No conflicting partial artifacts", "status": "PASS"},
+    {"gate": "Application mechanism/command verified", "status": "PASS", "command": "python apply_migration.py analytics/migrations/sprint11_merge_approval.sql"},
+    {"gate": "Target is only sprint11_merge_approval.sql", "status": "PASS"},
+    {"gate": "DB connection targets intended production database", "status": "PASS", "database": "neondb", "user": "neondb_owner"},
+    {"gate": "No unexpected schema drift", "status": "PASS"}
+  ],
+  "all_gates_passed": true,
+  "any_unknown_gate": false,
+  "application_result": {
+    "success": true,
+    "attempts": 1,
+    "retried": false,
+    "output": "[ok] migration applied.",
+    "reported_size_bytes": 8613,
+    "disk_size_bytes": 8616,
+    "size_discrepancy_explanation": "apply_migration.py reports Python character count (len(sql) after UTF-8 decode); disk size is byte count -- explained by one or more multi-byte UTF-8 characters in prose comments; content independently verified byte-identical via SHA-256 before this run",
+    "mechanism": "apply_migration.py, transaction.atomic() wraps the entire CREATE TABLE + 2x CREATE INDEX as one atomic unit",
+    "rollback_needed": false
+  },
+  "post_application_verification": {
+    "table_exists": true,
+    "column_count": 18,
+    "columns_match_design": true,
+    "loser_paper_id_has_no_fk": true,
+    "survivor_paper_id_fk": {"references": "ResearchPaper.PaperID", "on_delete": "NO ACTION"},
+    "self_merge_check_constraint": "CHECK ((\"SurvivorPaperID\" <> \"LoserPaperID\"))",
+    "status_check_constraint": "CHECK (((\"Status\")::text = ANY (ARRAY['PENDING'::character varying, 'APPROVED'::character varying, 'REJECTED'::character varying, 'REVOKED'::character varying, 'EXECUTED'::character varying]::text[])))",
+    "unique_identity_constraint_columns": ["SurvivorPaperID", "LoserPaperID", "PlanFingerprint", "ApprovalVersion"],
+    "other_fks": [
+      {"column": "ReviewedByUserID", "references": "Users.UserID", "on_delete": "SET NULL"},
+      {"column": "RevokedByUserID", "references": "Users.UserID", "on_delete": "SET NULL"},
+      {"column": "TenantID", "references": "Tenant.TenantID", "on_delete": "NO ACTION"},
+      {"column": "ExecutionAuditLogID", "references": "AuditLog.LogID", "on_delete": "SET NULL"}
+    ],
+    "indexes": ["MergeApproval_pkey", "uq_merge_approval_identity", "idx_merge_approval_status_created", "idx_merge_approval_lookup"],
+    "row_count": 0,
+    "approval_rows_created": 0
+  },
+  "existing_data_safety": {
+    "research_paper_row_count_before": 2031,
+    "research_paper_row_count_after": 2031,
+    "research_paper_row_count_unchanged": true,
+    "canary_pair_5232_unchanged": true,
+    "canary_pair_5482_unchanged": true,
+    "authors_table_canary_pair_unchanged": true,
+    "audit_log_row_count_before": 956,
+    "audit_log_row_count_after": 956,
+    "audit_log_row_count_unchanged": true,
+    "audit_log_write_by_migration": false,
+    "audit_log_write_by_migration_note": "apply_migration.py contains no AuditLog reference of any kind; confirmed by direct source read",
+    "paper_merge_dedup_rows_for_canary_pair": 0
+  },
+  "code_compatibility": {
+    "real_production_call_made": true,
+    "call": "merge_approval.fetch_current_approval(cur, 5232, 5482, 'nonexistent-fingerprint-compat-check') against the real, live production MergeApproval table",
+    "call_result": null,
+    "call_succeeded_without_schema_error": true,
+    "approval_columns_count_expected_by_code": 17,
+    "table_created_row_after_call": 0,
+    "mismatch_found": false
+  },
+  "recovery_context": {
+    "neon_pitr_window_hours": 6,
+    "manual_snapshot_created_before_phase": true,
+    "migration_succeeded": true,
+    "rollback_needed": false,
+    "database_in_expected_state": true,
+    "snapshot_must_remain_untouched_until_review": true
+  },
+  "regression": {
+    "test_dedup_papers.py": {"passed": 18, "total": 18},
+    "test_merge_plan_generator.py": {"passed": 43, "total": 43},
+    "test_merge_execution_safety.py": {"passed": 68, "total": 68},
+    "test_merge_approval.py": {"passed": 45, "total": 45},
+    "test_merge_executor.py": {"passed": 39, "total": 39},
+    "test_fk_lifecycle.py": {"passed": 11, "total": 11},
+    "total": {"passed": 224, "total": 224, "regressions": 0}
+  },
+  "accounting": {
+    "code_files_modified": 0,
+    "code_files_created": 0,
+    "migration_files_modified": 0,
+    "report_files_created": 2,
+    "db_writes": 1,
+    "db_writes_note": "one atomic DDL transaction: CREATE TABLE + 2x CREATE INDEX",
+    "db_schema_changes": 1,
+    "merge_approval_rows_created": 0,
+    "research_paper_rows_changed": 0,
+    "records_merged": 0,
+    "doi_changes": 0,
+    "apply_executions": 0,
+    "network_calls": 0
+  },
+  "final_decision": "A",
+  "final_decision_label": "MIGRATION_SUCCESSFULLY_APPLIED_AND_VERIFIED_READY_FOR_SEPARATE_APPROVAL_WORKFLOW_AUDIT",
+  "post_verdict_constraints": {
+    "pending_approval_created": false,
+    "anything_approved": false,
+    "merge_executed": false,
+    "phase_4p_started": false
+  }
+}

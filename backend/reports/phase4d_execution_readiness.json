@@ -1,0 +1,1953 @@
+{
+  "phase": "4D",
+  "scope": "execution-readiness audit of the 5 Phase 4C SAFE_PLAN_CANDIDATE pairs",
+  "db_writes": 0,
+  "network_calls": 0,
+  "records_merged": 0,
+  "execution_permitted": false,
+  "pairs": [
+    {
+      "pair": [
+        5207,
+        5481
+      ],
+      "field_actions": [
+        {
+          "field": "JournalID",
+          "winner_value": "440",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "Title",
+          "winner_value": "Tuberculosis disease diagnosis based on an optimized machine learning model",
+          "loser_value": "Research Article Tuberculosis Disease Diagnosis Based on an Optimized Machine Learning Model",
+          "status": "CONFLICT_EXPECTED",
+          "recommended_action": "NO_ACTION",
+          "reason": "differing values here are the expected shape of a genuine duplicate pair, not an ambiguity requiring a human decision -- the loser's value stays recoverable via the pre-merge snapshot even though it won't be visible in live queries after a merge"
+        },
+        {
+          "field": "Title_En",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "Abstract",
+          "winner_value": "Computer science plays an important role in modern dynamic health systems. Given the collaborative nature of the diagnostic process, computer technology provides important services to healthcare profe...",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "Abstract_En",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "Language",
+          "winner_value": "en",
+          "loser_value": "en",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "DOI",
+          "winner_value": "10.1155/2022/8950243",
+          "loser_value": null,
+          "status": "UNKNOWN",
+          "recommended_action": "SEE_DOI_STATE",
+          "reason": "DOI decisions are governed by doi_state, never by a generic field action"
+        },
+        {
+          "field": "PubYear",
+          "winner_value": "2022",
+          "loser_value": "2022",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "Volume",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "Issue",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "Pages",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "IsVerified",
+          "winner_value": "True",
+          "loser_value": "True",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "ScrapedAt",
+          "winner_value": "2026-05-07 08:25:22.292383+00:00",
+          "loser_value": "2026-05-07 08:30:28.086731+00:00",
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "process/ingestion timestamp describing when THIS row was scraped/verified -- the survivor's own timestamp stays authoritative for the surviving row after a merge; a differing loser timestamp is not a data conflict to resolve (matches merge_group()'s existing, unmodified behavior of never touching this column on the kept row)"
+        },
+        {
+          "field": "Source",
+          "winner_value": "Scholar",
+          "loser_value": "Scholar",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "RawData_Log",
+          "winner_value": "{'link': 'https://scholar.google.com/citations?view_op=view_citation&hl=en&user=yaX8Tu4AAAAJ&pagesize=100&citation_for_view=yaX8Tu4AAAAJ:tuHXwOkdijsC', 'year': '2022', 'title': 'Tuberculosis disease d...",
+          "loser_value": "{'link': 'https://scholar.google.com/citations?view_op=view_citation&hl=en&user=yaX8Tu4AAAAJ&cstart=300&pagesize=100&citation_for_view=yaX8Tu4AAAAJ:6bLC7aUMtPcC', 'year': '2022', 'title': 'Research Ar...",
+          "status": "CONFLICT_EXPECTED",
+          "recommended_action": "NO_ACTION",
+          "reason": "differing values here are the expected shape of a genuine duplicate pair, not an ambiguity requiring a human decision -- the loser's value stays recoverable via the pre-merge snapshot even though it won't be visible in live queries after a merge"
+        },
+        {
+          "field": "SearchVector_En",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "DERIVED",
+          "recommended_action": "NO_ACTION",
+          "reason": "tsvector regenerated from Title/Abstract by application code, not an independent data field"
+        },
+        {
+          "field": "SearchVector_Ar",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "DERIVED",
+          "recommended_action": "NO_ACTION",
+          "reason": "tsvector regenerated from Title/Abstract by application code, not an independent data field"
+        },
+        {
+          "field": "NormalizedTitle",
+          "winner_value": "tuberculosis disease diagnosis based on an optimized machine learning model",
+          "loser_value": "research article tuberculosis disease diagnosis based on an optimized machine learning model",
+          "status": "CONFLICT_EXPECTED",
+          "recommended_action": "NO_ACTION",
+          "reason": "differing values here are the expected shape of a genuine duplicate pair, not an ambiguity requiring a human decision -- the loser's value stays recoverable via the pre-merge snapshot even though it won't be visible in live queries after a merge"
+        },
+        {
+          "field": "Indexing",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "CitationsByYear",
+          "winner_value": "{'2022': 8, '2023': 23, '2024': 28, '2025': 13, '2026': 10}",
+          "loser_value": null,
+          "status": "MERGE",
+          "recommended_action": "MERGE_ELEMENTWISE_MAX",
+          "reason": "reconciled today by dedup_papers.py's merge_citation_fields() (element-wise MAX per year) -- existing, repository-backed rule, not a conflict"
+        },
+        {
+          "field": "TenantID",
+          "winner_value": "1",
+          "loser_value": "1",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "AffiliationVerified",
+          "winner_value": "True",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "VerificationSource",
+          "winner_value": "openalex",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "VerifiedAt",
+          "winner_value": "2026-08-02 10:35:00.626668",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "VerificationDetails",
+          "winner_value": "{'ror': 'https://ror.org/0403jak37', 'tier': 'openalex', 'country': 'SA', 'confidence': 'fallback', 'decision_basis': 'openalex_albaha_match', 'evidence_trail': [{'url': 'https://www.hindawi.com/journ...",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "VenueType",
+          "winner_value": "Journal",
+          "loser_value": "Journal",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "DoiResolvedBy",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "DoiResolvedAt",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "OpenAlexWorkID",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "AbstractSource",
+          "winner_value": "openalex",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "PdfUrl",
+          "winner_value": "https://downloads.hindawi.com/journals/jhe/2022/8950243.pdf",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "PdfAccessType",
+          "winner_value": "open_access_pdf_link",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "PublicationType",
+          "winner_value": "Research Article",
+          "loser_value": "Research Article",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        }
+      ],
+      "doi_state": {
+        "winner": "10.1155/2022/8950243",
+        "loser": null,
+        "action": "KEEP_EXISTING_WINNER_DOI",
+        "reason": "winner already has a DOI, loser has none -- nothing to change"
+      },
+      "child_table_actions": [
+        {
+          "table": "Authors",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 1,
+          "loser_rows": 1,
+          "handled_by_merge_group_today": true,
+          "planned_action": "MERGE",
+          "risk": "low -- existing merge_group() code handles UserID overlap via ON CONFLICT DO NOTHING",
+          "note": "Special-cased in merge_group(): INSERT...ON CONFLICT(UserID,PaperID) DO NOTHING, then DELETE loser rows. A shared UserID is not an error -- ON CONFLICT silently keeps the survivor's existing link."
+        },
+        {
+          "table": "Citations",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "Special-cased in merge_group(): GREATEST()-merge of CitationsCount via INSERT...ON CONFLICT(PaperID) DO UPDATE."
+        },
+        {
+          "table": "ExternalAuthors",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "In dedup_papers.py's SIMPLE_CHILDREN -- remap_simple_child() bulk UPDATE with a per-row SAVEPOINT/conflict-drop fallback."
+        },
+        {
+          "table": "PaperKeywords",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "Listed in SIMPLE_CHILDREN, but the table does not exist in this database today (confirmed via information_schema.tables) -- dead list entry, harmless."
+        },
+        {
+          "table": "CitationsHistory",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "In SIMPLE_CHILDREN -- remap_simple_child() bulk UPDATE with conflict-drop fallback."
+        },
+        {
+          "table": "ReportPaperDecision",
+          "foreign_key": "PaperID",
+          "on_delete": "SET NULL",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "In SIMPLE_CHILDREN -- remap_simple_child() runs BEFORE the loser ResearchPaper row is deleted, so the ON DELETE SET NULL rule is a fallback that should not normally fire; still worth reporting precisely (corrects an earlier, less precise Phase 4B read that said NO ACTION)."
+        },
+        {
+          "table": "ReportPaperDecision",
+          "foreign_key": "MissingResolvedToPaperID",
+          "on_delete": "SET NULL",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": false,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "NOT remapped by any existing logic -- only the table's primary PaperID column is in SIMPLE_CHILDREN. If a loser PaperID is ever referenced here, a real merge today would let it SET NULL silently on delete (not error, not cascade -- just silently lose the 'resolved to' link)."
+        },
+        {
+          "table": "AuthorReviewQueue",
+          "foreign_key": "PaperID",
+          "on_delete": "CASCADE",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": false,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "NOT in SIMPLE_CHILDREN, NOT special-cased, NOT included in snapshot_paper()'s captured child tables. If a loser PaperID ever has rows here, deleting the loser ResearchPaper row would CASCADE-delete them with zero recovery snapshot specific to this table."
+        }
+      ],
+      "authors_shared_uids": [
+        97
+      ],
+      "authors_content_conflicts": [
+        {
+          "UserID": 97,
+          "column": "AuthorNameRaw",
+          "winner_value": "O Hrizi, K Gasmi, I Ben Ltaifa, H Alshammari, H Karamti, M Krichen, ...",
+          "loser_value": "O Hrizi, K Gasmi, IB Ltaifa, H Alshammari, H Karamti, M Krichen, ..."
+        }
+      ],
+      "journal_id": {
+        "winner": 440,
+        "loser": null,
+        "backfill_target": null,
+        "backfill_target_journal_name": null,
+        "fk_constraint": "ResearchPaper.JournalID -> Journals.JournalID, ON DELETE NO ACTION"
+      },
+      "verdict": "READY_AFTER_IMPLEMENTATION",
+      "verdict_reasons": [
+        "Authors.AuthorNameRaw content differs for shared UserID 97; merge_group() silently keeps winner value with zero detection/logging"
+      ]
+    },
+    {
+      "pair": [
+        5232,
+        5482
+      ],
+      "field_actions": [
+        {
+          "field": "JournalID",
+          "winner_value": "1803",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "Title",
+          "winner_value": "Optimal deep learning model for olive disease diagnosis based on an adaptive genetic algorithm",
+          "loser_value": "Research Article Optimal Deep Learning Model for Olive Disease Diagnosis Based on an Adaptive Genetic Algorithm",
+          "status": "CONFLICT_EXPECTED",
+          "recommended_action": "NO_ACTION",
+          "reason": "differing values here are the expected shape of a genuine duplicate pair, not an ambiguity requiring a human decision -- the loser's value stays recoverable via the pre-merge snapshot even though it won't be visible in live queries after a merge"
+        },
+        {
+          "field": "Title_En",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "Abstract",
+          "winner_value": "Though many researchers have studied plant leaf disease, the timely diagnosis of diseases in olive leaves still presents an indisputable challenge. Infected leaves may display different symptoms from ...",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "Abstract_En",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "Language",
+          "winner_value": "en",
+          "loser_value": "en",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "DOI",
+          "winner_value": "10.1155/2022/8531213",
+          "loser_value": null,
+          "status": "UNKNOWN",
+          "recommended_action": "SEE_DOI_STATE",
+          "reason": "DOI decisions are governed by doi_state, never by a generic field action"
+        },
+        {
+          "field": "PubYear",
+          "winner_value": "2022",
+          "loser_value": "2022",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "Volume",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "Issue",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "Pages",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "IsVerified",
+          "winner_value": "True",
+          "loser_value": "True",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "ScrapedAt",
+          "winner_value": "2026-05-07 08:25:22.292383+00:00",
+          "loser_value": "2026-05-07 08:30:28.086731+00:00",
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "process/ingestion timestamp describing when THIS row was scraped/verified -- the survivor's own timestamp stays authoritative for the surviving row after a merge; a differing loser timestamp is not a data conflict to resolve (matches merge_group()'s existing, unmodified behavior of never touching this column on the kept row)"
+        },
+        {
+          "field": "Source",
+          "winner_value": "Scholar",
+          "loser_value": "Scholar",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "RawData_Log",
+          "winner_value": "{'link': 'https://scholar.google.com/citations?view_op=view_citation&hl=en&user=yaX8Tu4AAAAJ&pagesize=100&citation_for_view=yaX8Tu4AAAAJ:b1wdh0AR-JQC', 'year': '2022', 'title': 'Optimal deep learning ...",
+          "loser_value": "{'link': 'https://scholar.google.com/citations?view_op=view_citation&hl=en&user=yaX8Tu4AAAAJ&cstart=300&pagesize=100&citation_for_view=yaX8Tu4AAAAJ:mlAyqtXpCwEC', 'year': '2022', 'title': 'Research Ar...",
+          "status": "CONFLICT_EXPECTED",
+          "recommended_action": "NO_ACTION",
+          "reason": "differing values here are the expected shape of a genuine duplicate pair, not an ambiguity requiring a human decision -- the loser's value stays recoverable via the pre-merge snapshot even though it won't be visible in live queries after a merge"
+        },
+        {
+          "field": "SearchVector_En",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "DERIVED",
+          "recommended_action": "NO_ACTION",
+          "reason": "tsvector regenerated from Title/Abstract by application code, not an independent data field"
+        },
+        {
+          "field": "SearchVector_Ar",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "DERIVED",
+          "recommended_action": "NO_ACTION",
+          "reason": "tsvector regenerated from Title/Abstract by application code, not an independent data field"
+        },
+        {
+          "field": "NormalizedTitle",
+          "winner_value": "optimal deep learning model for olive disease diagnosis based on an adaptive genetic algorithm",
+          "loser_value": "research article optimal deep learning model for olive disease diagnosis based on an adaptive genetic algorithm",
+          "status": "CONFLICT_EXPECTED",
+          "recommended_action": "NO_ACTION",
+          "reason": "differing values here are the expected shape of a genuine duplicate pair, not an ambiguity requiring a human decision -- the loser's value stays recoverable via the pre-merge snapshot even though it won't be visible in live queries after a merge"
+        },
+        {
+          "field": "Indexing",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "CitationsByYear",
+          "winner_value": "{'2022': 5, '2023': 13, '2024': 12, '2025': 8, '2026': 2}",
+          "loser_value": null,
+          "status": "MERGE",
+          "recommended_action": "MERGE_ELEMENTWISE_MAX",
+          "reason": "reconciled today by dedup_papers.py's merge_citation_fields() (element-wise MAX per year) -- existing, repository-backed rule, not a conflict"
+        },
+        {
+          "field": "TenantID",
+          "winner_value": "1",
+          "loser_value": "1",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "AffiliationVerified",
+          "winner_value": "True",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "VerificationSource",
+          "winner_value": "openalex",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "VerifiedAt",
+          "winner_value": "2026-08-02 10:36:44.846037",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "VerificationDetails",
+          "winner_value": "{'ror': 'https://ror.org/0403jak37', 'tier': 'openalex', 'country': 'SA', 'confidence': 'fallback', 'decision_basis': 'openalex_albaha_match', 'evidence_trail': [{'url': 'https://onlinelibrary.wiley.c...",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "VenueType",
+          "winner_value": "Journal",
+          "loser_value": "Journal",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "DoiResolvedBy",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "DoiResolvedAt",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "OpenAlexWorkID",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "AbstractSource",
+          "winner_value": "openalex",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "PdfUrl",
+          "winner_value": "https://downloads.hindawi.com/journals/wcmc/2022/8531213.pdf",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "PdfAccessType",
+          "winner_value": "open_access_pdf_link",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "PublicationType",
+          "winner_value": "Research Article",
+          "loser_value": "Research Article",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        }
+      ],
+      "doi_state": {
+        "winner": "10.1155/2022/8531213",
+        "loser": null,
+        "action": "KEEP_EXISTING_WINNER_DOI",
+        "reason": "winner already has a DOI, loser has none -- nothing to change"
+      },
+      "child_table_actions": [
+        {
+          "table": "Authors",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 1,
+          "loser_rows": 1,
+          "handled_by_merge_group_today": true,
+          "planned_action": "MERGE",
+          "risk": "low -- existing merge_group() code handles UserID overlap via ON CONFLICT DO NOTHING",
+          "note": "Special-cased in merge_group(): INSERT...ON CONFLICT(UserID,PaperID) DO NOTHING, then DELETE loser rows. A shared UserID is not an error -- ON CONFLICT silently keeps the survivor's existing link."
+        },
+        {
+          "table": "Citations",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "Special-cased in merge_group(): GREATEST()-merge of CitationsCount via INSERT...ON CONFLICT(PaperID) DO UPDATE."
+        },
+        {
+          "table": "ExternalAuthors",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "In dedup_papers.py's SIMPLE_CHILDREN -- remap_simple_child() bulk UPDATE with a per-row SAVEPOINT/conflict-drop fallback."
+        },
+        {
+          "table": "PaperKeywords",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "Listed in SIMPLE_CHILDREN, but the table does not exist in this database today (confirmed via information_schema.tables) -- dead list entry, harmless."
+        },
+        {
+          "table": "CitationsHistory",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "In SIMPLE_CHILDREN -- remap_simple_child() bulk UPDATE with conflict-drop fallback."
+        },
+        {
+          "table": "ReportPaperDecision",
+          "foreign_key": "PaperID",
+          "on_delete": "SET NULL",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "In SIMPLE_CHILDREN -- remap_simple_child() runs BEFORE the loser ResearchPaper row is deleted, so the ON DELETE SET NULL rule is a fallback that should not normally fire; still worth reporting precisely (corrects an earlier, less precise Phase 4B read that said NO ACTION)."
+        },
+        {
+          "table": "ReportPaperDecision",
+          "foreign_key": "MissingResolvedToPaperID",
+          "on_delete": "SET NULL",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": false,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "NOT remapped by any existing logic -- only the table's primary PaperID column is in SIMPLE_CHILDREN. If a loser PaperID is ever referenced here, a real merge today would let it SET NULL silently on delete (not error, not cascade -- just silently lose the 'resolved to' link)."
+        },
+        {
+          "table": "AuthorReviewQueue",
+          "foreign_key": "PaperID",
+          "on_delete": "CASCADE",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": false,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "NOT in SIMPLE_CHILDREN, NOT special-cased, NOT included in snapshot_paper()'s captured child tables. If a loser PaperID ever has rows here, deleting the loser ResearchPaper row would CASCADE-delete them with zero recovery snapshot specific to this table."
+        }
+      ],
+      "authors_shared_uids": [
+        97
+      ],
+      "authors_content_conflicts": [],
+      "journal_id": {
+        "winner": 1803,
+        "loser": null,
+        "backfill_target": null,
+        "backfill_target_journal_name": null,
+        "fk_constraint": "ResearchPaper.JournalID -> Journals.JournalID, ON DELETE NO ACTION"
+      },
+      "verdict": "EXECUTION_READY",
+      "verdict_reasons": []
+    },
+    {
+      "pair": [
+        5548,
+        5549
+      ],
+      "field_actions": [
+        {
+          "field": "JournalID",
+          "winner_value": null,
+          "loser_value": "676",
+          "status": "COPY_LOSER",
+          "recommended_action": "BACKFILL_FROM_LOSER",
+          "reason": "winner is empty, loser has a real value -- deterministic backfill candidate, no ambiguity about which value to use"
+        },
+        {
+          "field": "Title",
+          "winner_value": "Research Article Optimization of Students’ Performance Prediction through an Iterative Model of Frustration Severity",
+          "loser_value": "Optimization of students’ performance prediction through an iterative model of frustration severity",
+          "status": "CONFLICT_EXPECTED",
+          "recommended_action": "NO_ACTION",
+          "reason": "differing values here are the expected shape of a genuine duplicate pair, not an ambiguity requiring a human decision -- the loser's value stays recoverable via the pre-merge snapshot even though it won't be visible in live queries after a merge"
+        },
+        {
+          "field": "Title_En",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "Abstract",
+          "winner_value": "Recent articles reported a massive increase in frustration among weak students due to the outbreak of COVID-19 and Massive Open Online Courses (MOOCs). These students need to be evaluated to detect po...",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "Abstract_En",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "Language",
+          "winner_value": "en",
+          "loser_value": "en",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "DOI",
+          "winner_value": "10.1155/2022/3183492",
+          "loser_value": null,
+          "status": "UNKNOWN",
+          "recommended_action": "SEE_DOI_STATE",
+          "reason": "DOI decisions are governed by doi_state, never by a generic field action"
+        },
+        {
+          "field": "PubYear",
+          "winner_value": "2022",
+          "loser_value": "2022",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "Volume",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "Issue",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "Pages",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "IsVerified",
+          "winner_value": "True",
+          "loser_value": "True",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "ScrapedAt",
+          "winner_value": "2026-05-07 08:32:13.204421+00:00",
+          "loser_value": "2026-05-07 08:32:13.204421+00:00",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "Source",
+          "winner_value": "Scholar",
+          "loser_value": "Scholar",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "RawData_Log",
+          "winner_value": "{'link': 'https://scholar.google.com/citations?view_op=view_citation&hl=en&user=XzD4xzoAAAAJ&pagesize=100&sortby=pubdate&citation_for_view=XzD4xzoAAAAJ:5Ul4iDaHHb8C', 'year': '2022', 'title': 'Researc...",
+          "loser_value": "{'link': 'https://scholar.google.com/citations?view_op=view_citation&hl=en&user=XzD4xzoAAAAJ&pagesize=100&sortby=pubdate&citation_for_view=XzD4xzoAAAAJ:4OULZ7Gr8RgC', 'year': '2022', 'title': 'Optimiz...",
+          "status": "CONFLICT_EXPECTED",
+          "recommended_action": "NO_ACTION",
+          "reason": "differing values here are the expected shape of a genuine duplicate pair, not an ambiguity requiring a human decision -- the loser's value stays recoverable via the pre-merge snapshot even though it won't be visible in live queries after a merge"
+        },
+        {
+          "field": "SearchVector_En",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "DERIVED",
+          "recommended_action": "NO_ACTION",
+          "reason": "tsvector regenerated from Title/Abstract by application code, not an independent data field"
+        },
+        {
+          "field": "SearchVector_Ar",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "DERIVED",
+          "recommended_action": "NO_ACTION",
+          "reason": "tsvector regenerated from Title/Abstract by application code, not an independent data field"
+        },
+        {
+          "field": "NormalizedTitle",
+          "winner_value": "research article optimization of students performance prediction through an iterative model of frustration severity",
+          "loser_value": "optimization of students performance prediction through an iterative model of frustration severity",
+          "status": "CONFLICT_EXPECTED",
+          "recommended_action": "NO_ACTION",
+          "reason": "differing values here are the expected shape of a genuine duplicate pair, not an ambiguity requiring a human decision -- the loser's value stays recoverable via the pre-merge snapshot even though it won't be visible in live queries after a merge"
+        },
+        {
+          "field": "Indexing",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "CitationsByYear",
+          "winner_value": "{'2023': 2, '2024': 1, '2025': 1}",
+          "loser_value": "{'2023': 2, '2024': 1, '2025': 1}",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "identical on both sides"
+        },
+        {
+          "field": "TenantID",
+          "winner_value": "1",
+          "loser_value": "1",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "AffiliationVerified",
+          "winner_value": "True",
+          "loser_value": "True",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "VerificationSource",
+          "winner_value": "openalex",
+          "loser_value": "openalex",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "VerifiedAt",
+          "winner_value": "2026-08-02 10:51:18.606469",
+          "loser_value": "2026-08-02 12:29:05.801973",
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "process/ingestion timestamp describing when THIS row was scraped/verified -- the survivor's own timestamp stays authoritative for the surviving row after a merge; a differing loser timestamp is not a data conflict to resolve (matches merge_group()'s existing, unmodified behavior of never touching this column on the kept row)"
+        },
+        {
+          "field": "VerificationDetails",
+          "winner_value": "{'ror': 'https://ror.org/0403jak37', 'tier': 'openalex', 'country': 'SA', 'confidence': 'fallback', 'decision_basis': 'openalex_albaha_match', 'evidence_trail': [{'url': 'https://www.hindawi.com/journ...",
+          "loser_value": "{'ror': 'https://ror.org/0403jak37', 'tier': 'openalex', 'country': 'SA', 'confidence': 'fallback', 'decision_basis': 'openalex_albaha_match', 'evidence_trail': [{'url': 'https://www.hindawi.com/journ...",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "VenueType",
+          "winner_value": "Journal",
+          "loser_value": "Journal",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "DoiResolvedBy",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "DoiResolvedAt",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "OpenAlexWorkID",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "AbstractSource",
+          "winner_value": "openalex",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "PdfUrl",
+          "winner_value": "https://downloads.hindawi.com/journals/cin/2022/3183492.pdf",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "PdfAccessType",
+          "winner_value": "open_access_pdf_link",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "PublicationType",
+          "winner_value": "Research Article",
+          "loser_value": "Research Article",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        }
+      ],
+      "doi_state": {
+        "winner": "10.1155/2022/3183492",
+        "loser": null,
+        "action": "KEEP_EXISTING_WINNER_DOI",
+        "reason": "winner already has a DOI, loser has none -- nothing to change"
+      },
+      "child_table_actions": [
+        {
+          "table": "Authors",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 1,
+          "loser_rows": 1,
+          "handled_by_merge_group_today": true,
+          "planned_action": "MERGE",
+          "risk": "low -- existing merge_group() code handles UserID overlap via ON CONFLICT DO NOTHING",
+          "note": "Special-cased in merge_group(): INSERT...ON CONFLICT(UserID,PaperID) DO NOTHING, then DELETE loser rows. A shared UserID is not an error -- ON CONFLICT silently keeps the survivor's existing link."
+        },
+        {
+          "table": "Citations",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "Special-cased in merge_group(): GREATEST()-merge of CitationsCount via INSERT...ON CONFLICT(PaperID) DO UPDATE."
+        },
+        {
+          "table": "ExternalAuthors",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "In dedup_papers.py's SIMPLE_CHILDREN -- remap_simple_child() bulk UPDATE with a per-row SAVEPOINT/conflict-drop fallback."
+        },
+        {
+          "table": "PaperKeywords",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "Listed in SIMPLE_CHILDREN, but the table does not exist in this database today (confirmed via information_schema.tables) -- dead list entry, harmless."
+        },
+        {
+          "table": "CitationsHistory",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "In SIMPLE_CHILDREN -- remap_simple_child() bulk UPDATE with conflict-drop fallback."
+        },
+        {
+          "table": "ReportPaperDecision",
+          "foreign_key": "PaperID",
+          "on_delete": "SET NULL",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "In SIMPLE_CHILDREN -- remap_simple_child() runs BEFORE the loser ResearchPaper row is deleted, so the ON DELETE SET NULL rule is a fallback that should not normally fire; still worth reporting precisely (corrects an earlier, less precise Phase 4B read that said NO ACTION)."
+        },
+        {
+          "table": "ReportPaperDecision",
+          "foreign_key": "MissingResolvedToPaperID",
+          "on_delete": "SET NULL",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": false,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "NOT remapped by any existing logic -- only the table's primary PaperID column is in SIMPLE_CHILDREN. If a loser PaperID is ever referenced here, a real merge today would let it SET NULL silently on delete (not error, not cascade -- just silently lose the 'resolved to' link)."
+        },
+        {
+          "table": "AuthorReviewQueue",
+          "foreign_key": "PaperID",
+          "on_delete": "CASCADE",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": false,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "NOT in SIMPLE_CHILDREN, NOT special-cased, NOT included in snapshot_paper()'s captured child tables. If a loser PaperID ever has rows here, deleting the loser ResearchPaper row would CASCADE-delete them with zero recovery snapshot specific to this table."
+        }
+      ],
+      "authors_shared_uids": [
+        104
+      ],
+      "authors_content_conflicts": [
+        {
+          "UserID": 104,
+          "column": "AuthorNameRaw",
+          "winner_value": "S Ahmad, NB Aoun, MA El Affendi, MS Anwar, S Abbas, AA Abd El Latif",
+          "loser_value": "S Ahmad, N Ben Aoun, MAE Affendi, MS Anwar, S Abbas, AAAE Latif"
+        }
+      ],
+      "journal_id": {
+        "winner": null,
+        "loser": 676,
+        "backfill_target": 676,
+        "backfill_target_journal_name": "Computational Intelligence and Neuroscience 2022 (1), 7897669, 2022",
+        "fk_constraint": "ResearchPaper.JournalID -> Journals.JournalID, ON DELETE NO ACTION"
+      },
+      "verdict": "READY_AFTER_IMPLEMENTATION",
+      "verdict_reasons": [
+        "Authors.AuthorNameRaw content differs for shared UserID 104 (same gap as above)",
+        "JournalID backfill needed (loser=676, winner=NULL) -- BACKFILL_FROM_LOSER not implemented in merge_group()"
+      ]
+    },
+    {
+      "pair": [
+        6086,
+        6088
+      ],
+      "field_actions": [
+        {
+          "field": "JournalID",
+          "winner_value": null,
+          "loser_value": "771",
+          "status": "COPY_LOSER",
+          "recommended_action": "BACKFILL_FROM_LOSER",
+          "reason": "winner is empty, loser has a real value -- deterministic backfill candidate, no ambiguity about which value to use"
+        },
+        {
+          "field": "Title",
+          "winner_value": "Research Article Prediction Approaches for Smart Cultivation: A Comparative Study",
+          "loser_value": "Prediction approaches for smart cultivation: a comparative study",
+          "status": "CONFLICT_EXPECTED",
+          "recommended_action": "NO_ACTION",
+          "reason": "differing values here are the expected shape of a genuine duplicate pair, not an ambiguity requiring a human decision -- the loser's value stays recoverable via the pre-merge snapshot even though it won't be visible in live queries after a merge"
+        },
+        {
+          "field": "Title_En",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "Abstract",
+          "winner_value": "Crop cultivation is one of the oldest activities of civilization. For a long time, crop production was carried out based on knowledge passed from generation to generation. However, due to the rapid gr...",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "Abstract_En",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "Language",
+          "winner_value": "en",
+          "loser_value": "en",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "DOI",
+          "winner_value": "10.1155/2021/5534379",
+          "loser_value": null,
+          "status": "UNKNOWN",
+          "recommended_action": "SEE_DOI_STATE",
+          "reason": "DOI decisions are governed by doi_state, never by a generic field action"
+        },
+        {
+          "field": "PubYear",
+          "winner_value": "2021",
+          "loser_value": "2021",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "Volume",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "Issue",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "Pages",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "IsVerified",
+          "winner_value": "True",
+          "loser_value": "True",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "ScrapedAt",
+          "winner_value": "2026-05-07 10:32:09.598577+00:00",
+          "loser_value": "2026-05-07 10:32:09.598577+00:00",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "Source",
+          "winner_value": "Scholar",
+          "loser_value": "Scholar",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "RawData_Log",
+          "winner_value": "{'link': 'https://scholar.google.com/citations?view_op=view_citation&hl=en&user=budxbSoAAAAJ&pagesize=100&sortby=pubdate&citation_for_view=budxbSoAAAAJ:3fE2CSJIrl8C', 'year': '2021', 'title': 'Researc...",
+          "loser_value": "{'link': 'https://scholar.google.com/citations?view_op=view_citation&hl=en&user=budxbSoAAAAJ&pagesize=100&sortby=pubdate&citation_for_view=budxbSoAAAAJ:Tyk-4Ss8FVUC', 'year': '2021', 'title': 'Predict...",
+          "status": "CONFLICT_EXPECTED",
+          "recommended_action": "NO_ACTION",
+          "reason": "differing values here are the expected shape of a genuine duplicate pair, not an ambiguity requiring a human decision -- the loser's value stays recoverable via the pre-merge snapshot even though it won't be visible in live queries after a merge"
+        },
+        {
+          "field": "SearchVector_En",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "DERIVED",
+          "recommended_action": "NO_ACTION",
+          "reason": "tsvector regenerated from Title/Abstract by application code, not an independent data field"
+        },
+        {
+          "field": "SearchVector_Ar",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "DERIVED",
+          "recommended_action": "NO_ACTION",
+          "reason": "tsvector regenerated from Title/Abstract by application code, not an independent data field"
+        },
+        {
+          "field": "NormalizedTitle",
+          "winner_value": "research article prediction approaches for smart cultivation a comparative study",
+          "loser_value": "prediction approaches for smart cultivation a comparative study",
+          "status": "CONFLICT_EXPECTED",
+          "recommended_action": "NO_ACTION",
+          "reason": "differing values here are the expected shape of a genuine duplicate pair, not an ambiguity requiring a human decision -- the loser's value stays recoverable via the pre-merge snapshot even though it won't be visible in live queries after a merge"
+        },
+        {
+          "field": "Indexing",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "CitationsByYear",
+          "winner_value": "{'2021': 4, '2022': 5, '2023': 2, '2024': 4, '2025': 1, '2026': 2}",
+          "loser_value": "{'2021': 4, '2022': 5, '2023': 2, '2024': 4, '2025': 1, '2026': 2}",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "identical on both sides"
+        },
+        {
+          "field": "TenantID",
+          "winner_value": "1",
+          "loser_value": "1",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "AffiliationVerified",
+          "winner_value": "True",
+          "loser_value": "True",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "VerificationSource",
+          "winner_value": "openalex",
+          "loser_value": "openalex",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "VerifiedAt",
+          "winner_value": "2026-08-02 11:22:59.573003",
+          "loser_value": "2026-08-02 12:31:35.391539",
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "process/ingestion timestamp describing when THIS row was scraped/verified -- the survivor's own timestamp stays authoritative for the surviving row after a merge; a differing loser timestamp is not a data conflict to resolve (matches merge_group()'s existing, unmodified behavior of never touching this column on the kept row)"
+        },
+        {
+          "field": "VerificationDetails",
+          "winner_value": "{'ror': 'https://ror.org/0403jak37', 'tier': 'openalex', 'country': 'SA', 'confidence': 'fallback', 'decision_basis': 'openalex_albaha_match', 'evidence_trail': [{'url': 'https://onlinelibrary.wiley.c...",
+          "loser_value": "{'ror': 'https://ror.org/0403jak37', 'tier': 'openalex', 'country': 'SA', 'confidence': 'fallback', 'decision_basis': 'openalex_albaha_match', 'evidence_trail': [{'url': 'https://onlinelibrary.wiley.c...",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "VenueType",
+          "winner_value": "Journal",
+          "loser_value": "Journal",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "DoiResolvedBy",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "DoiResolvedAt",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "OpenAlexWorkID",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "AbstractSource",
+          "winner_value": "openalex",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "PdfUrl",
+          "winner_value": "https://downloads.hindawi.com/journals/complexity/2021/5534379.pdf",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "PdfAccessType",
+          "winner_value": "open_access_pdf_link",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "PublicationType",
+          "winner_value": "Research Article",
+          "loser_value": "Research Article",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        }
+      ],
+      "doi_state": {
+        "winner": "10.1155/2021/5534379",
+        "loser": null,
+        "action": "KEEP_EXISTING_WINNER_DOI",
+        "reason": "winner already has a DOI, loser has none -- nothing to change"
+      },
+      "child_table_actions": [
+        {
+          "table": "Authors",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 1,
+          "loser_rows": 1,
+          "handled_by_merge_group_today": true,
+          "planned_action": "MERGE",
+          "risk": "low -- existing merge_group() code handles UserID overlap via ON CONFLICT DO NOTHING",
+          "note": "Special-cased in merge_group(): INSERT...ON CONFLICT(UserID,PaperID) DO NOTHING, then DELETE loser rows. A shared UserID is not an error -- ON CONFLICT silently keeps the survivor's existing link."
+        },
+        {
+          "table": "Citations",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "Special-cased in merge_group(): GREATEST()-merge of CitationsCount via INSERT...ON CONFLICT(PaperID) DO UPDATE."
+        },
+        {
+          "table": "ExternalAuthors",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "In dedup_papers.py's SIMPLE_CHILDREN -- remap_simple_child() bulk UPDATE with a per-row SAVEPOINT/conflict-drop fallback."
+        },
+        {
+          "table": "PaperKeywords",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "Listed in SIMPLE_CHILDREN, but the table does not exist in this database today (confirmed via information_schema.tables) -- dead list entry, harmless."
+        },
+        {
+          "table": "CitationsHistory",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "In SIMPLE_CHILDREN -- remap_simple_child() bulk UPDATE with conflict-drop fallback."
+        },
+        {
+          "table": "ReportPaperDecision",
+          "foreign_key": "PaperID",
+          "on_delete": "SET NULL",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "In SIMPLE_CHILDREN -- remap_simple_child() runs BEFORE the loser ResearchPaper row is deleted, so the ON DELETE SET NULL rule is a fallback that should not normally fire; still worth reporting precisely (corrects an earlier, less precise Phase 4B read that said NO ACTION)."
+        },
+        {
+          "table": "ReportPaperDecision",
+          "foreign_key": "MissingResolvedToPaperID",
+          "on_delete": "SET NULL",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": false,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "NOT remapped by any existing logic -- only the table's primary PaperID column is in SIMPLE_CHILDREN. If a loser PaperID is ever referenced here, a real merge today would let it SET NULL silently on delete (not error, not cascade -- just silently lose the 'resolved to' link)."
+        },
+        {
+          "table": "AuthorReviewQueue",
+          "foreign_key": "PaperID",
+          "on_delete": "CASCADE",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": false,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "NOT in SIMPLE_CHILDREN, NOT special-cased, NOT included in snapshot_paper()'s captured child tables. If a loser PaperID ever has rows here, deleting the loser ResearchPaper row would CASCADE-delete them with zero recovery snapshot specific to this table."
+        }
+      ],
+      "authors_shared_uids": [
+        105
+      ],
+      "authors_content_conflicts": [
+        {
+          "UserID": 105,
+          "column": "AuthorNameRaw",
+          "winner_value": "A Chakrabarty, N Mansoor, MI Uddin, MH Al-adaileh, N Alsharif, ...",
+          "loser_value": "A Chakrabarty, N Mansoor, MI Uddin, MH Al-Adaileh, N Alsharif, ..."
+        }
+      ],
+      "journal_id": {
+        "winner": null,
+        "loser": 771,
+        "backfill_target": 771,
+        "backfill_target_journal_name": "Complexity",
+        "fk_constraint": "ResearchPaper.JournalID -> Journals.JournalID, ON DELETE NO ACTION"
+      },
+      "verdict": "READY_AFTER_IMPLEMENTATION",
+      "verdict_reasons": [
+        "Authors.AuthorNameRaw content differs for shared UserID 105 (same gap as above)",
+        "JournalID backfill needed (loser=771, winner=NULL) -- BACKFILL_FROM_LOSER not implemented in merge_group()"
+      ]
+    },
+    {
+      "pair": [
+        6153,
+        6189
+      ],
+      "field_actions": [
+        {
+          "field": "JournalID",
+          "winner_value": "676",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "Title",
+          "winner_value": "Semantic Sentiment Classification for COVID‐19 Tweets Using Universal Sentence Encoder",
+          "loser_value": "Research Article Semantic Sentiment Classification for COVID-19 Tweets Using Universal Sentence Encoder",
+          "status": "CONFLICT_EXPECTED",
+          "recommended_action": "NO_ACTION",
+          "reason": "differing values here are the expected shape of a genuine duplicate pair, not an ambiguity requiring a human decision -- the loser's value stays recoverable via the pre-merge snapshot even though it won't be visible in live queries after a merge"
+        },
+        {
+          "field": "Title_En",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "Abstract",
+          "winner_value": "The spread of data on the web has increased in the last twenty years. One of the reasons is the appearance of social media. The data on social sites describe many real-life events in our daily lives. ...",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "Abstract_En",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "Language",
+          "winner_value": "en",
+          "loser_value": "en",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "DOI",
+          "winner_value": "10.1155/2022/6354543",
+          "loser_value": null,
+          "status": "UNKNOWN",
+          "recommended_action": "SEE_DOI_STATE",
+          "reason": "DOI decisions are governed by doi_state, never by a generic field action"
+        },
+        {
+          "field": "PubYear",
+          "winner_value": "2022",
+          "loser_value": "2022",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "Volume",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "Issue",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "Pages",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "IsVerified",
+          "winner_value": "True",
+          "loser_value": "True",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "ScrapedAt",
+          "winner_value": "2026-05-07 10:34:54.078221+00:00",
+          "loser_value": "2026-05-07 10:34:54.078221+00:00",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "Source",
+          "winner_value": "Scholar",
+          "loser_value": "Scholar",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "RawData_Log",
+          "winner_value": "{'link': 'https://scholar.google.com/citations?view_op=view_citation&hl=en&user=Zs28nxwAAAAJ&pagesize=100&citation_for_view=Zs28nxwAAAAJ:olpn-zPbct0C', 'year': '2022', 'title': 'Semantic Sentiment Cla...",
+          "loser_value": "{'link': 'https://scholar.google.com/citations?view_op=view_citation&hl=en&user=Zs28nxwAAAAJ&pagesize=100&citation_for_view=Zs28nxwAAAAJ:PR6Y55bgFSsC', 'year': '2022', 'title': 'Research Article Seman...",
+          "status": "CONFLICT_EXPECTED",
+          "recommended_action": "NO_ACTION",
+          "reason": "differing values here are the expected shape of a genuine duplicate pair, not an ambiguity requiring a human decision -- the loser's value stays recoverable via the pre-merge snapshot even though it won't be visible in live queries after a merge"
+        },
+        {
+          "field": "SearchVector_En",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "DERIVED",
+          "recommended_action": "NO_ACTION",
+          "reason": "tsvector regenerated from Title/Abstract by application code, not an independent data field"
+        },
+        {
+          "field": "SearchVector_Ar",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "DERIVED",
+          "recommended_action": "NO_ACTION",
+          "reason": "tsvector regenerated from Title/Abstract by application code, not an independent data field"
+        },
+        {
+          "field": "NormalizedTitle",
+          "winner_value": "semantic sentiment classification for covid19 tweets using universal sentence encoder",
+          "loser_value": "research article semantic sentiment classification for covid19 tweets using universal sentence encoder",
+          "status": "CONFLICT_EXPECTED",
+          "recommended_action": "NO_ACTION",
+          "reason": "differing values here are the expected shape of a genuine duplicate pair, not an ambiguity requiring a human decision -- the loser's value stays recoverable via the pre-merge snapshot even though it won't be visible in live queries after a merge"
+        },
+        {
+          "field": "Indexing",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "CitationsByYear",
+          "winner_value": "{'2023': 5, '2024': 2, '2025': 2, '2026': 1}",
+          "loser_value": null,
+          "status": "MERGE",
+          "recommended_action": "MERGE_ELEMENTWISE_MAX",
+          "reason": "reconciled today by dedup_papers.py's merge_citation_fields() (element-wise MAX per year) -- existing, repository-backed rule, not a conflict"
+        },
+        {
+          "field": "TenantID",
+          "winner_value": "1",
+          "loser_value": "1",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "AffiliationVerified",
+          "winner_value": "False",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "VerificationSource",
+          "winner_value": "openalex",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "VerifiedAt",
+          "winner_value": "2026-08-02 11:26:57.500323",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "VerificationDetails",
+          "winner_value": "{'tier': 'openalex', 'reason': 'no_albaha_complete_affiliations', 'authors': 4, 'confidence': 'fallback', 'decision_basis': 'openalex_complete_affiliations', 'evidence_trail': [{'url': 'https://www.hi...",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "VenueType",
+          "winner_value": "Journal",
+          "loser_value": "Journal",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        },
+        {
+          "field": "DoiResolvedBy",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "DoiResolvedAt",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "OpenAlexWorkID",
+          "winner_value": null,
+          "loser_value": null,
+          "status": "EMPTY_BOTH",
+          "recommended_action": "NO_ACTION",
+          "reason": "both empty"
+        },
+        {
+          "field": "AbstractSource",
+          "winner_value": "openalex",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "PdfUrl",
+          "winner_value": "https://downloads.hindawi.com/journals/cin/2022/6354543.pdf",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "PdfAccessType",
+          "winner_value": "open_access_pdf_link",
+          "loser_value": null,
+          "status": "KEEP_WINNER",
+          "recommended_action": "NO_ACTION",
+          "reason": "loser has no value to contribute"
+        },
+        {
+          "field": "PublicationType",
+          "winner_value": "Research Article",
+          "loser_value": "Research Article",
+          "status": "EQUAL",
+          "recommended_action": "NO_ACTION",
+          "reason": "equal values"
+        }
+      ],
+      "doi_state": {
+        "winner": "10.1155/2022/6354543",
+        "loser": null,
+        "action": "KEEP_EXISTING_WINNER_DOI",
+        "reason": "winner already has a DOI, loser has none -- nothing to change"
+      },
+      "child_table_actions": [
+        {
+          "table": "Authors",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 1,
+          "loser_rows": 1,
+          "handled_by_merge_group_today": true,
+          "planned_action": "MERGE",
+          "risk": "low -- existing merge_group() code handles UserID overlap via ON CONFLICT DO NOTHING",
+          "note": "Special-cased in merge_group(): INSERT...ON CONFLICT(UserID,PaperID) DO NOTHING, then DELETE loser rows. A shared UserID is not an error -- ON CONFLICT silently keeps the survivor's existing link."
+        },
+        {
+          "table": "Citations",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "Special-cased in merge_group(): GREATEST()-merge of CitationsCount via INSERT...ON CONFLICT(PaperID) DO UPDATE."
+        },
+        {
+          "table": "ExternalAuthors",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "In dedup_papers.py's SIMPLE_CHILDREN -- remap_simple_child() bulk UPDATE with a per-row SAVEPOINT/conflict-drop fallback."
+        },
+        {
+          "table": "PaperKeywords",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "Listed in SIMPLE_CHILDREN, but the table does not exist in this database today (confirmed via information_schema.tables) -- dead list entry, harmless."
+        },
+        {
+          "table": "CitationsHistory",
+          "foreign_key": "PaperID",
+          "on_delete": "NO ACTION",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "In SIMPLE_CHILDREN -- remap_simple_child() bulk UPDATE with conflict-drop fallback."
+        },
+        {
+          "table": "ReportPaperDecision",
+          "foreign_key": "PaperID",
+          "on_delete": "SET NULL",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": true,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "In SIMPLE_CHILDREN -- remap_simple_child() runs BEFORE the loser ResearchPaper row is deleted, so the ON DELETE SET NULL rule is a fallback that should not normally fire; still worth reporting precisely (corrects an earlier, less precise Phase 4B read that said NO ACTION)."
+        },
+        {
+          "table": "ReportPaperDecision",
+          "foreign_key": "MissingResolvedToPaperID",
+          "on_delete": "SET NULL",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": false,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "NOT remapped by any existing logic -- only the table's primary PaperID column is in SIMPLE_CHILDREN. If a loser PaperID is ever referenced here, a real merge today would let it SET NULL silently on delete (not error, not cascade -- just silently lose the 'resolved to' link)."
+        },
+        {
+          "table": "AuthorReviewQueue",
+          "foreign_key": "PaperID",
+          "on_delete": "CASCADE",
+          "winner_rows": 0,
+          "loser_rows": 0,
+          "handled_by_merge_group_today": false,
+          "planned_action": "NO_ACTION",
+          "risk": "none -- loser has 0 rows in this table, nothing to remap",
+          "note": "NOT in SIMPLE_CHILDREN, NOT special-cased, NOT included in snapshot_paper()'s captured child tables. If a loser PaperID ever has rows here, deleting the loser ResearchPaper row would CASCADE-delete them with zero recovery snapshot specific to this table."
+        }
+      ],
+      "authors_shared_uids": [
+        112
+      ],
+      "authors_content_conflicts": [
+        {
+          "UserID": 112,
+          "column": "AuthorNameRaw",
+          "winner_value": "IE Fattoh, F Kamal Alsheref, WM Ead, AM Youssef",
+          "loser_value": "IE Fattoh, FK Alsheref, WM Ead, AM Youssef"
+        }
+      ],
+      "journal_id": {
+        "winner": 676,
+        "loser": null,
+        "backfill_target": null,
+        "backfill_target_journal_name": null,
+        "fk_constraint": "ResearchPaper.JournalID -> Journals.JournalID, ON DELETE NO ACTION"
+      },
+      "verdict": "READY_AFTER_IMPLEMENTATION",
+      "verdict_reasons": [
+        "Authors.AuthorNameRaw content differs for shared UserID 112 (same gap as above)"
+      ]
+    }
+  ]
+}

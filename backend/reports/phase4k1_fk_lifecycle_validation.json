@@ -1,0 +1,150 @@
+{
+  "phase": "4K.1",
+  "title": "MergeApproval FK Lifecycle Fix & Safety Validation",
+  "read_only_except_migration_file_edit": true,
+  "canary_pair": {"survivor_paper_id": 5232, "loser_paper_id": 5482},
+  "reference_fingerprint": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb",
+  "fresh_fingerprint_this_phase": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb",
+  "fingerprint_result": "MATCH",
+  "fingerprint_confirmation_count": 8,
+  "chosen_fk_design": {
+    "option": "D",
+    "label": "Remove LoserPaperID's foreign key entirely",
+    "survivor_paper_id_on_delete": "NO ACTION (unchanged)",
+    "loser_paper_id_on_delete": "no FK constraint at all (Phase 4K.1 change)"
+  },
+  "rejected_alternatives": [
+    {"option": "A", "label": "LoserPaperID ON DELETE SET NULL", "rejected_because": "Silently destroys the loser's real identity from the column at exactly the moment (post-merge) it matters most; only indirectly reconstructable via ExecutionAuditLogID -> AuditLog.TargetID, and only for EXECUTED rows"},
+    {"option": "B", "label": "Both SurvivorPaperID and LoserPaperID ON DELETE SET NULL", "rejected_because": "Same defect as A, plus removes the survivor's own safety-net protection for no offsetting benefit"},
+    {"option": "C", "label": "LoserPaperID ON DELETE CASCADE", "rejected_because": "Deletes the MergeApproval row itself the instant the loser is deleted, destroying the exact audit trail the table exists to preserve -- directly contradicts the migration's own stated design rationale"}
+  ],
+  "live_precedent": {
+    "table": "AuditLog",
+    "column": "TargetID",
+    "has_fk_constraint": false,
+    "only_fks_on_table": ["TenantID", "UserID"],
+    "directly_analogous": "structurally similar, not perfectly identical (TargetID is polymorphic via TargetType; LoserPaperID is monomorphic)",
+    "used_as": "evidence that dropping the FK is a safe, already-in-production pattern in this exact schema"
+  },
+  "migration_change": {
+    "file": "backend/analytics/migrations/sprint11_merge_approval.sql",
+    "applied_to_any_database": false,
+    "diff_summary": "LoserPaperID INT NOT NULL REFERENCES \"ResearchPaper\"(\"PaperID\") ON DELETE NO ACTION  ->  LoserPaperID INT NOT NULL",
+    "survivor_paper_id_unchanged": true
+  },
+  "implementation_files_changed_beyond_migration": [],
+  "files_modified": [
+    "backend/analytics/migrations/sprint11_merge_approval.sql",
+    "backend/tools/test_merge_executor.py"
+  ],
+  "files_created": [
+    "backend/tools/test_fk_lifecycle.py",
+    "backend/reports/phase4k1_fk_lifecycle_fix.md",
+    "backend/reports/phase4k1_fk_lifecycle_validation.json"
+  ],
+  "database_level_validation_method": {
+    "type": "python_simulation",
+    "real_postgresql_instance_available": false,
+    "reason": "no local psql/postgres binary found; no second, non-production database configured in .env; production is read-only for this phase",
+    "simulation_mechanism": "ExecutorFakeCursor.enforce_loser_paper_id_fk -- encodes PostgreSQL's real, documented, undeferred ON DELETE NO ACTION semantics directly (a DELETE against a row referenced by such a constraint fails immediately if a referencing row exists)",
+    "faithfulness_proof": "the simulation was first used to reproduce the exact Phase 4K failure under the original schema, before being used to prove the corrected schema removes it -- not merely asserted to work",
+    "cannot_prove": ["real Postgres error codes/messages", "transaction isolation-level interactions", "DEFERRABLE constraint timing under concurrent load", "index behavior"],
+    "recommended_stronger_validation": "apply the corrected migration once against a real disposable/staging PostgreSQL instance (or via apply_migration.py --dry-run's real-SQL-then-rollback capability) and confirm a real DELETE succeeds, before ever applying it to production"
+  },
+  "new_lifecycle_test_suite": {
+    "file": "backend/tools/test_fk_lifecycle.py",
+    "tests": 6,
+    "test_classes": [
+      {
+        "name": "OriginalDesignReproducesThePhase4KFailure",
+        "tests": ["test_delete_fails_with_simulated_fk_violation", "test_failure_leaves_no_partial_corruption"],
+        "proves": "the exact Phase 4K failure mode reproduces under the original schema, and leaves zero partial corruption on failure"
+      },
+      {
+        "name": "CorrectedDesignSucceeds",
+        "tests": [
+          "test_full_lifecycle_reaches_executed_with_no_fk_violation",
+          "test_loser_actually_deleted",
+          "test_approval_history_survives_the_loser_deletion",
+          "test_execution_audit_log_id_cross_reference_also_recoverable"
+        ],
+        "proves": "the corrected schema allows the full approve -> execute -> EXECUTED lifecycle to complete, with the merged pair's historical identity directly and independently recoverable"
+      }
+    ]
+  },
+  "requirement_6_checklist": {
+    "two_research_paper_records_exist": "PASS",
+    "merge_approval_row_approved": "PASS",
+    "references_survivor_and_loser": "PASS",
+    "merge_lifecycle_deletes_loser": "PASS",
+    "approval_history_survives": "PASS",
+    "transaction_reaches_executed": "PASS",
+    "no_fk_violation_occurs": "PASS",
+    "historical_identity_recoverable": "PASS",
+    "rollback_loser_remains_on_failure": "PASS",
+    "rollback_approval_not_falsely_executed": "PASS",
+    "rollback_no_partial_historical_corruption": "PASS"
+  },
+  "executor_order_recheck": {
+    "sequence": "merge_group() [remaps -> AuditLog -> loser DELETE] -> MergeApproval EXECUTED update -> (caller) commit",
+    "valid_under_corrected_fk_design": true,
+    "valid_under_original_fk_design": false,
+    "transaction_correctness_classification": "SOUND_WITH_REQUIRED_TRANSACTION_WRAPPING",
+    "classification_reasoning": "Exception propagation / no-internal-commit discipline is real and tested (Phase 4J's M/N/O/P, re-run unchanged, 39/39 passing); no real caller wraps execute_approved_merge() in a transaction anywhere in the repository yet (grep confirms only merge_executor.py and its own tests reference it)"
+  },
+  "non_blocking_findings": {
+    "auditlog_userid_hardcoded_null": {
+      "confirmed": true,
+      "location": "dedup_papers.py::merge_group()'s own AuditLog INSERT",
+      "unchanged_this_phase": true,
+      "prevents_executing_actor_auditability": true,
+      "must_fix_before_phase_4L": false,
+      "must_fix_before": "any general, unsupervised, multi-user production rollout",
+      "acceptable_for": "a single, human-supervised canary execution, where the operator is externally identifiable"
+    },
+    "tenant_scoping_absent_in_has_litrix_perm": {
+      "confirmed": true,
+      "location": "accounts/models.py::User.get_permissions() -- no TenantID clause in its query",
+      "unchanged_this_phase": true,
+      "blocker_for_single_canary": false,
+      "blocker_for_broader_rollout": true,
+      "reason_not_blocking_for_canary": "both ResearchPaper rows (5232, 5482) share TenantID=1, live-reconfirmed this phase",
+      "must_fix_before": "any multi-tenant execution"
+    }
+  },
+  "live_canary_revalidation": {
+    "performed_read_only": true,
+    "both_exist": true,
+    "survivor_direction_unchanged": true,
+    "fingerprint_match": true,
+    "duplicate_safety": {"pair_confidence": "high", "hard_exclusion_reason": null},
+    "doi_safety_claimed_elsewhere": false,
+    "idempotency_verdict": "NOT_PREVIOUSLY_EXECUTED",
+    "auditlog_rows_referencing_canary_pair": 0,
+    "dependency_gaps": [],
+    "journal_state": "WINNER_ONLY",
+    "journal_execution_permitted": true,
+    "author_content_conflicts": [],
+    "merge_approval_table_exists_in_production": false
+  },
+  "tests": {
+    "test_dedup_papers.py": {"passed": 18, "total": 18},
+    "test_merge_plan_generator.py": {"passed": 43, "total": 43},
+    "test_merge_execution_safety.py": {"passed": 68, "total": 68},
+    "test_merge_approval.py": {"passed": 45, "total": 45},
+    "test_merge_executor.py": {"passed": 39, "total": 39, "changed_this_phase": false, "note": "gained an opt-in, default-off FK-simulation flag with zero behavioral change to existing tests"},
+    "test_fk_lifecycle.py": {"passed": 6, "total": 6, "new_this_phase": true},
+    "total": {"passed": 219, "total": 219, "regressions": 0}
+  },
+  "accounting": {
+    "production_db_writes": 0,
+    "production_schema_changes": 0,
+    "production_migrations_applied": 0,
+    "production_merges": 0,
+    "doi_changes": 0,
+    "production_merge_approval_rows_created": 0,
+    "network_calls": 0
+  },
+  "final_decision": "B",
+  "final_decision_label": "FK_FIX_IMPLEMENTED_BUT_REQUIRES_STRONGER_DATABASE_LEVEL_VALIDATION"
+}

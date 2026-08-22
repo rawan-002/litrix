@@ -1,0 +1,169 @@
+{
+  "phase": "4X",
+  "title": "Author Identity Conflict Policy Review",
+  "read_only": true,
+  "code_modified": false,
+  "task_a_safety_boundary": {
+    "current_comparison": "exact Python string equality, case/whitespace/punctuation-sensitive, no transformation applied",
+    "current_comparison_location": "backend/tools/dedup_papers.py::author_content_conflicts(), line ~888: if w_raw != l_raw",
+    "identity_key": "UserID (already deterministic, established upstream, never decided by AuthorNameRaw)",
+    "deliberate_test_proving_intent": "test_dedup_papers.py::AuthorContentConflictDetection::test_different_raw_formatting_is_an_explicit_conflict",
+    "normalize_name_location": "backend/analytics/disambiguation/pipeline.py, lines 72-85",
+    "normalize_name_deterministic": true,
+    "normalize_name_lossy": true,
+    "normalize_name_lossy_proof": [
+      {"a": "Al-Amin", "b": "Al Amin", "normalized_a": "al amin", "normalized_b": "al amin", "collapse": true},
+      {"a": "D'Angelo", "b": "D Angelo", "normalized_a": "d angelo", "normalized_b": "d angelo", "collapse": true},
+      {"a": "M Ahmed", "b": "Mohammed Ahmed", "normalized_a": "m ahmed", "normalized_b": "mohammed ahmed", "collapse": false, "note": "control case, confirms no initial-expansion"}
+    ],
+    "can_collapse_distinct_real_identities": true,
+    "existing_use_of_normalize_name": {
+      "used_for": "co-author identity linking (which UserID to attach to a scraped co-author), NOT display cleanup",
+      "tier_4_name_and_albaha": {"confidence": 0.85, "requires_independent_signal": "Al-Baha University affiliation match", "auto_links": true},
+      "tier_5_fuzzy": {"mechanism": "pg_trgm SIMILARITY(), genuinely fuzzy not just normalized", "confidence_cap": 0.80, "auto_link_threshold": 0.70, "below_threshold_routes_to": "AuthorReviewQueue for human review"},
+      "cross_referenced_from_merge_safety_code": false
+    },
+    "claude_md_policy_exact_quote": "Deterministic identifiers only for matching: Scholar_ID, DOI, ORCID, OpenAlex Author ID. Never name-based fuzzy matching for cross-attribution.",
+    "602_incident_exact_nature": "primary paper-ownership attribution (which researcher's profile does this whole paper belong to) was decided by name matching; fixed by making that specific decision flow only from Scholar_ID",
+    "disambiguation_pipeline_scope": "secondary co-author linkage only; never touches the trigger researcher's own primary link; gated by confidence threshold + human review fallback",
+    "policy_tension_identified": true,
+    "policy_tension_description": "disambiguation/pipeline.py's Tier 4/5 already perform name-based (and even pg_trgm fuzzy) matching for identity linkage in production today; whether this falls inside or outside CLAUDE.md's literal policy text is a genuine, unresolved data-governance question this phase surfaces but does not resolve",
+    "current_authornameraw_conflict_question_scope": "narrower than either the 602-incident or the disambiguation pipeline's use case: UserID identity is already fixed on both sides in every examined case; the only question is whether a display-text field for that already-agreed identity is equivalent"
+  },
+  "name_difference_taxonomy": [
+    {"category": "A", "name": "Case-only", "found_in_real_data": true, "example_count": 1, "examples": ["6086/6088: Al-adaileh vs Al-Adaileh"], "normalize_name_collapses": true, "can_merge_distinct_people": false, "repository_policy_support": false, "classification": "SAFE_FORMATTING_ONLY_IN_ISOLATION"},
+    {"category": "B", "name": "Whitespace only", "found_in_real_data": false, "example_count": 0, "normalize_name_collapses": true, "can_merge_distinct_people": false, "repository_policy_support": false, "classification": "SAFE_FORMATTING_ONLY_IN_ISOLATION"},
+    {"category": "C", "name": "Unicode/diacritic normalization", "found_in_real_data": "unconfirmed for this conflict set", "example_count": 0, "normalize_name_collapses": true, "can_merge_distinct_people": "unclear, not resolved", "repository_policy_support": false, "classification": "UNKNOWN"},
+    {"category": "D", "name": "Punctuation-only", "found_in_real_data": true, "example_count": 1, "examples": ["overlaps with A: 6086/6088 hyphen"], "normalize_name_collapses": true, "can_merge_distinct_people": true, "proof": "Al-Amin/Al Amin, D'Angelo/D Angelo", "repository_policy_support": false, "classification": "UNSAFE_AUTOMATICALLY"},
+    {"category": "E", "name": "Initial/token segmentation", "found_in_real_data": true, "example_count": 4, "examples": ["5207/5481", "6145/6190", "6153/6189", "5548/5549"], "normalize_name_collapses": false, "can_merge_distinct_people": "not directly testable by this function; a more aggressive tokenizer would carry real risk", "repository_policy_support": false, "classification": "HUMAN_REVIEW_ONLY", "note": "dominant real category"},
+    {"category": "F", "name": "Initial expansion/contraction", "found_in_real_data": false, "example_count": 0, "normalize_name_collapses": false, "can_merge_distinct_people": "n/a", "repository_policy_support": false, "classification": "HUMAN_REVIEW_ONLY"},
+    {"category": "G", "name": "Token reordering", "found_in_real_data": false, "example_count": 0, "normalize_name_collapses": "not applicable, function does not reorder", "can_merge_distinct_people": "theoretical only", "repository_policy_support": false, "classification": "UNKNOWN"},
+    {"category": "H", "name": "Different token counts", "found_in_real_data": true, "example_count": 1, "examples": ["6107/6109: 1 name vs 4 names"], "normalize_name_collapses": false, "can_merge_distinct_people": "n/a, not a formatting question", "repository_policy_support": false, "classification": "UNSAFE_AUTOMATICALLY"},
+    {"category": "I", "name": "Different author cardinality under same UserID", "found_in_real_data": true, "example_count": 1, "examples": ["6107/6109"], "normalize_name_collapses": false, "can_merge_distinct_people": "high risk if auto-resolved, would discard real co-author names", "repository_policy_support": false, "classification": "UNSAFE_AUTOMATICALLY", "note": "likely upstream scraper data-quality issue, separate from merge-safety scope"},
+    {"category": "J", "name": "Empty vs populated", "found_in_real_data": true, "example_count": 1, "examples": ["5645/7618, UserID=50: '' vs 'Saad Alqithami'"], "normalize_name_collapses": "n/a (empty string does not collapse onto a populated one)", "can_merge_distinct_people": false, "repository_policy_support": "analogous precedent exists (journal_id_decision's LOSER_ONLY_BACKFILL pattern for a different field)", "classification": "HUMAN_REVIEW_ONLY_FOR_NOW", "note": "most plausible candidate for a future narrow, deterministic backfill rule; not decided or implemented here"}
+  ],
+  "loser_only_backfill_candidates": [
+    {
+      "pair": [5548, 5549], "survivor": 5548, "loser": 5549,
+      "journal_id_state": "LOSER_ONLY_BACKFILL", "winner_journal_id": null, "loser_journal_id": 676,
+      "user_id": 104,
+      "survivor_author_name_raw": "S Ahmad, NB Aoun, MA El Affendi, MS Anwar, S Abbas, AA Abd El Latif",
+      "loser_author_name_raw": "S Ahmad, N Ben Aoun, MAE Affendi, MS Anwar, S Abbas, AAAE Latif",
+      "normalize_name_collapse": false,
+      "taxonomy_category": "E",
+      "cross_attribution_risk": "none (UserID already fixed both sides)",
+      "data_loss_risk_if_auto_resolved": "medium - genuine ambiguity about tokenization equivalence",
+      "classification": "HUMAN_REVIEW_ONLY"
+    },
+    {
+      "pair": [6086, 6088], "survivor": 6086, "loser": 6088,
+      "journal_id_state": "LOSER_ONLY_BACKFILL", "winner_journal_id": null, "loser_journal_id": 771,
+      "user_id": 105,
+      "survivor_author_name_raw": "A Chakrabarty, N Mansoor, MI Uddin, MH Al-adaileh, N Alsharif, ...",
+      "loser_author_name_raw": "A Chakrabarty, N Mansoor, MI Uddin, MH Al-Adaileh, N Alsharif, ...",
+      "normalize_name_collapse": true,
+      "taxonomy_category": "A+D",
+      "cross_attribution_risk": "none (UserID already fixed both sides)",
+      "data_loss_risk_if_auto_resolved": "low for this specific pair, but the general transformation class (punctuation-stripping) is proven unsafe in the general case",
+      "classification": "NOT_SUFFICIENT_FOR_AUTOMATIC_EXECUTION_DESPITE_COLLAPSE",
+      "note": "explicitly does NOT qualify for production execution merely because normalize_name happens to resolve it"
+    },
+    {
+      "pair": [6107, 6109], "survivor": 6107, "loser": 6109,
+      "journal_id_state": "LOSER_ONLY_BACKFILL", "winner_journal_id": null, "loser_journal_id": 1104,
+      "user_id": 69,
+      "survivor_author_name_raw": "AM Alomari",
+      "loser_author_name_raw": "A Alomari, F Comeau, W Phillips, N Aslam",
+      "normalize_name_collapse": false,
+      "taxonomy_category": "H+I",
+      "cross_attribution_risk": "none directly, but real data-completeness risk",
+      "data_loss_risk_if_auto_resolved": "high - would silently discard 3 real co-author names",
+      "classification": "HUMAN_REVIEW_ONLY",
+      "note": "possible upstream scraper data-quality issue, not a formatting question"
+    }
+  ],
+  "precedent_search": {
+    "case_insensitive_author_comparison_in_merge_safety_path": false,
+    "normalize_name_cross_referenced_from_merge_safety_files": false,
+    "verify_attributions_py_mechanism": "re-verifies paper-title membership against Scholar's authoritative per-author article list; unrelated to AuthorNameRaw text comparison",
+    "existing_human_review_mechanism_for_same_question_shape": "AuthorReviewQueue",
+    "existing_human_review_mechanism_real_endpoint": "backend/analytics/reconciliation_views.py::review_queue_decide()",
+    "existing_human_review_mechanism_scope": "co-author linkage decisions, not merge-time AuthorNameRaw conflicts -- structurally closest available precedent",
+    "new_workflow_proposed_this_phase": false,
+    "new_workflow_implemented_this_phase": false
+  },
+  "policy_options_evaluated": [
+    {"option": "A", "label": "Keep exact-match rule unchanged", "false_positive_risk": "none", "cross_attribution_risk": "none", "claude_md_compatible": true, "changes_automatic_behavior": false, "unlocks_candidates": 0, "weakens_protection_elsewhere": false},
+    {"option": "B", "label": "Auto-ignore strictly case-only differences", "false_positive_risk": "low but nonzero", "cross_attribution_risk": "low but nonzero", "claude_md_compatible": "debatable", "changes_automatic_behavior": true, "unlocks_candidates": 1, "weakens_protection_elsewhere": true},
+    {"option": "C", "label": "Apply normalize_name() automatically to all comparisons", "false_positive_risk": "high, disproven safe this phase", "cross_attribution_risk": "elevated", "claude_md_compatible": false, "changes_automatic_behavior": true, "unlocks_candidates": "up to 8 nominally, but 6 of 8 not actually resolved by this function", "weakens_protection_elsewhere": true, "note": "the option this phase was explicitly told to try to disprove; disproven directly"},
+    {"option": "D", "label": "Normalization downgrades BLOCK to HUMAN_REVIEW_REQUIRED only", "false_positive_risk": "low, human makes final call", "cross_attribution_risk": "low", "claude_md_compatible": true, "changes_automatic_behavior": false, "unlocks_candidates": "0 immediately, structurally enables all 8 once a human-decision surface is built", "weakens_protection_elsewhere": false, "implementation_complexity": "medium", "strongest_repository_precedent_match": true},
+    {"option": "E", "label": "Auto-resolve only empty-vs-populated (taxonomy category J)", "false_positive_risk": "very low", "cross_attribution_risk": "very low", "claude_md_compatible": "arguably yes, not a name-matching operation at all, structurally a backfill decision", "changes_automatic_behavior": "yes, narrowly", "unlocks_candidates": 1, "unlocks_which": [5645, 7618], "weakens_protection_elsewhere": false, "note": "does not address any of the 3 LOSER_ONLY_BACKFILL candidates"}
+  ],
+  "final_decision": "C",
+  "final_decision_label": "HUMAN_REVIEW_PATH_IS_REQUIRED",
+  "final_decision_reasoning": "normalize_name() may inform a future human-review surface but must not automatically decide populated-vs-populated AuthorNameRaw conflicts; direct proof of collision risk found this phase; the one real repository precedent (disambiguation pipeline) itself relies on human review at this confidence range, not blanket automation; option E (empty-vs-populated) is a real, narrow, evidence-backed exception but does not resolve the LOSER_ONLY_BACKFILL bottleneck since none of the 3 candidates have that shape",
+  "none_of_three_loser_only_backfill_candidates_recommended_for_execution": true,
+  "claude_md_literal_vs_narrow_reading_tension": "unresolved by this phase, flagged for whoever owns that document",
+  "addendum": {
+    "trigger": "user follow-up requesting precise proof of 5 specific questions before making the final case-only-vs-human-review call themselves; explicit instruction not to change code yet",
+    "q1_is_disambiguation_precedent_transferable_to_formatting_question": {
+      "verify_attributions_py_reconfirmed_mechanism": "deletes Authors rows via normalize_title(paper.Title) not in fetch_scholar_titles(scholar_id); operates on paper-title membership, not AuthorNameRaw text at all",
+      "disambiguation_pipeline_structural_shape": "1-to-many identity search (one scraped name against a pool of candidate researchers) -- a wrong match reassigns a paper to the wrong person",
+      "merge_time_authornameraw_structural_shape": "1-to-1 equivalence check on two strings already tied to the identical UserID on both sides -- no candidate pool, no misattribution possible",
+      "conclusion": "precedent proves normalize_name() is accepted in principle elsewhere in this codebase (undermining an absolute-ban reading of CLAUDE.md), but does not by itself justify reuse for the narrower 1-to-1 question -- that still requires independent risk analysis",
+      "directly_transferable": false,
+      "useful_as_policy_context": true
+    },
+    "q2_is_normalize_name_deterministic_in_all_relevant_cases": {
+      "method": "called normalize_name() 20 times each on all 5 distinct real AuthorNameRaw strings from the 3 LOSER_ONLY_BACKFILL candidates (100 calls total)",
+      "result": "zero variance across every call for every input",
+      "conclusion": true
+    },
+    "q3_can_case_only_be_safe_without_endangering_dangerous_categories": {
+      "tested_transformation": "s.lower() only -- no punctuation stripping, no whitespace collapsing, no diacritic removal (explicitly narrower than normalize_name())",
+      "against_collision_proof_pairs": [
+        {"a": "Al-Amin", "b": "Al Amin", "collapse_under_case_only": false},
+        {"a": "D'Angelo", "b": "D Angelo", "collapse_under_case_only": false}
+      ],
+      "against_6086_6088": {"collapse_under_case_only": true, "reason": "only difference is letter case on one hyphenated surname; hyphen identical on both sides"},
+      "against_other_7_real_conflicts": {"any_collapse": false, "pairs_checked": [[5548,5549],[6107,6109],[5207,5481],[6145,6190],[6153,6189],[5645,7618],[5065,4786]]},
+      "conclusion": "yes -- case-only-only is empirically narrower than normalize_name() and does not reproduce either proven collision; residual risk (locale-sensitive casing) assessed near-zero since Python str.lower() is locale-independent here"
+    },
+    "q4_should_case_only_downgrade_to_human_review_rather_than_auto_match": {
+      "decision_reserved_for_user": true,
+      "case_for_auto_match": "narrow, provably-scoped, deterministic, zero demonstrated collision risk, touches none of the other 7 conflicts",
+      "case_for_human_review_only": "repository's consistent existing pattern (AuthorReviewQueue, journal_id_decision CONFLICT refusal, NO_AUTO_COPY_FIELDS) always prefers audited human confirmation over automation even where logic alone would support it; AUTO_MATCH here would be the first automatic name-based decision inside the merge-safety path itself",
+      "assistant_position": "presents both, does not choose"
+    },
+    "q5_does_6086_6088_become_testable_while_others_stay_blocked": {
+      "6086_6088": {"resolved_under_case_only": true, "reason": "only difference is letter case, character-for-character"},
+      "5548_5549": {"resolved_under_case_only": false, "reason": "genuine tokenization difference (NB Aoun vs N Ben Aoun, etc.), survives case-folding unchanged"},
+      "6107_6109": {"resolved_under_case_only": false, "reason": "cardinality mismatch (1 name vs 4), not a formatting question under any transformation considered"},
+      "conclusion": "yes, confirmed -- narrows rather than reverses Task F's original finding; original normalize_name()-as-a-whole conclusion (unsafe for blanket use) stands, this adds a materially narrower sub-option affecting exactly one candidate"
+    },
+    "code_changed_this_addendum": false,
+    "db_writes_this_addendum": 0
+  },
+  "accounting": {
+    "code_files_modified": 0,
+    "code_files_created": 0,
+    "report_files_created": 2,
+    "db_writes": 0,
+    "network_calls": 0,
+    "records_merged": 0,
+    "records_deleted": 0,
+    "doi_changes": 0,
+    "approvals_created_or_modified": 0
+  },
+  "regression": {
+    "test_dedup_papers.py": {"passed": 18, "total": 18},
+    "test_merge_plan_generator.py": {"passed": 43, "total": 43},
+    "test_merge_execution_safety.py": {"passed": 89, "total": 89},
+    "test_merge_approval.py": {"passed": 50, "total": 50},
+    "test_merge_executor.py": {"passed": 48, "total": 48},
+    "test_fk_lifecycle.py": {"passed": 11, "total": 11},
+    "total": {"passed": 259, "total": 259, "regressions": 0}
+  },
+  "production_state_changed": false,
+  "phase_4y_started": false
+}

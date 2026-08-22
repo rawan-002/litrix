@@ -1,0 +1,225 @@
+{
+  "phase": "4T",
+  "title": "Post-Canary Execution Review & Coverage Gap Audit",
+  "read_only": true,
+  "code_changed": false,
+  "canary": {
+    "survivor_paper_id": 5232,
+    "loser_paper_id": 5482,
+    "approval_id": 1,
+    "audit_log_id": 1539
+  },
+  "clean_room_reconstruction": [
+    {"check": "PaperID 5232 exists", "classification": "DIRECTLY_PROVEN"},
+    {"check": "PaperID 5482 does not exist", "classification": "DIRECTLY_PROVEN"},
+    {"check": "ApprovalID=1 identity/status/fingerprint/ExecutionAuditLogID/LoserPaperID retention", "classification": "DIRECTLY_PROVEN"},
+    {"check": "AuditLogID=1539 content", "classification": "DIRECTLY_PROVEN"},
+    {"check": "Merge record semantically corresponds to 5232<-5482", "classification": "DIRECTLY_PROVEN"},
+    {"check": "No contradictory merge history for either ID", "classification": "DIRECTLY_PROVEN"},
+    {"check": "Current idempotency verdict = ALREADY_EXECUTED", "classification": "DIRECTLY_PROVEN"},
+    {"check": "Current schema re-derived fresh (LoserPaperID has no FK)", "classification": "DIRECTLY_PROVEN"}
+  ],
+  "branch_coverage_matrix": [
+    {
+      "id": 1, "branch": "successful merge", "code_location": "merge_executor.py:204 (execute_approved_merge, full function)",
+      "unit_tested": true, "integration_tested": true, "exercised_in_real_canary": true,
+      "production_proven": true, "theoretically_safe_only": false,
+      "production_execution_necessary_before_scaling": "already satisfied"
+    },
+    {
+      "id": 2, "branch": "self-merge rejection", "code_location": "merge_executor.py:235",
+      "unit_tested": true, "integration_tested": false, "exercised_in_real_canary": false,
+      "production_proven": false, "theoretically_safe_only": true,
+      "production_execution_necessary_before_scaling": "not necessary -- pure identity check, mocked coverage sufficient"
+    },
+    {
+      "id": 3, "branch": "permission rejection", "code_location": "merge_executor.py:250",
+      "unit_tested": true, "integration_tested": false, "exercised_in_real_canary": false,
+      "production_proven": false, "theoretically_safe_only": true,
+      "production_execution_necessary_before_scaling": "not necessary -- reuses real can_approve_merge() already exercised live during the canary's own successful path"
+    },
+    {
+      "id": 4, "branch": "missing approval", "code_location": "merge_executor.py:255",
+      "unit_tested": true, "integration_tested": false, "exercised_in_real_canary": false,
+      "production_proven": false, "theoretically_safe_only": true,
+      "production_execution_necessary_before_scaling": "not necessary"
+    },
+    {
+      "id": 5, "branch": "reversed approval direction", "code_location": "merge_executor.py:265",
+      "unit_tested": true, "integration_tested": false, "exercised_in_real_canary": false,
+      "production_proven": false, "theoretically_safe_only": true,
+      "production_execution_necessary_before_scaling": "not necessary -- fetch_current_approval's own WHERE clause structurally prevents this from occurring"
+    },
+    {
+      "id": 6, "branch": "approval not APPROVED", "code_location": "merge_executor.py (EXEC_BLOCKED_APPROVAL_NOT_APPROVED)",
+      "unit_tested": true, "integration_tested": false, "exercised_in_real_canary": false,
+      "production_proven": false, "theoretically_safe_only": true,
+      "production_execution_necessary_before_scaling": "not necessary"
+    },
+    {
+      "id": 7, "branch": "stale fingerprint", "code_location": "merge_execution_safety.py:359 (validate_against_plan)",
+      "unit_tested": true, "integration_tested": false, "exercised_in_real_canary": false,
+      "production_proven": false, "theoretically_safe_only": true,
+      "production_execution_necessary_before_scaling": "not necessary -- this is exactly the Phase 4P/4P.1 defect class; the FIX was proven live during the canary's own successful preflight (fingerprint matched)"
+    },
+    {
+      "id": 8, "branch": "duplicate safety failure", "code_location": "merge_execution_safety.py:365",
+      "unit_tested": true, "integration_tested": false, "exercised_in_real_canary": false,
+      "production_proven": false, "theoretically_safe_only": true,
+      "production_execution_necessary_before_scaling": "not necessary"
+    },
+    {
+      "id": 9, "branch": "DOI safety failure", "code_location": "merge_execution_safety.py:370",
+      "unit_tested": true, "integration_tested": false, "exercised_in_real_canary": false,
+      "production_proven": false, "theoretically_safe_only": true,
+      "production_execution_necessary_before_scaling": "not necessary"
+    },
+    {
+      "id": 10, "branch": "ALREADY_EXECUTED", "code_location": "merge_executor.py (EXEC_BLOCKED_ALREADY_EXECUTED)",
+      "unit_tested": true, "integration_tested": false, "exercised_in_real_canary": false,
+      "production_proven": "partial -- detection mechanism proven live read-only post-execution; executor's own live refusal of a second attempt never exercised",
+      "theoretically_safe_only": false,
+      "production_execution_necessary_before_scaling": "recommended but not urgent -- underlying idempotency_verdict() detection is real-data-proven"
+    },
+    {
+      "id": 11, "branch": "HISTORICAL_STATE_AMBIGUOUS", "code_location": "merge_executor.py (EXEC_BLOCKED_HISTORY_AMBIGUOUS)",
+      "unit_tested": true, "integration_tested": false, "exercised_in_real_canary": false,
+      "production_proven": false, "theoretically_safe_only": true,
+      "production_execution_necessary_before_scaling": "not necessary -- requires a malformed AuditLog row, none exist"
+    },
+    {
+      "id": 12, "branch": "JournalID EQUAL", "code_location": "dedup_papers.py:853",
+      "unit_tested": true, "integration_tested": false, "exercised_in_real_canary": false,
+      "production_proven": false, "theoretically_safe_only": true,
+      "production_execution_necessary_before_scaling": "not necessary -- pure no-op path"
+    },
+    {
+      "id": 13, "branch": "JournalID WINNER_ONLY", "code_location": "dedup_papers.py:849",
+      "unit_tested": true, "integration_tested": true, "exercised_in_real_canary": true,
+      "production_proven": true, "theoretically_safe_only": false,
+      "production_execution_necessary_before_scaling": "already satisfied"
+    },
+    {
+      "id": 14, "branch": "JournalID LOSER_ONLY_BACKFILL", "code_location": "dedup_papers.py:851; write at merge_executor.py:348",
+      "unit_tested": true, "integration_tested": false, "exercised_in_real_canary": false,
+      "production_proven": false, "theoretically_safe_only": true,
+      "production_execution_necessary_before_scaling": "RECOMMENDED -- highest-value next canary property, a real designed write path never exercised in production"
+    },
+    {
+      "id": 15, "branch": "JournalID CONFLICT", "code_location": "dedup_papers.py:855",
+      "unit_tested": true, "integration_tested": false, "exercised_in_real_canary": false,
+      "production_proven": false, "theoretically_safe_only": true,
+      "production_execution_necessary_before_scaling": "not necessary -- this is a blocking path, testing it means finding a real conflicted pair and confirming it correctly refuses, lower priority than proving a real success path"
+    },
+    {
+      "id": 16, "branch": "AuthorNameRaw no conflict", "code_location": "dedup_papers.py::author_content_conflicts()",
+      "unit_tested": true, "integration_tested": true, "exercised_in_real_canary": true,
+      "production_proven": true, "theoretically_safe_only": false,
+      "production_execution_necessary_before_scaling": "already satisfied"
+    },
+    {
+      "id": 17, "branch": "AuthorNameRaw formatting conflict", "code_location": "same function, EXEC_BLOCKED_AUTHOR_CONFLICT",
+      "unit_tested": true, "integration_tested": false, "exercised_in_real_canary": false,
+      "production_proven": false, "theoretically_safe_only": true,
+      "production_execution_necessary_before_scaling": "recommended -- multiple real candidate pairs identified with exactly this conflict shape (Phase 4S)"
+    },
+    {
+      "id": 18, "branch": "populated AuthorReviewQueue dependency gap", "code_location": "merge_executor.py:170 (check_unhandled_dependency_gaps)",
+      "unit_tested": true, "integration_tested": false, "exercised_in_real_canary": false,
+      "production_proven": false, "theoretically_safe_only": true,
+      "production_execution_necessary_before_scaling": "not currently possible -- 0 rows exist in this table, project-wide, as of every phase's check"
+    },
+    {
+      "id": 19, "branch": "populated ReportPaperDecision.MissingResolvedToPaperID gap", "code_location": "same function",
+      "unit_tested": true, "integration_tested": false, "exercised_in_real_canary": false,
+      "production_proven": false, "theoretically_safe_only": true,
+      "production_execution_necessary_before_scaling": "not currently possible -- 0 rows exist project-wide"
+    },
+    {
+      "id": 20, "branch": "cross-tenant rejection", "code_location": "NO dedicated check found in merge_approval.py or merge_executor.py; only merge_plan_generator.compute_classification()'s tenant_blocked, which execute_approved_merge() never calls",
+      "unit_tested": "partial -- only at merge_plan_generator.py level (test_merge_plan_generator.py:256), not at approval-creation or execution level",
+      "integration_tested": false, "exercised_in_real_canary": false,
+      "production_proven": false, "theoretically_safe_only": "UNCONFIRMED -- enforcement point itself not confirmed to exist at the point that matters",
+      "production_execution_necessary_before_scaling": "DO NOT test this in production; requires a code-level investigation/fix first if cross-tenant pairs are ever a real possibility -- flagged as a genuine finding, not merely an untested branch",
+      "flagged_as_significant_finding": true
+    },
+    {
+      "id": 21, "branch": "transaction failure and rollback", "code_location": "merge_executor.py, multiple write points (see phase4t_post_canary_review.md Section 7)",
+      "unit_tested": true, "integration_tested": false, "exercised_in_real_canary": false,
+      "production_proven": false, "theoretically_safe_only": true,
+      "production_execution_necessary_before_scaling": "cannot be deliberately tested in production without violating explicit safety rules; remains proven only by mocked tests plus Postgres's own transaction-atomicity guarantee"
+    },
+    {
+      "id": 22, "branch": "concurrent execution attempt", "code_location": "lock_pair_rows(), merge_execution_safety.py:308",
+      "unit_tested": "minimal -- single-threaded missing-row simulation only, no true concurrency test",
+      "integration_tested": false, "exercised_in_real_canary": false,
+      "production_proven": false, "theoretically_safe_only": true,
+      "production_execution_necessary_before_scaling": "should remain untested until a real multi-operator workflow exists; single-canary-at-a-time discipline makes this moot for now"
+    }
+  ],
+  "preservation_evidence_correction": {
+    "class_a_before_after_value_proof": ["DOI", "Title", "JournalID", "PubYear", "TenantID"],
+    "class_b_sql_path_non_modification_proof": [
+      "Abstract", "Abstract_En", "PublicationType", "VenueType", "Language", "Source",
+      "OpenAlexWorkID", "PdfUrl", "PdfAccessType", "IsVerified", "NormalizedTitle", "Indexing"
+    ],
+    "class_c_merge_reconciliation_proof": ["CitationsByYear", "RawData_Log.cited_by_count"],
+    "class_d_not_proven": {
+      "trivial": ["Title_En (NULL both sides)"],
+      "correction": "the loser's own distinct field values (whatever its Abstract/PublicationType/PdfUrl/etc. actually were) were never captured in full and were discarded with the loser row -- this pair required zero field transfer (journal_state=WINNER_ONLY, doi_state=no action needed), so nothing was actually at risk of loss for THIS canary, but describing loser-side fields as 'preserved' would be misleading; correct terminology is 'discarded with the loser, nothing required transfer for this pair'"
+    }
+  },
+  "rollback_failure_point_matrix": [
+    {"step": "JournalID backfill UPDATE (conditional, did not fire)", "classification": ["PROVEN_BY_TEST_indirect", "INFERRED_FROM_CODE"]},
+    {"step": "merge_group() Authors remap", "classification": "PROVEN_BY_TEST", "test": "test_J_child_remap_failure_rolls_back"},
+    {"step": "merge_group() Citations/CitationsHistory/etc remaps", "classification": "PROVEN_BY_TEST", "note": "shared exception-propagation mechanism, not per-table injected"},
+    {"step": "merge_citation_fields() CitationsByYear UPDATE", "classification": "INFERRED_FROM_CODE", "note": "no dedicated mocked injection at this exact statement"},
+    {"step": "merge_group() AuditLog INSERT", "classification": "PROVEN_BY_TEST", "test": "test_N_auditlog_failure_rolls_back"},
+    {"step": "merge_group() ResearchPaper DELETE", "classification": "PROVEN_BY_TEST", "test": "test_O_delete_failure_rolls_back"},
+    {"step": "AuditLog LogID lookup SELECT", "classification": "INFERRED_FROM_CODE"},
+    {"step": "MergeApproval EXECUTED UPDATE", "classification": "PROVEN_BY_TEST", "test": "test_M_approval_executed_update_failure_rolls_back"},
+    {"step": "Final invariant SELECTs", "classification": "PROVEN_BY_TEST", "test": "test_P_unexpected_mid_preflight_exception_not_reported_as_success"}
+  ],
+  "overarching_rollback_guarantee": "PROVEN_BY_DATABASE_TRANSACTION_STRUCTURE (Postgres atomicity, transaction never committed until every step succeeds) + PROVEN_BY_TEST (no exception anywhere in the call chain is caught and swallowed) -- NOT proven by the real canary itself, since nothing failed during it",
+  "real_rollback_occurred_during_canary": false,
+  "next_canary_candidates": [
+    {
+      "pair": [6086, 6088], "roles": "survivor=6086, loser=6088",
+      "journal_state": "LOSER_ONLY_BACKFILL",
+      "author_name_raw_conflict": "UserID=105, capitalization variant (MH Al-adaileh vs MH Al-Adaileh)",
+      "recommended": true,
+      "reason": "exercises two previously-unexercised branches (id 14 and 17) in one controlled step, pending human resolution of the naming conflict",
+      "note": "reused from Phase 4S's live check, not re-verified fresh this phase -- requires a final live re-check before any future approval"
+    },
+    {"pair": [5548, 5549], "journal_state": "LOSER_ONLY_BACKFILL", "author_name_raw_conflict": "UserID=104", "recommended": "alternative"},
+    {"pair": [6107, 6109], "journal_state": "LOSER_ONLY_BACKFILL", "author_name_raw_conflict": "UserID=69, substantive difference not just formatting -- flagged for extra scrutiny", "recommended": "alternative, needs closer review"}
+  ],
+  "scaling_readiness_decision": "A",
+  "scaling_readiness_decision_label": "READY_FOR_A_SECOND_DIFFERENT_SHAPE_CONTROLLED_CANARY",
+  "safety_accounting": {
+    "code_files_modified": 0,
+    "code_files_created": 0,
+    "report_files_created": 2,
+    "db_writes": 0,
+    "network_calls": 0,
+    "records_merged": 0,
+    "records_deleted": 0,
+    "approvals_created": 0,
+    "approvals_changed": 0,
+    "doi_changes": 0
+  },
+  "regression": {
+    "code_changed_this_phase": false,
+    "test_run_performed": "baseline confirmation only, not evidence of new work",
+    "test_dedup_papers.py": {"passed": 18, "total": 18},
+    "test_merge_plan_generator.py": {"passed": 43, "total": 43},
+    "test_merge_execution_safety.py": {"passed": 79, "total": 79},
+    "test_merge_approval.py": {"passed": 45, "total": 45},
+    "test_merge_executor.py": {"passed": 39, "total": 39},
+    "test_fk_lifecycle.py": {"passed": 11, "total": 11},
+    "total": {"passed": 235, "total": 235, "regressions": 0}
+  },
+  "phase_4u_started": false,
+  "merge_executed_this_phase": false,
+  "approval_created_this_phase": false
+}

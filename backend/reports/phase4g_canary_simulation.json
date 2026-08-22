@@ -1,0 +1,53 @@
+{
+  "phase": "4G",
+  "pair": [
+    5232,
+    5482
+  ],
+  "db_writes": 0,
+  "network_calls": 0,
+  "records_merged": 0,
+  "doi_changes": 0,
+  "live_read_only_run": true,
+  "reference_plan_fingerprint": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb",
+  "simulation_result": {
+    "final_verdict": "BLOCKED_APPROVAL",
+    "reason": "no approval artifact exists for this plan",
+    "steps": {
+      "load_current_pair": {
+        "winner_exists": true,
+        "loser_exists": true
+      },
+      "fingerprint_check": {
+        "current": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb",
+        "reference": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb",
+        "match": true
+      },
+      "duplicate_safety_check": {
+        "choose_keep_result": 5232,
+        "reversed": false,
+        "pair_confidence": "high",
+        "hard_exclusion_reason": null
+      },
+      "doi_safety_check": {
+        "winner_doi": "10.1155/2022/8531213",
+        "claimed_elsewhere": false
+      },
+      "idempotency_check": {
+        "status": "ELIGIBLE",
+        "reason": "no prior paper.merge.dedup history for either PaperID"
+      },
+      "approval_check": {
+        "artifact_present": false,
+        "valid": false,
+        "reason": "no approval artifact exists for this plan"
+      }
+    }
+  },
+  "live_locking_demo": {
+    "method": "lock_pair_rows() called inside a real transaction, autocommit=False, then conn.rollback() explicitly",
+    "lock_acquired": true,
+    "rows_before_and_after_identical": true,
+    "persistent_writes": 0
+  }
+}

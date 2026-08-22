@@ -1,0 +1,132 @@
+{
+  "phase": "4P",
+  "title": "Approval Workflow Audit",
+  "canary_pair": {"survivor_paper_id": 5232, "loser_paper_id": 5482},
+  "reference_fingerprint": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb",
+  "fingerprint_result_at_phase_start": "MATCH",
+  "fingerprint_confirmation_count": 12,
+  "acting_user": {"user_id": 221, "email": "admin@litrix.com", "user_type": "Admin", "can_approve_merge": true, "reasoning": "real account that genuinely holds the required manage_users/Admin permission; can_approve_merge() exercised unmodified, no bypass"},
+  "db_writes": [
+    {
+      "seq": 1,
+      "function": "create_pending_approval",
+      "table": "MergeApproval",
+      "before": {"row_count": 0},
+      "after": {"approval_id": 1, "status": "PENDING", "survivor_paper_id": 5232, "loser_paper_id": 5482, "plan_fingerprint": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb"},
+      "reason": "Task A -- create the real pending approval for the canary pair"
+    },
+    {
+      "seq": 2,
+      "function": "approve_pending",
+      "tables": ["MergeApproval", "AuditLog"],
+      "before": {"status": "PENDING", "audit_log_count": 956},
+      "after": {"status": "APPROVED", "reviewed_by_user_id": 221, "audit_log_count": 957},
+      "reason": "Task C -- the real human-approval decision"
+    }
+  ],
+  "total_db_writes": 2,
+  "guard_tests": [
+    {"id": "B.1", "test": "self-merge (5232->5232)", "result": "refused: self_merge_rejected", "sql_issued": 0},
+    {"id": "B.2", "test": "lookup with wrong fingerprint", "result": "None (not found)", "writes": 0},
+    {"id": "B.2", "test": "lookup with correct fingerprint", "result": "found, PENDING", "writes": 0},
+    {"id": "B.3", "test": "lookup with reversed pair (5482 survivor / 5232 loser)", "result": "None (not found)", "writes": 0},
+    {"id": "B.4", "test": "duplicate create_pending_approval, same identity", "result": "returns same ApprovalID=1, no new row", "writes": 0},
+    {"id": "C.1", "test": "double-approve (APPROVED->APPROVED)", "result": "refused: illegal_transition", "row_unchanged": true, "writes": 0},
+    {"id": "C.2", "test": "reject on approved row (APPROVED->REJECTED)", "result": "refused: illegal_transition", "row_unchanged": true, "writes": 0},
+    {"id": "B.5", "test": "revoke with wrong fingerprint (APPROVED->REVOKED, state-machine-legal, wrong fingerprint)", "result": "refused: fingerprint_mismatch (not illegal_transition -- proves independent enforcement)", "row_unchanged": true, "writes": 0}
+  ],
+  "rejected_revoked_live_tested": false,
+  "rejected_revoked_reasoning": "would consume the one intended-to-be-kept APPROVED row; already exhaustively proven correct by 45 unmodified mocked tests in test_merge_approval.py, re-run this phase and still passing",
+  "executor_boundary_proof": {
+    "execute_approved_merge_called": false,
+    "individual_functions_called": ["fetch_current_approval", "approval_matches_pair", "lock_pair_rows", "fetch_current_state", "validate_against_plan", "idempotency_verdict", "build_journal_state", "author_content_conflicts", "check_unhandled_dependency_gaps"],
+    "connection_used": "django.db.connection (the real mechanism execute_approved_merge() is designed to run under)",
+    "transaction_rolled_back": true,
+    "zero_persistence": true,
+    "no_write_to_research_paper_or_child_tables": true,
+    "defect_surfaced": true
+  },
+  "defect": {
+    "found": true,
+    "location": "merge_execution_safety.py::_normalize_scalar()",
+    "summary": "compute_plan_fingerprint() is non-deterministic across this repository's two real DB connection mechanisms for jsonb-typed fingerprinted fields",
+    "root_cause": "Django's connection.cursor() returns jsonb columns as raw str (uncanonicalized JSON text) when used for raw SQL; a bare psycopg2.connect() connection (litrix_db.db()) auto-decodes the same column into a native dict, which _normalize_scalar() canonicalizes via json.dumps(sort_keys=True); the str branch returns the raw text unmodified, un-sorted",
+    "evidence": {
+      "fingerprint_via_django_connection": "b74d4675e3069fe979720db3bcad7e2c20e1dfd92dc83656d38b1a6d71dbf4f9",
+      "fingerprint_via_raw_psycopg2": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb",
+      "differing_field": "VerificationDetails",
+      "django_type": "str",
+      "raw_psycopg2_type": "dict",
+      "citations_by_year_also_affected_in_principle": true,
+      "citations_by_year_not_visible_in_this_case_because": "this pair's CitationsByYear keys (2022-2026) already happen to sort in ascending/alphabetical order, coincidentally masking the same underlying bug"
+    },
+    "why_not_caught_before": [
+      "all 224 existing tests use mocked cursors that construct dict values directly in fixtures, never exercising real jsonb decoding via either connection type",
+      "every prior live canary check (12 confirmations, Phase 4G through 4O) used litrix_db.db() (raw psycopg2), which always takes the already-canonical dict branch",
+      "this phase is the first time the fingerprint was computed via Django's connection, the actual mechanism execute_approved_merge() is designed to run under"
+    ],
+    "safety_characterization": "fail-safe, not fail-open -- causes a spurious STALE_FINGERPRINT block on unchanged data, never an incorrect ALLOW",
+    "recommended_fix": "make _normalize_scalar() attempt json.loads() on a str input before its existing dict-canonicalization path, falling back to current string handling only if parsing fails",
+    "fix_applied_this_phase": false,
+    "fix_applied_this_phase_reason": "explicit instruction: do not modify executor/dedup logic without a proven defect and even then prefer a separate, dedicated phase, matching this project's established audit-then-fix discipline (e.g. Phase 4K -> 4K.1)"
+  },
+  "report_questions": {
+    "can_valid_approved_approval_be_created": {"answer": true, "evidence": "ApprovalID=1, live in production, Status=APPROVED, correct direction, real reviewer, correct AuditLog cross-reference"},
+    "path_to_merge_without_valid_approval": {"answer": false, "note": "the defect found causes spurious blocking of a legitimate approval, not a bypass"},
+    "fingerprint_binding_actually_works": {"answer": "partially", "note": "the binding/scoping/mismatch-rejection logic is proven correct; the fingerprint value it binds to is not yet deterministic across this repo's two real connection mechanisms"},
+    "conflicting_or_orphaned_records": {"answer": false, "note": "exactly one row, correct identity, correct state, no duplicates, no strays"}
+  },
+  "final_state": {
+    "research_paper_row_count": 2031,
+    "research_paper_row_count_unchanged": true,
+    "canary_pair_contents_unchanged": true,
+    "merge_approval_row_count": 1,
+    "merge_approval_row": {
+      "approval_id": 1, "survivor_paper_id": 5232, "loser_paper_id": 5482,
+      "plan_fingerprint": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb",
+      "status": "APPROVED", "reviewed_by_user_id": 221,
+      "executed_at": null, "execution_audit_log_id": null
+    },
+    "audit_log_row_count": 957,
+    "paper_merge_dedup_rows_for_canary_pair": 0
+  },
+  "cleanup_decision": {
+    "decision": "keep the real APPROVED approval as-is; do not revoke, do not delete",
+    "reasoning": [
+      "the approval workflow itself has zero defects -- the human decision it represents remains valid",
+      "verdict A (READY FOR FIRST CONTROLLED CANARY MERGE) presupposes a real, unrevoked APPROVED approval surviving this phase",
+      "the fingerprint defect affects only whether the executor can currently validate against it, not whether the approval decision itself is sound",
+      "matches this project's established practice of not deleting approval history when the design intends to keep it (Phase 4H/4K.1)"
+    ]
+  },
+  "records_merged": 0,
+  "doi_changes": 0,
+  "apply_executions": 0,
+  "merge_group_or_execute_approved_merge_calls_against_production": 0,
+  "network_calls": 0,
+  "regression": {
+    "test_dedup_papers.py": {"passed": 18, "total": 18},
+    "test_merge_plan_generator.py": {"passed": 43, "total": 43},
+    "test_merge_execution_safety.py": {"passed": 68, "total": 68},
+    "test_merge_approval.py": {"passed": 45, "total": 45},
+    "test_merge_executor.py": {"passed": 39, "total": 39},
+    "test_fk_lifecycle.py": {"passed": 11, "total": 11},
+    "total": {"passed": 224, "total": 224, "regressions": 0},
+    "tests_added_this_phase": 0,
+    "code_modified_this_phase": false
+  },
+  "accounting": {
+    "code_files_modified": 0,
+    "code_files_created": 0,
+    "migration_files_modified": 0,
+    "report_files_created": 2,
+    "db_writes": 2,
+    "merge_approval_rows_created": 1,
+    "research_paper_rows_changed": 0,
+    "network_calls": 0
+  },
+  "final_decision": "C",
+  "final_decision_label": "DEFECT_FOUND_WITH_EVIDENCE",
+  "phase_4q_started": false,
+  "real_merge_executed": false
+}

@@ -1,0 +1,161 @@
+{
+  "phase": "4P.1",
+  "title": "Deterministic Fingerprint Defect Investigation & Fix",
+  "canary_pair": {"survivor_paper_id": 5232, "loser_paper_id": 5482},
+  "approval_id_1": {
+    "modified_this_phase": false,
+    "status_before": "APPROVED",
+    "status_after": "APPROVED",
+    "plan_fingerprint": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb",
+    "unchanged": true
+  },
+  "root_cause": {
+    "location": "merge_execution_safety.py::_normalize_scalar()",
+    "summary": "Django's connection.cursor(), used for raw SQL, returns jsonb columns as an undecoded str; a bare psycopg2.connect() connection (litrix_db.db()) auto-decodes the same column into a native dict. The str branch of _normalize_scalar() returned such values unmodified/uncanonicalized, while the dict branch already correctly applied json.dumps(sort_keys=True).",
+    "affected_fields_confirmed": ["CitationsByYear", "VerificationDetails"],
+    "affected_fields_type": "jsonb",
+    "underlying_data_semantically_identical": true,
+    "proof": "json.loads(django_str) == raw_dict for both fields, on the real live canary pair; canonical(django) == canonical(raw) after sort_keys=True"
+  },
+  "reproduction": {
+    "fingerprint_via_django_connection_before_fix": "b74d4675e3069fe979720db3bcad7e2c20e1dfd92dc83656d38b1a6d71dbf4f9",
+    "fingerprint_via_raw_psycopg2_before_fix": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb",
+    "fingerprint_via_django_connection_after_fix": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb",
+    "fingerprint_via_raw_psycopg2_after_fix": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb",
+    "both_paths_match_after_fix": true,
+    "both_paths_match_reference_after_fix": true
+  },
+  "scope_bounding": {
+    "jsonb_dict_typed_fields": "affected, confirmed",
+    "json_like_strings_in_non_jsonb_text_columns": "not affected in practice (no such columns exist in FINGERPRINT_RP_FIELDS with this shape); handled safely by the fix regardless",
+    "nested_dicts": "affected in principle (same root cause), covered by fix and tests",
+    "lists": "affected in principle (same root cause), covered by fix and tests",
+    "null_values": "not affected -- identical across both connections",
+    "numeric_values": "not affected -- identical across both connections",
+    "boolean_values": "not affected -- identical across both connections",
+    "equivalent_key_ordering": "was already handled correctly for native dict inputs; the defect was that a str-represented dict never reached that canonicalization path at all"
+  },
+  "why_previous_checks_did_not_expose_it": "all 12 prior live canary confirmations (Phase 4G through the start of Phase 4P) used litrix_db.db() (raw psycopg2), which always takes the already-correct dict branch; Phase 4P's Task D was the first point in the project the fingerprint was computed via Django's connection.cursor(), the actual mechanism execute_approved_merge() is designed to run under",
+  "blast_radius": {
+    "compute_plan_fingerprint_real_callers": [
+      "merge_execution_safety.py:313 (validate_against_plan)",
+      "merge_execution_safety.py:713 (run_canary_simulation)"
+    ],
+    "normalize_scalar_definitions": 1,
+    "normalize_scalar_real_callers": [
+      "merge_execution_safety.py:127 (_normalize_authors, for AuthorNameRaw)",
+      "merge_execution_safety.py:162-163 (FINGERPRINT_RP_FIELDS loop)"
+    ],
+    "other_canonical_json_serialization_for_merge_plans": "none found elsewhere in the repository",
+    "confirmed_affected_paths": ["compute_plan_fingerprint() via both real call sites"],
+    "theoretically_affected_paths": "none beyond the confirmed paths",
+    "unaffected_paths": [
+      "_normalize_authors()'s use of _normalize_scalar() for AuthorNameRaw (always plain text, never jsonb)",
+      "merge_plan_generator.py::classify_field() (compares values directly, never hashes)",
+      "dedup_papers.py::merge_citation_fields() (reads/writes CitationsByYear directly, never fingerprints)",
+      "merge_approval.py (never computes a fingerprint, only stores/compares opaque string values)"
+    ],
+    "unrelated_code_broadened": false
+  },
+  "fix": {
+    "files_changed": ["backend/tools/merge_execution_safety.py"],
+    "function_added": "_looks_like_json_container(s)",
+    "function_modified": "_normalize_scalar(value)",
+    "rule": "a string is only ever considered for JSON parsing if it structurally looks like a JSON object or array (starts with '{'/'[' and ends with the matching '}'/']', after stripping); parsing failures fall back to plain-string handling without raising; a successful parse into dict/list recurses into the shared dict/list canonicalization branch (json.dumps(sort_keys=True)), which sorts dict keys recursively at every nesting level while never reordering list elements",
+    "blind_json_loads_on_every_string": false,
+    "ordinary_strings_can_be_accidentally_transformed": "only in the acknowledged, extremely narrow theoretical edge case of a text field that is simultaneously brace/bracket-wrapped edge-to-edge AND syntactically valid JSON -- not realistic for this schema's actual text fields (Title/Abstract/DOI/etc.), and even then the result is deterministic, not incorrect or crash-prone",
+    "malformed_json_crashes": false,
+    "dict_key_order_affects_fingerprint": false,
+    "list_order_significant": true,
+    "merge_semantics_altered": false,
+    "duplicate_detection_thresholds_altered": false,
+    "pair_selection_altered": false,
+    "approval_state_machine_altered": false,
+    "unrelated_dedup_logic_modified": false,
+    "fix_location": "normalization boundary (_normalize_scalar), not adapter-specific hacks in individual callers"
+  },
+  "tests": {
+    "file": "backend/tools/test_merge_execution_safety.py",
+    "class": "JsonRepresentationEquivalenceTests",
+    "new_tests": 11,
+    "test_names": [
+      "test_dict_and_equivalent_json_string_produce_same_fingerprint",
+      "test_nested_objects_normalize_identically_regardless_of_source_representation",
+      "test_key_order_variants_normalize_identically_via_the_string_path",
+      "test_list_element_order_remains_significant_through_the_string_path",
+      "test_list_nested_dict_key_order_does_not_affect_fingerprint",
+      "test_ordinary_string_that_is_a_bare_json_scalar_is_not_reinterpreted",
+      "test_ordinary_object_shaped_text_field_is_unaffected_when_not_valid_json",
+      "test_malformed_json_like_string_does_not_crash_fingerprint_computation",
+      "test_empty_json_object_and_array_strings_normalize_to_none",
+      "test_real_canary_verification_details_dict_and_json_string_forms_match",
+      "test_genuinely_changed_value_still_produces_different_fingerprint_via_string_path"
+    ],
+    "uses_real_canary_field_shape": true,
+    "uses_production_writes": false
+  },
+  "regression": {
+    "before_this_phase": {"passed": 224, "total": 224},
+    "after_this_phase": {"passed": 235, "total": 235},
+    "delta": 11,
+    "delta_reason": "11 new tests added specifically for this defect/fix; zero pre-existing tests modified",
+    "suites": {
+      "test_dedup_papers.py": {"passed": 18, "total": 18},
+      "test_merge_plan_generator.py": {"passed": 43, "total": 43},
+      "test_merge_execution_safety.py": {"passed": 79, "total": 79},
+      "test_merge_approval.py": {"passed": 45, "total": 45},
+      "test_merge_executor.py": {"passed": 39, "total": 39},
+      "test_fk_lifecycle.py": {"passed": 11, "total": 11}
+    },
+    "regressions": 0
+  },
+  "live_validation": {
+    "approval_id_1_read_only": true,
+    "approval_id_1_modified": false,
+    "fingerprint_recomputed_django_path": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb",
+    "fingerprint_recomputed_raw_psycopg2_path": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb",
+    "byte_identical": true,
+    "matches_stored_approval_fingerprint": true,
+    "approval_technically_valid_for_executor_preflight": true,
+    "preflight_result": {
+      "validate_against_plan_status": "OK",
+      "validate_against_plan_passed": true,
+      "fingerprint_match": true,
+      "idempotency_verdict": "NOT_PREVIOUSLY_EXECUTED",
+      "journal_state_execution_permitted": true,
+      "author_content_conflicts": [],
+      "dependency_gaps": [],
+      "all_preconditions_satisfied": true
+    },
+    "execute_approved_merge_called": false,
+    "transaction_rolled_back": true,
+    "stopped_before_any_research_paper_or_child_table_write": true
+  },
+  "compatibility_with_existing_approval": {
+    "outcome": "A",
+    "outcome_label": "existing_stored_fingerprint_now_matches_deterministic_algorithm_approval_remains_valid",
+    "plan_fingerprint_rewritten": false,
+    "reasoning": "the raw psycopg2 path (which produced the stored fingerprint) was already canonical before this fix; the fix makes Django's path converge on that same already-canonical value, not a new one"
+  },
+  "accounting": {
+    "code_files_modified": 1,
+    "code_files_created": 0,
+    "test_files_modified": 1,
+    "migration_files_modified": 0,
+    "report_files_created": 2,
+    "production_db_writes": 0,
+    "production_db_writes_to_research_paper": 0,
+    "production_db_writes_to_child_tables": 0,
+    "production_db_writes_to_merge_approval": 0,
+    "records_merged": 0,
+    "doi_changes": 0,
+    "merge_executor_executions": 0,
+    "apply_executions": 0,
+    "network_calls": 0,
+    "second_approval_created": false
+  },
+  "final_decision": "A",
+  "final_decision_label": "DEFECT_FIXED_READY_TO_RE_AUDIT_FIRST_CANARY_EXECUTION",
+  "phase_4q_started": false,
+  "real_merge_executed": false
+}

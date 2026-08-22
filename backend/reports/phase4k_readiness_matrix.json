@@ -1,0 +1,72 @@
+{
+  "phase": "4K",
+  "title": "Controlled Live-Execution Readiness Audit",
+  "generated_read_only": true,
+  "canary_pair": {"survivor_paper_id": 5232, "loser_paper_id": 5482},
+  "reference_fingerprint": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb",
+  "fresh_fingerprint_this_phase": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb",
+  "fingerprint_result": "MATCH",
+  "fingerprint_confirmation_count": 7,
+  "final_decision": "B",
+  "final_decision_label": "READY_ONLY_AFTER_SPECIFIC_FIXES",
+  "classifications": {
+    "fk_lifecycle": "FK_LIFECYCLE_BLOCKER",
+    "transaction_atomicity": "SOUND_IF_EXTERNALLY_WRAPPED_IN_ONE_TRANSACTION",
+    "migration_readiness": "BLOCKED",
+    "permission_readiness": "PARTIALLY_DEFINED",
+    "idempotency_verdict_live": "NOT_PREVIOUSLY_EXECUTED",
+    "auditlog_rows_referencing_canary_pair": 0
+  },
+  "allowed_statuses": ["READY", "READY_WITH_TESTED_ASSUMPTION", "UNKNOWN", "BLOCKED"],
+  "readiness_matrix": [
+    {"prerequisite": "Canary pair still exists", "status": "READY", "evidence": "Live SELECT against ResearchPaper, both PaperIDs present and distinct", "blocking": false, "next_action": null},
+    {"prerequisite": "Survivor direction (5232 survives)", "status": "READY", "evidence": "Live choose_keep() returns survivor=5232, loser=5482, unreversed", "blocking": false, "next_action": null},
+    {"prerequisite": "Fingerprint freshness", "status": "READY", "evidence": "Live-recomputed fingerprint MATCHes the reference value, 7th independent confirmation across 3 calendar days", "blocking": false, "next_action": null},
+    {"prerequisite": "Duplicate safety", "status": "READY", "evidence": "Live pair_confidence=high, hard_exclusion_reason=None", "blocking": false, "next_action": null},
+    {"prerequisite": "DOI safety", "status": "READY", "evidence": "Live is_doi_claimed_elsewhere(winner DOI)=False", "blocking": false, "next_action": null},
+    {"prerequisite": "Self-merge prevention", "status": "READY", "evidence": "reject_self_merge tested; lock_pair_rows proven to issue zero SQL before rejecting a self-merge (Phase 4G/4J)", "blocking": false, "next_action": null},
+    {"prerequisite": "Row locking", "status": "READY_WITH_TESTED_ASSUMPTION", "evidence": "Real SELECT...FOR UPDATE live-demonstrated with explicit rollback in Phase 4G; never exercised live inside execute_approved_merge() itself", "blocking": false, "next_action": "Exercise once, under supervision, in a future controlled execution phase"},
+    {"prerequisite": "Transaction atomicity", "status": "READY_WITH_TESTED_ASSUMPTION", "evidence": "Design never opens/commits/rolls back a transaction itself (source-scan proven); no real caller wraps it anywhere in the repository today", "blocking": false, "next_action": "Wrap execute_approved_merge() in transaction.atomic() when a real caller is written"},
+    {"prerequisite": "Rollback behavior", "status": "READY_WITH_TESTED_ASSUMPTION", "evidence": "Phase 4J scenarios M/N/O/P prove exception propagation on injected write failures, mocked only", "blocking": false, "next_action": null},
+    {"prerequisite": "Idempotency", "status": "READY", "evidence": "Live idempotency_verdict()=NOT_PREVIOUSLY_EXECUTED against 0 matching AuditLog rows", "blocking": false, "next_action": null},
+    {"prerequisite": "AuditLog compatibility", "status": "READY", "evidence": "Live schema/type check: AuditLog.LogID integer PK, compatible with MergeApproval.ExecutionAuditLogID's FK design", "blocking": false, "next_action": null},
+    {"prerequisite": "JournalID handling", "status": "READY", "evidence": "Live state=WINNER_ONLY (no backfill needed) for the canary; CONFLICT-state blocking newly tested this phase (test_journal_id_conflict_state_blocks_before_merge)", "blocking": false, "next_action": null},
+    {"prerequisite": "AuthorNameRaw handling", "status": "READY", "evidence": "Live author_content_conflicts()=[] for the canary; conflict-blocking path tested in Phase 4J", "blocking": false, "next_action": null},
+    {"prerequisite": "AuthorReviewQueue dependency", "status": "READY", "evidence": "Live COUNT=0 for loser PaperID 5482", "blocking": false, "next_action": null},
+    {"prerequisite": "ReportPaperDecision dependency", "status": "READY", "evidence": "Live COUNT=0 for both PaperID and MissingResolvedToPaperID referencing loser 5482", "blocking": false, "next_action": null},
+    {"prerequisite": "All relevant child-table remaps", "status": "READY_WITH_TESTED_ASSUMPTION", "evidence": "PaperKeywords found to now exist (schema drift since Phase 4C/4F/4H's 'table doesn't exist' finding); 0 rows table-wide, already safely covered by existing SIMPLE_CHILDREN logic", "blocking": false, "next_action": "Re-verify the full dependency map before auditing any non-empty pair"},
+    {"prerequisite": "MergeApproval migration validity", "status": "BLOCKED", "evidence": "LoserPaperID FK (ON DELETE NO ACTION) would block the intended loser DELETE once any MergeApproval row exists for it", "blocking": true, "next_action": "Remove the REFERENCES clause on LoserPaperID; keep it a plain INT column, matching AuditLog.TargetID's live-confirmed unconstrained-reference precedent"},
+    {"prerequisite": "MergeApproval FK lifecycle after loser deletion", "status": "BLOCKED", "evidence": "Proven with certainty from documented PostgreSQL FK semantics: an APPROVED MergeApproval row is a precondition for execution, and its LoserPaperID reference (NO ACTION, undeferred) makes the loser row undeletable while that approval row exists", "blocking": true, "next_action": "Same fix as above"},
+    {"prerequisite": "Approval creation", "status": "READY", "evidence": "Phase 4I, 45/45 tests, unchanged", "blocking": false, "next_action": null},
+    {"prerequisite": "Approval storage (as currently designed)", "status": "BLOCKED", "evidence": "Same underlying FK defect makes the designed schema unable to support its own stated purpose (approval history surviving the merge)", "blocking": true, "next_action": "Same fix as above"},
+    {"prerequisite": "Approval revocation", "status": "READY", "evidence": "revoke_approved() tested, Phase 4I", "blocking": false, "next_action": null},
+    {"prerequisite": "Approval/execution actor auditability", "status": "BLOCKED", "evidence": "Approval decisions are fully attributable to a real user (ReviewedByUserID + AuditLog); merge_group()'s own AuditLog INSERT hardcodes UserID=NULL, TenantID=1 -- the executing user is never recorded", "blocking": true, "next_action": "Add an explicit executor-side audit write capturing the real executing user, or accept manual/external attribution for a single supervised run"},
+    {"prerequisite": "Permission enforcement", "status": "READY", "evidence": "manage_users is a real, live, foundational permission (sprint1_foundation.sql), correctly reused by can_approve_merge()", "blocking": false, "next_action": null},
+    {"prerequisite": "Cross-tenant isolation", "status": "BLOCKED", "evidence": "has_litrix_perm()/get_permissions() query has zero TenantID scoping -- directly confirmed by reading the live code this phase, not merely unproven", "blocking": true, "next_action": "Add tenant-scoping to the permission check before any multi-tenant use; not a blocker for this specific canary pair since both rows share TenantID=1"},
+    {"prerequisite": "Migration deployment readiness", "status": "BLOCKED", "evidence": "Section 6 -- cannot be READY_TO_APPLY given the FK design defect", "blocking": true, "next_action": "Same fix as above, then re-audit before applying"}
+  ],
+  "tests": {
+    "test_dedup_papers.py": {"passed": 18, "total": 18},
+    "test_merge_plan_generator.py": {"passed": 43, "total": 43},
+    "test_merge_execution_safety.py": {"passed": 68, "total": 68},
+    "test_merge_approval.py": {"passed": 45, "total": 45},
+    "test_merge_executor.py": {"passed": 39, "total": 39, "new_this_phase": 1},
+    "total": {"passed": 213, "total": 213, "regressions": 0}
+  },
+  "accounting": {
+    "db_writes": 0,
+    "schema_changes": 0,
+    "migrations_applied": 0,
+    "merges_executed": 0,
+    "doi_changes": 0,
+    "production_merge_approval_rows_created": 0,
+    "network_calls": 0,
+    "files_modified": 1,
+    "files_created": 2,
+    "files_modified_list": ["backend/tools/test_merge_executor.py"],
+    "files_created_list": [
+      "backend/reports/phase4k_live_execution_readiness_audit.md",
+      "backend/reports/phase4k_readiness_matrix.json"
+    ]
+  }
+}

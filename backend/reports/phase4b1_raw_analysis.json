@@ -1,0 +1,2713 @@
+[
+ {
+  "pair_input": [
+   5434,
+   5329
+  ],
+  "tier": "TIER1",
+  "choose_keep_survivor": 5329,
+  "choose_keep_loser": 5434,
+  "choose_keep_reason": "has_doi",
+  "pair_confidence": "high",
+  "hard_exclusion_reason": null,
+  "is_distinct_record": false,
+  "survivor_doi": "10.1109/aiccsa47632.2019.9035301",
+  "loser_doi": null,
+  "survivor_citations": 11,
+  "loser_citations": 1,
+  "survivor_is_verified": true,
+  "loser_is_verified": true,
+  "survivor_authors_uid": [
+   97
+  ],
+  "loser_authors_uid": [
+   97
+  ],
+  "survivor_title": "Towards optimizing the placement of security testing components for internet of things architectures",
+  "loser_title": "Optimizing the Placement of Security Testing Components for Internet of Things Architectures",
+  "contamination_survivor": [],
+  "contamination_loser": [],
+  "field_diffs": [
+   {
+    "field": "JournalID",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "953",
+    "loser_value": "None"
+   },
+   {
+    "field": "Title",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "Towards optimizing the placement of security testing components for internet of things architectures",
+    "loser_value": "Optimizing the Placement of Security Testing Components for Internet of Things Architectures"
+   },
+   {
+    "field": "Title_En",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Abstract",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "In this article we are interested in optimizing the placement problem of security testing components for Internet of Things Architectures. Our goal is to extend existing techniques used in Fog computi",
+    "loser_value": "None"
+   },
+   {
+    "field": "Abstract_En",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Language",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "en",
+    "loser_value": "en"
+   },
+   {
+    "field": "DOI",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "10.1109/aiccsa47632.2019.9035301",
+    "loser_value": "None"
+   },
+   {
+    "field": "PubYear",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "2019",
+    "loser_value": "2020"
+   },
+   {
+    "field": "Volume",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Issue",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Pages",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "IsVerified",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "True",
+    "loser_value": "True"
+   },
+   {
+    "field": "ScrapedAt",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "2026-05-07 08:27:25.996964+00:00",
+    "loser_value": "2026-05-07 08:30:28.086731+00:00"
+   },
+   {
+    "field": "Source",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Scholar",
+    "loser_value": "Scholar"
+   },
+   {
+    "field": "NormalizedTitle",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "towards optimizing the placement of security testing components for internet of things architectures",
+    "loser_value": "optimizing the placement of security testing components for internet of things architectures"
+   },
+   {
+    "field": "Indexing",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "CitationsByYear",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "{'2020': 2, '2021': 2, '2024': 1}",
+    "loser_value": "None"
+   },
+   {
+    "field": "TenantID",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "1",
+    "loser_value": "1"
+   },
+   {
+    "field": "AffiliationVerified",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "True",
+    "loser_value": "None"
+   },
+   {
+    "field": "VerificationSource",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "ieee_browser",
+    "loser_value": "None"
+   },
+   {
+    "field": "VerifiedAt",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "2026-08-02 10:44:17.200465",
+    "loser_value": "None"
+   },
+   {
+    "field": "VerificationDetails",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "{'url': 'https://ieeexplore.ieee.org/document/9035301', 'tier': 'ieee_browser', 'confidence': 'authoritative', 'decision_basis': 'ieee_browser', 'evidence_trail': [{'url': 'https://ieeexplore.ieee.org",
+    "loser_value": "None"
+   },
+   {
+    "field": "VenueType",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Conference",
+    "loser_value": "Conference"
+   },
+   {
+    "field": "DoiResolvedBy",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "DoiResolvedAt",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "OpenAlexWorkID",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "AbstractSource",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "openalex",
+    "loser_value": "None"
+   },
+   {
+    "field": "PdfUrl",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "PdfAccessType",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "publisher_page_only",
+    "loser_value": "None"
+   },
+   {
+    "field": "PublicationType",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "Conference Paper",
+    "loser_value": "Research Article"
+   }
+  ],
+  "dependencies": {
+   "Citations": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ExternalAuthors": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "PaperKeywords": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "CitationsHistory": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ReportPaperDecision": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "AuthorReviewQueue": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ReportPaperDecision.MissingResolvedToPaperID": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   }
+  }
+ },
+ {
+  "pair_input": [
+   5481,
+   5207
+  ],
+  "tier": "TIER1",
+  "choose_keep_survivor": 5207,
+  "choose_keep_loser": 5481,
+  "choose_keep_reason": "has_doi",
+  "pair_confidence": "high",
+  "hard_exclusion_reason": null,
+  "is_distinct_record": false,
+  "survivor_doi": "10.1155/2022/8950243",
+  "loser_doi": null,
+  "survivor_citations": 133,
+  "loser_citations": 0,
+  "survivor_is_verified": true,
+  "loser_is_verified": true,
+  "survivor_authors_uid": [
+   97
+  ],
+  "loser_authors_uid": [
+   97
+  ],
+  "survivor_title": "Tuberculosis disease diagnosis based on an optimized machine learning model",
+  "loser_title": "Research Article Tuberculosis Disease Diagnosis Based on an Optimized Machine Learning Model",
+  "contamination_survivor": [],
+  "contamination_loser": [],
+  "field_diffs": [
+   {
+    "field": "JournalID",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "440",
+    "loser_value": "None"
+   },
+   {
+    "field": "Title",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "Tuberculosis disease diagnosis based on an optimized machine learning model",
+    "loser_value": "Research Article Tuberculosis Disease Diagnosis Based on an Optimized Machine Learning Model"
+   },
+   {
+    "field": "Title_En",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Abstract",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "Computer science plays an important role in modern dynamic health systems. Given the collaborative nature of the diagnostic process, computer technology provides important services to healthcare profe",
+    "loser_value": "None"
+   },
+   {
+    "field": "Abstract_En",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Language",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "en",
+    "loser_value": "en"
+   },
+   {
+    "field": "DOI",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "10.1155/2022/8950243",
+    "loser_value": "None"
+   },
+   {
+    "field": "PubYear",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "2022",
+    "loser_value": "2022"
+   },
+   {
+    "field": "Volume",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Issue",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Pages",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "IsVerified",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "True",
+    "loser_value": "True"
+   },
+   {
+    "field": "ScrapedAt",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "2026-05-07 08:25:22.292383+00:00",
+    "loser_value": "2026-05-07 08:30:28.086731+00:00"
+   },
+   {
+    "field": "Source",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Scholar",
+    "loser_value": "Scholar"
+   },
+   {
+    "field": "NormalizedTitle",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "tuberculosis disease diagnosis based on an optimized machine learning model",
+    "loser_value": "research article tuberculosis disease diagnosis based on an optimized machine learning model"
+   },
+   {
+    "field": "Indexing",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "CitationsByYear",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "{'2022': 8, '2023': 23, '2024': 28, '2025': 13, '2026': 10}",
+    "loser_value": "None"
+   },
+   {
+    "field": "TenantID",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "1",
+    "loser_value": "1"
+   },
+   {
+    "field": "AffiliationVerified",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "True",
+    "loser_value": "None"
+   },
+   {
+    "field": "VerificationSource",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "openalex",
+    "loser_value": "None"
+   },
+   {
+    "field": "VerifiedAt",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "2026-08-02 10:35:00.626668",
+    "loser_value": "None"
+   },
+   {
+    "field": "VerificationDetails",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "{'ror': 'https://ror.org/0403jak37', 'tier': 'openalex', 'country': 'SA', 'confidence': 'fallback', 'decision_basis': 'openalex_albaha_match', 'evidence_trail': [{'url': 'https://www.hindawi.com/journ",
+    "loser_value": "None"
+   },
+   {
+    "field": "VenueType",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Journal",
+    "loser_value": "Journal"
+   },
+   {
+    "field": "DoiResolvedBy",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "DoiResolvedAt",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "OpenAlexWorkID",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "AbstractSource",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "openalex",
+    "loser_value": "None"
+   },
+   {
+    "field": "PdfUrl",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "https://downloads.hindawi.com/journals/jhe/2022/8950243.pdf",
+    "loser_value": "None"
+   },
+   {
+    "field": "PdfAccessType",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "open_access_pdf_link",
+    "loser_value": "None"
+   },
+   {
+    "field": "PublicationType",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Research Article",
+    "loser_value": "Research Article"
+   }
+  ],
+  "dependencies": {
+   "Citations": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ExternalAuthors": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "PaperKeywords": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "CitationsHistory": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ReportPaperDecision": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "AuthorReviewQueue": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ReportPaperDecision.MissingResolvedToPaperID": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   }
+  }
+ },
+ {
+  "pair_input": [
+   5482,
+   5232
+  ],
+  "tier": "TIER1",
+  "choose_keep_survivor": 5232,
+  "choose_keep_loser": 5482,
+  "choose_keep_reason": "has_doi",
+  "pair_confidence": "high",
+  "hard_exclusion_reason": null,
+  "is_distinct_record": false,
+  "survivor_doi": "10.1155/2022/8531213",
+  "loser_doi": null,
+  "survivor_citations": 61,
+  "loser_citations": 0,
+  "survivor_is_verified": true,
+  "loser_is_verified": true,
+  "survivor_authors_uid": [
+   97
+  ],
+  "loser_authors_uid": [
+   97
+  ],
+  "survivor_title": "Optimal deep learning model for olive disease diagnosis based on an adaptive genetic algorithm",
+  "loser_title": "Research Article Optimal Deep Learning Model for Olive Disease Diagnosis Based on an Adaptive Genetic Algorithm",
+  "contamination_survivor": [],
+  "contamination_loser": [],
+  "field_diffs": [
+   {
+    "field": "JournalID",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "1803",
+    "loser_value": "None"
+   },
+   {
+    "field": "Title",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "Optimal deep learning model for olive disease diagnosis based on an adaptive genetic algorithm",
+    "loser_value": "Research Article Optimal Deep Learning Model for Olive Disease Diagnosis Based on an Adaptive Genetic Algorithm"
+   },
+   {
+    "field": "Title_En",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Abstract",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "Though many researchers have studied plant leaf disease, the timely diagnosis of diseases in olive leaves still presents an indisputable challenge. Infected leaves may display different symptoms from ",
+    "loser_value": "None"
+   },
+   {
+    "field": "Abstract_En",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Language",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "en",
+    "loser_value": "en"
+   },
+   {
+    "field": "DOI",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "10.1155/2022/8531213",
+    "loser_value": "None"
+   },
+   {
+    "field": "PubYear",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "2022",
+    "loser_value": "2022"
+   },
+   {
+    "field": "Volume",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Issue",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Pages",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "IsVerified",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "True",
+    "loser_value": "True"
+   },
+   {
+    "field": "ScrapedAt",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "2026-05-07 08:25:22.292383+00:00",
+    "loser_value": "2026-05-07 08:30:28.086731+00:00"
+   },
+   {
+    "field": "Source",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Scholar",
+    "loser_value": "Scholar"
+   },
+   {
+    "field": "NormalizedTitle",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "optimal deep learning model for olive disease diagnosis based on an adaptive genetic algorithm",
+    "loser_value": "research article optimal deep learning model for olive disease diagnosis based on an adaptive genetic algorithm"
+   },
+   {
+    "field": "Indexing",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "CitationsByYear",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "{'2022': 5, '2023': 13, '2024': 12, '2025': 8, '2026': 2}",
+    "loser_value": "None"
+   },
+   {
+    "field": "TenantID",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "1",
+    "loser_value": "1"
+   },
+   {
+    "field": "AffiliationVerified",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "True",
+    "loser_value": "None"
+   },
+   {
+    "field": "VerificationSource",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "openalex",
+    "loser_value": "None"
+   },
+   {
+    "field": "VerifiedAt",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "2026-08-02 10:36:44.846037",
+    "loser_value": "None"
+   },
+   {
+    "field": "VerificationDetails",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "{'ror': 'https://ror.org/0403jak37', 'tier': 'openalex', 'country': 'SA', 'confidence': 'fallback', 'decision_basis': 'openalex_albaha_match', 'evidence_trail': [{'url': 'https://onlinelibrary.wiley.c",
+    "loser_value": "None"
+   },
+   {
+    "field": "VenueType",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Journal",
+    "loser_value": "Journal"
+   },
+   {
+    "field": "DoiResolvedBy",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "DoiResolvedAt",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "OpenAlexWorkID",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "AbstractSource",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "openalex",
+    "loser_value": "None"
+   },
+   {
+    "field": "PdfUrl",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "https://downloads.hindawi.com/journals/wcmc/2022/8531213.pdf",
+    "loser_value": "None"
+   },
+   {
+    "field": "PdfAccessType",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "open_access_pdf_link",
+    "loser_value": "None"
+   },
+   {
+    "field": "PublicationType",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Research Article",
+    "loser_value": "Research Article"
+   }
+  ],
+  "dependencies": {
+   "Citations": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ExternalAuthors": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "PaperKeywords": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "CitationsHistory": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ReportPaperDecision": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "AuthorReviewQueue": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ReportPaperDecision.MissingResolvedToPaperID": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   }
+  }
+ },
+ {
+  "pair_input": [
+   5549,
+   5548
+  ],
+  "tier": "TIER1",
+  "choose_keep_survivor": 5548,
+  "choose_keep_loser": 5549,
+  "choose_keep_reason": "has_doi",
+  "pair_confidence": "high",
+  "hard_exclusion_reason": null,
+  "is_distinct_record": false,
+  "survivor_doi": "10.1155/2022/3183492",
+  "loser_doi": null,
+  "survivor_citations": 0,
+  "loser_citations": 4,
+  "survivor_is_verified": true,
+  "loser_is_verified": true,
+  "survivor_authors_uid": [
+   104
+  ],
+  "loser_authors_uid": [
+   104
+  ],
+  "survivor_title": "Research Article Optimization of Students’ Performance Prediction through an Iterative Model of Frustration Severity",
+  "loser_title": "Optimization of students’ performance prediction through an iterative model of frustration severity",
+  "contamination_survivor": [],
+  "contamination_loser": [],
+  "field_diffs": [
+   {
+    "field": "JournalID",
+    "classification": "ONE_SIDED",
+    "why": "loser side empty",
+    "survivor_value": "None",
+    "loser_value": "676"
+   },
+   {
+    "field": "Title",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "Research Article Optimization of Students’ Performance Prediction through an Iterative Model of Frustration Severity",
+    "loser_value": "Optimization of students’ performance prediction through an iterative model of frustration severity"
+   },
+   {
+    "field": "Title_En",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Abstract",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "Recent articles reported a massive increase in frustration among weak students due to the outbreak of COVID-19 and Massive Open Online Courses (MOOCs). These students need to be evaluated to detect po",
+    "loser_value": "None"
+   },
+   {
+    "field": "Abstract_En",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Language",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "en",
+    "loser_value": "en"
+   },
+   {
+    "field": "DOI",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "10.1155/2022/3183492",
+    "loser_value": "None"
+   },
+   {
+    "field": "PubYear",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "2022",
+    "loser_value": "2022"
+   },
+   {
+    "field": "Volume",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Issue",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Pages",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "IsVerified",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "True",
+    "loser_value": "True"
+   },
+   {
+    "field": "ScrapedAt",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "2026-05-07 08:32:13.204421+00:00",
+    "loser_value": "2026-05-07 08:32:13.204421+00:00"
+   },
+   {
+    "field": "Source",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Scholar",
+    "loser_value": "Scholar"
+   },
+   {
+    "field": "NormalizedTitle",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "research article optimization of students performance prediction through an iterative model of frustration severity",
+    "loser_value": "optimization of students performance prediction through an iterative model of frustration severity"
+   },
+   {
+    "field": "Indexing",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "CitationsByYear",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "{'2023': 2, '2024': 1, '2025': 1}",
+    "loser_value": "{'2023': 2, '2024': 1, '2025': 1}"
+   },
+   {
+    "field": "TenantID",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "1",
+    "loser_value": "1"
+   },
+   {
+    "field": "AffiliationVerified",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "True",
+    "loser_value": "True"
+   },
+   {
+    "field": "VerificationSource",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "openalex",
+    "loser_value": "openalex"
+   },
+   {
+    "field": "VerifiedAt",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "2026-08-02 10:51:18.606469",
+    "loser_value": "2026-08-02 12:29:05.801973"
+   },
+   {
+    "field": "VerificationDetails",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "{'ror': 'https://ror.org/0403jak37', 'tier': 'openalex', 'country': 'SA', 'confidence': 'fallback', 'decision_basis': 'openalex_albaha_match', 'evidence_trail': [{'url': 'https://www.hindawi.com/journ",
+    "loser_value": "{'ror': 'https://ror.org/0403jak37', 'tier': 'openalex', 'country': 'SA', 'confidence': 'fallback', 'decision_basis': 'openalex_albaha_match', 'evidence_trail': [{'url': 'https://www.hindawi.com/journ"
+   },
+   {
+    "field": "VenueType",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Journal",
+    "loser_value": "Journal"
+   },
+   {
+    "field": "DoiResolvedBy",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "DoiResolvedAt",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "OpenAlexWorkID",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "AbstractSource",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "openalex",
+    "loser_value": "None"
+   },
+   {
+    "field": "PdfUrl",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "https://downloads.hindawi.com/journals/cin/2022/3183492.pdf",
+    "loser_value": "None"
+   },
+   {
+    "field": "PdfAccessType",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "open_access_pdf_link",
+    "loser_value": "None"
+   },
+   {
+    "field": "PublicationType",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Research Article",
+    "loser_value": "Research Article"
+   }
+  ],
+  "dependencies": {
+   "Citations": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ExternalAuthors": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "PaperKeywords": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "CitationsHistory": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ReportPaperDecision": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "AuthorReviewQueue": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ReportPaperDecision.MissingResolvedToPaperID": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   }
+  }
+ },
+ {
+  "pair_input": [
+   6088,
+   6086
+  ],
+  "tier": "TIER1",
+  "choose_keep_survivor": 6086,
+  "choose_keep_loser": 6088,
+  "choose_keep_reason": "has_doi",
+  "pair_confidence": "high",
+  "hard_exclusion_reason": null,
+  "is_distinct_record": false,
+  "survivor_doi": "10.1155/2021/5534379",
+  "loser_doi": null,
+  "survivor_citations": 0,
+  "loser_citations": 18,
+  "survivor_is_verified": true,
+  "loser_is_verified": true,
+  "survivor_authors_uid": [
+   105
+  ],
+  "loser_authors_uid": [
+   105
+  ],
+  "survivor_title": "Research Article Prediction Approaches for Smart Cultivation: A Comparative Study",
+  "loser_title": "Prediction approaches for smart cultivation: a comparative study",
+  "contamination_survivor": [],
+  "contamination_loser": [],
+  "field_diffs": [
+   {
+    "field": "JournalID",
+    "classification": "ONE_SIDED",
+    "why": "loser side empty",
+    "survivor_value": "None",
+    "loser_value": "771"
+   },
+   {
+    "field": "Title",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "Research Article Prediction Approaches for Smart Cultivation: A Comparative Study",
+    "loser_value": "Prediction approaches for smart cultivation: a comparative study"
+   },
+   {
+    "field": "Title_En",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Abstract",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "Crop cultivation is one of the oldest activities of civilization. For a long time, crop production was carried out based on knowledge passed from generation to generation. However, due to the rapid gr",
+    "loser_value": "None"
+   },
+   {
+    "field": "Abstract_En",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Language",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "en",
+    "loser_value": "en"
+   },
+   {
+    "field": "DOI",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "10.1155/2021/5534379",
+    "loser_value": "None"
+   },
+   {
+    "field": "PubYear",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "2021",
+    "loser_value": "2021"
+   },
+   {
+    "field": "Volume",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Issue",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Pages",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "IsVerified",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "True",
+    "loser_value": "True"
+   },
+   {
+    "field": "ScrapedAt",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "2026-05-07 10:32:09.598577+00:00",
+    "loser_value": "2026-05-07 10:32:09.598577+00:00"
+   },
+   {
+    "field": "Source",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Scholar",
+    "loser_value": "Scholar"
+   },
+   {
+    "field": "NormalizedTitle",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "research article prediction approaches for smart cultivation a comparative study",
+    "loser_value": "prediction approaches for smart cultivation a comparative study"
+   },
+   {
+    "field": "Indexing",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "CitationsByYear",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "{'2021': 4, '2022': 5, '2023': 2, '2024': 4, '2025': 1, '2026': 2}",
+    "loser_value": "{'2021': 4, '2022': 5, '2023': 2, '2024': 4, '2025': 1, '2026': 2}"
+   },
+   {
+    "field": "TenantID",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "1",
+    "loser_value": "1"
+   },
+   {
+    "field": "AffiliationVerified",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "True",
+    "loser_value": "True"
+   },
+   {
+    "field": "VerificationSource",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "openalex",
+    "loser_value": "openalex"
+   },
+   {
+    "field": "VerifiedAt",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "2026-08-02 11:22:59.573003",
+    "loser_value": "2026-08-02 12:31:35.391539"
+   },
+   {
+    "field": "VerificationDetails",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "{'ror': 'https://ror.org/0403jak37', 'tier': 'openalex', 'country': 'SA', 'confidence': 'fallback', 'decision_basis': 'openalex_albaha_match', 'evidence_trail': [{'url': 'https://onlinelibrary.wiley.c",
+    "loser_value": "{'ror': 'https://ror.org/0403jak37', 'tier': 'openalex', 'country': 'SA', 'confidence': 'fallback', 'decision_basis': 'openalex_albaha_match', 'evidence_trail': [{'url': 'https://onlinelibrary.wiley.c"
+   },
+   {
+    "field": "VenueType",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Journal",
+    "loser_value": "Journal"
+   },
+   {
+    "field": "DoiResolvedBy",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "DoiResolvedAt",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "OpenAlexWorkID",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "AbstractSource",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "openalex",
+    "loser_value": "None"
+   },
+   {
+    "field": "PdfUrl",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "https://downloads.hindawi.com/journals/complexity/2021/5534379.pdf",
+    "loser_value": "None"
+   },
+   {
+    "field": "PdfAccessType",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "open_access_pdf_link",
+    "loser_value": "None"
+   },
+   {
+    "field": "PublicationType",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Research Article",
+    "loser_value": "Research Article"
+   }
+  ],
+  "dependencies": {
+   "Citations": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ExternalAuthors": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "PaperKeywords": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "CitationsHistory": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ReportPaperDecision": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "AuthorReviewQueue": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ReportPaperDecision.MissingResolvedToPaperID": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   }
+  }
+ },
+ {
+  "pair_input": [
+   6091,
+   3875
+  ],
+  "tier": "TIER1",
+  "choose_keep_survivor": 3875,
+  "choose_keep_loser": 6091,
+  "choose_keep_reason": "has_doi",
+  "pair_confidence": "high",
+  "hard_exclusion_reason": null,
+  "is_distinct_record": false,
+  "survivor_doi": "10.1155/2019/4568368",
+  "loser_doi": null,
+  "survivor_citations": 88,
+  "loser_citations": 0,
+  "survivor_is_verified": true,
+  "loser_is_verified": true,
+  "survivor_authors_uid": [
+   6,
+   105
+  ],
+  "loser_authors_uid": [
+   105
+  ],
+  "survivor_title": "Investigating brute force attack patterns in IoT network",
+  "loser_title": "Research Article Investigating Brute Force Attack Patterns in IoT Network",
+  "contamination_survivor": [],
+  "contamination_loser": [],
+  "field_diffs": [
+   {
+    "field": "JournalID",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "2375",
+    "loser_value": "None"
+   },
+   {
+    "field": "Title",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "Investigating brute force attack patterns in IoT network",
+    "loser_value": "Research Article Investigating Brute Force Attack Patterns in IoT Network"
+   },
+   {
+    "field": "Title_En",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Abstract",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "https://www.scopus.com/record/display.url?eid=2-s2.0-85065760582&origin=resultslist",
+    "loser_value": "None"
+   },
+   {
+    "field": "Abstract_En",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Language",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "English",
+    "loser_value": "en"
+   },
+   {
+    "field": "DOI",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "10.1155/2019/4568368",
+    "loser_value": "None"
+   },
+   {
+    "field": "PubYear",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "2019",
+    "loser_value": "2019"
+   },
+   {
+    "field": "Volume",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "2019",
+    "loser_value": "None"
+   },
+   {
+    "field": "Issue",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "-",
+    "loser_value": "None"
+   },
+   {
+    "field": "Pages",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "-",
+    "loser_value": "None"
+   },
+   {
+    "field": "IsVerified",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "True",
+    "loser_value": "True"
+   },
+   {
+    "field": "ScrapedAt",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "2026-06-04 13:50:10.731478+00:00",
+    "loser_value": "2026-05-07 10:32:09.598577+00:00"
+   },
+   {
+    "field": "Source",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "Scopus",
+    "loser_value": "Scholar"
+   },
+   {
+    "field": "NormalizedTitle",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "investigating brute force attack patterns in iot network",
+    "loser_value": "research article investigating brute force attack patterns in iot network"
+   },
+   {
+    "field": "Indexing",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "CitationsByYear",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "{'2019': 2, '2020': 7, '2021': 24, '2022': 12, '2023': 16, '2024': 14, '2025': 11, '2026': 2}",
+    "loser_value": "None"
+   },
+   {
+    "field": "TenantID",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "1",
+    "loser_value": "1"
+   },
+   {
+    "field": "AffiliationVerified",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "True",
+    "loser_value": "None"
+   },
+   {
+    "field": "VerificationSource",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "openalex",
+    "loser_value": "None"
+   },
+   {
+    "field": "VerifiedAt",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "2026-08-01 20:28:29.952893",
+    "loser_value": "None"
+   },
+   {
+    "field": "VerificationDetails",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "{'ror': 'https://ror.org/0403jak37', 'tier': 'openalex', 'country': 'SA', 'confidence': 'supporting', 'decision_basis': 'openalex', 'evidence_trail': [{'url': 'https://www.hindawi.com/journals/jece/20",
+    "loser_value": "None"
+   },
+   {
+    "field": "VenueType",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Journal",
+    "loser_value": "Journal"
+   },
+   {
+    "field": "DoiResolvedBy",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "DoiResolvedAt",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "OpenAlexWorkID",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "AbstractSource",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "openalex",
+    "loser_value": "None"
+   },
+   {
+    "field": "PdfUrl",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "https://downloads.hindawi.com/journals/jece/2019/4568368.pdf",
+    "loser_value": "None"
+   },
+   {
+    "field": "PdfAccessType",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "open_access_pdf_link",
+    "loser_value": "None"
+   },
+   {
+    "field": "PublicationType",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Research Article",
+    "loser_value": "Research Article"
+   }
+  ],
+  "dependencies": {
+   "Citations": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ExternalAuthors": {
+    "survivor_rows": 5,
+    "loser_rows": 0
+   },
+   "PaperKeywords": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "CitationsHistory": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ReportPaperDecision": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "AuthorReviewQueue": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ReportPaperDecision.MissingResolvedToPaperID": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   }
+  }
+ },
+ {
+  "pair_input": [
+   6189,
+   6153
+  ],
+  "tier": "TIER1",
+  "choose_keep_survivor": 6153,
+  "choose_keep_loser": 6189,
+  "choose_keep_reason": "has_doi",
+  "pair_confidence": "high",
+  "hard_exclusion_reason": null,
+  "is_distinct_record": false,
+  "survivor_doi": "10.1155/2022/6354543",
+  "loser_doi": null,
+  "survivor_citations": 45,
+  "loser_citations": 0,
+  "survivor_is_verified": true,
+  "loser_is_verified": true,
+  "survivor_authors_uid": [
+   112
+  ],
+  "loser_authors_uid": [
+   112
+  ],
+  "survivor_title": "Semantic Sentiment Classification for COVID‐19 Tweets Using Universal Sentence Encoder",
+  "loser_title": "Research Article Semantic Sentiment Classification for COVID-19 Tweets Using Universal Sentence Encoder",
+  "contamination_survivor": [],
+  "contamination_loser": [],
+  "field_diffs": [
+   {
+    "field": "JournalID",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "676",
+    "loser_value": "None"
+   },
+   {
+    "field": "Title",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "Semantic Sentiment Classification for COVID‐19 Tweets Using Universal Sentence Encoder",
+    "loser_value": "Research Article Semantic Sentiment Classification for COVID-19 Tweets Using Universal Sentence Encoder"
+   },
+   {
+    "field": "Title_En",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Abstract",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "The spread of data on the web has increased in the last twenty years. One of the reasons is the appearance of social media. The data on social sites describe many real-life events in our daily lives. ",
+    "loser_value": "None"
+   },
+   {
+    "field": "Abstract_En",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Language",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "en",
+    "loser_value": "en"
+   },
+   {
+    "field": "DOI",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "10.1155/2022/6354543",
+    "loser_value": "None"
+   },
+   {
+    "field": "PubYear",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "2022",
+    "loser_value": "2022"
+   },
+   {
+    "field": "Volume",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Issue",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Pages",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "IsVerified",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "True",
+    "loser_value": "True"
+   },
+   {
+    "field": "ScrapedAt",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "2026-05-07 10:34:54.078221+00:00",
+    "loser_value": "2026-05-07 10:34:54.078221+00:00"
+   },
+   {
+    "field": "Source",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Scholar",
+    "loser_value": "Scholar"
+   },
+   {
+    "field": "NormalizedTitle",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "semantic sentiment classification for covid19 tweets using universal sentence encoder",
+    "loser_value": "research article semantic sentiment classification for covid19 tweets using universal sentence encoder"
+   },
+   {
+    "field": "Indexing",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "CitationsByYear",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "{'2023': 5, '2024': 2, '2025': 2, '2026': 1}",
+    "loser_value": "None"
+   },
+   {
+    "field": "TenantID",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "1",
+    "loser_value": "1"
+   },
+   {
+    "field": "AffiliationVerified",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "False",
+    "loser_value": "None"
+   },
+   {
+    "field": "VerificationSource",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "openalex",
+    "loser_value": "None"
+   },
+   {
+    "field": "VerifiedAt",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "2026-08-02 11:26:57.500323",
+    "loser_value": "None"
+   },
+   {
+    "field": "VerificationDetails",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "{'tier': 'openalex', 'reason': 'no_albaha_complete_affiliations', 'authors': 4, 'confidence': 'fallback', 'decision_basis': 'openalex_complete_affiliations', 'evidence_trail': [{'url': 'https://www.hi",
+    "loser_value": "None"
+   },
+   {
+    "field": "VenueType",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Journal",
+    "loser_value": "Journal"
+   },
+   {
+    "field": "DoiResolvedBy",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "DoiResolvedAt",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "OpenAlexWorkID",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "AbstractSource",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "openalex",
+    "loser_value": "None"
+   },
+   {
+    "field": "PdfUrl",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "https://downloads.hindawi.com/journals/cin/2022/6354543.pdf",
+    "loser_value": "None"
+   },
+   {
+    "field": "PdfAccessType",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "open_access_pdf_link",
+    "loser_value": "None"
+   },
+   {
+    "field": "PublicationType",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Research Article",
+    "loser_value": "Research Article"
+   }
+  ],
+  "dependencies": {
+   "Citations": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ExternalAuthors": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "PaperKeywords": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "CitationsHistory": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ReportPaperDecision": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "AuthorReviewQueue": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ReportPaperDecision.MissingResolvedToPaperID": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   }
+  }
+ },
+ {
+  "pair_input": [
+   7572,
+   6645
+  ],
+  "tier": "TIER1",
+  "choose_keep_survivor": 6645,
+  "choose_keep_loser": 7572,
+  "choose_keep_reason": "has_doi",
+  "pair_confidence": "high",
+  "hard_exclusion_reason": null,
+  "is_distinct_record": false,
+  "survivor_doi": "10.1109/jstars.2026.3683462",
+  "loser_doi": null,
+  "survivor_citations": 1,
+  "loser_citations": 0,
+  "survivor_is_verified": true,
+  "loser_is_verified": true,
+  "survivor_authors_uid": [
+   81
+  ],
+  "loser_authors_uid": [
+   81
+  ],
+  "survivor_title": "LiDAR, GNSS, and IMU Sensor Fine Alignment Through Dynamic Time Warping to Construct 3D City Maps",
+  "loser_title": "LiDAR, GNSS and IMU Sensor Alignment through Dynamic Time Warping to Construct 3D City Maps",
+  "contamination_survivor": [],
+  "contamination_loser": [],
+  "field_diffs": [
+   {
+    "field": "JournalID",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "1440",
+    "loser_value": "None"
+   },
+   {
+    "field": "Title",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "LiDAR, GNSS, and IMU Sensor Fine Alignment Through Dynamic Time Warping to Construct 3D City Maps",
+    "loser_value": "LiDAR, GNSS and IMU Sensor Alignment through Dynamic Time Warping to Construct 3D City Maps"
+   },
+   {
+    "field": "Title_En",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Abstract",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "(LiDAR)-based 3-D mapping suffers from cumulative drift causing global misalignment, particularly in global navigation satellite system (GNSS)-constrained environments. To address this, we propose a u",
+    "loser_value": "None"
+   },
+   {
+    "field": "Abstract_En",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Language",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "en",
+    "loser_value": "en"
+   },
+   {
+    "field": "DOI",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "10.1109/jstars.2026.3683462",
+    "loser_value": "None"
+   },
+   {
+    "field": "PubYear",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "2026",
+    "loser_value": "2025"
+   },
+   {
+    "field": "Volume",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Issue",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Pages",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "IsVerified",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "True",
+    "loser_value": "True"
+   },
+   {
+    "field": "ScrapedAt",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "2026-05-07 17:27:01.424047+00:00",
+    "loser_value": "2026-07-24 19:35:07.060634+00:00"
+   },
+   {
+    "field": "Source",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Scholar",
+    "loser_value": "Scholar"
+   },
+   {
+    "field": "NormalizedTitle",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "lidar gnss and imu sensor fine alignment through dynamic time warping to construct 3d city maps",
+    "loser_value": "lidar gnss and imu sensor alignment through dynamic time warping to construct 3d city maps"
+   },
+   {
+    "field": "Indexing",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "CitationsByYear",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "{'2026': 1}",
+    "loser_value": "None"
+   },
+   {
+    "field": "TenantID",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "1",
+    "loser_value": "1"
+   },
+   {
+    "field": "AffiliationVerified",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "False",
+    "loser_value": "None"
+   },
+   {
+    "field": "VerificationSource",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "ieee_browser",
+    "loser_value": "None"
+   },
+   {
+    "field": "VerifiedAt",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "2026-08-02 12:08:08.794126",
+    "loser_value": "None"
+   },
+   {
+    "field": "VerificationDetails",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "{'url': 'https://ieeexplore.ieee.org/document/11493942', 'tier': 'ieee_browser', 'reason': 'no_albaha_in_affiliations', 'confidence': 'authoritative', 'authors_count': 8, 'decision_basis': 'ieee_brows",
+    "loser_value": "None"
+   },
+   {
+    "field": "VenueType",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "Journal",
+    "loser_value": "Preprint"
+   },
+   {
+    "field": "DoiResolvedBy",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "DoiResolvedAt",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "OpenAlexWorkID",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "AbstractSource",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "openalex",
+    "loser_value": "None"
+   },
+   {
+    "field": "PdfUrl",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "https://doi.org/10.1109/jstars.2026.3683462",
+    "loser_value": "None"
+   },
+   {
+    "field": "PdfAccessType",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "open_access_landing_page",
+    "loser_value": "None"
+   },
+   {
+    "field": "PublicationType",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Research Article",
+    "loser_value": "Research Article"
+   }
+  ],
+  "dependencies": {
+   "Citations": {
+    "survivor_rows": 1,
+    "loser_rows": 0
+   },
+   "ExternalAuthors": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "PaperKeywords": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "CitationsHistory": {
+    "survivor_rows": 1,
+    "loser_rows": 0
+   },
+   "ReportPaperDecision": {
+    "survivor_rows": 2,
+    "loser_rows": 0
+   },
+   "AuthorReviewQueue": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ReportPaperDecision.MissingResolvedToPaperID": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   }
+  }
+ },
+ {
+  "pair_input": [
+   5289,
+   5392
+  ],
+  "tier": "TIER2",
+  "choose_keep_survivor": 5289,
+  "choose_keep_loser": 5392,
+  "choose_keep_reason": "has_doi",
+  "pair_confidence": "high",
+  "hard_exclusion_reason": null,
+  "is_distinct_record": false,
+  "survivor_doi": "10.5220/0009592102610268",
+  "loser_doi": null,
+  "survivor_citations": 24,
+  "loser_citations": 3,
+  "survivor_is_verified": true,
+  "loser_is_verified": true,
+  "survivor_authors_uid": [
+   97
+  ],
+  "loser_authors_uid": [
+   97
+  ],
+  "survivor_title": "Adopting formal verification and model-based testing techniques for validating a blockchain-based healthcare records sharing system",
+  "loser_title": "Formal verification and model-based testing techniques for validating a blockchain-based healthcare records sharing system",
+  "contamination_survivor": [],
+  "contamination_loser": [],
+  "field_diffs": [
+   {
+    "field": "JournalID",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "1828",
+    "loser_value": "None"
+   },
+   {
+    "field": "Title",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "Adopting formal verification and model-based testing techniques for validating a blockchain-based healthcare records sharing system",
+    "loser_value": "Formal verification and model-based testing techniques for validating a blockchain-based healthcare records sharing system"
+   },
+   {
+    "field": "Title_En",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Abstract",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "The Electronic Health Records (EHR) sharing system is the modern tool for delivering efficient healthcare to patients. Its functions include tracking of therapies, monitoring of the treatment effectiv",
+    "loser_value": "None"
+   },
+   {
+    "field": "Abstract_En",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Language",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "en",
+    "loser_value": "en"
+   },
+   {
+    "field": "DOI",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "10.5220/0009592102610268",
+    "loser_value": "None"
+   },
+   {
+    "field": "PubYear",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "2020",
+    "loser_value": "2020"
+   },
+   {
+    "field": "Volume",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Issue",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Pages",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "IsVerified",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "True",
+    "loser_value": "True"
+   },
+   {
+    "field": "ScrapedAt",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "2026-05-07 08:27:25.996964+00:00",
+    "loser_value": "2026-05-07 08:29:27.272806+00:00"
+   },
+   {
+    "field": "Source",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Scholar",
+    "loser_value": "Scholar"
+   },
+   {
+    "field": "NormalizedTitle",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "adopting formal verification and modelbased testing techniques for validating a blockchainbased healthcare records sharing system",
+    "loser_value": "formal verification and modelbased testing techniques for validating a blockchainbased healthcare records sharing system"
+   },
+   {
+    "field": "Indexing",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "CitationsByYear",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "{'2022': 5, '2023': 3, '2024': 4, '2025': 2}",
+    "loser_value": "None"
+   },
+   {
+    "field": "TenantID",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "1",
+    "loser_value": "1"
+   },
+   {
+    "field": "AffiliationVerified",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "False",
+    "loser_value": "False"
+   },
+   {
+    "field": "VerificationSource",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "openalex",
+    "loser_value": "openalex"
+   },
+   {
+    "field": "VerifiedAt",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "2026-08-02 10:41:10.834559",
+    "loser_value": "2026-08-02 12:27:19.681487"
+   },
+   {
+    "field": "VerificationDetails",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "{'tier': 'openalex', 'reason': 'no_albaha_complete_affiliations', 'authors': 4, 'confidence': 'fallback', 'decision_basis': 'openalex_complete_affiliations', 'evidence_trail': [{'url': 'https://www.sc",
+    "loser_value": "{'tier': 'openalex', 'reason': 'no_albaha_complete_affiliations', 'authors': 4, 'confidence': 'fallback', 'decision_basis': 'openalex_complete_affiliations', 'evidence_trail': [{'url': 'https://www.sc"
+   },
+   {
+    "field": "VenueType",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "Conference",
+    "loser_value": "Journal"
+   },
+   {
+    "field": "DoiResolvedBy",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "DoiResolvedAt",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "OpenAlexWorkID",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "AbstractSource",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "openalex",
+    "loser_value": "None"
+   },
+   {
+    "field": "PdfUrl",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "https://doi.org/10.5220/0009592102610268",
+    "loser_value": "None"
+   },
+   {
+    "field": "PdfAccessType",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "open_access_landing_page",
+    "loser_value": "None"
+   },
+   {
+    "field": "PublicationType",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "Conference Paper",
+    "loser_value": "Research Article"
+   }
+  ],
+  "dependencies": {
+   "Citations": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ExternalAuthors": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "PaperKeywords": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "CitationsHistory": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ReportPaperDecision": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "AuthorReviewQueue": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ReportPaperDecision.MissingResolvedToPaperID": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   }
+  }
+ },
+ {
+  "pair_input": [
+   6107,
+   6109
+  ],
+  "tier": "TIER2",
+  "choose_keep_survivor": 6107,
+  "choose_keep_loser": 6109,
+  "choose_keep_reason": "has_doi",
+  "pair_confidence": "high",
+  "hard_exclusion_reason": null,
+  "is_distinct_record": false,
+  "survivor_doi": "10.1007/s11276-017-1493-2",
+  "loser_doi": null,
+  "survivor_citations": 94,
+  "loser_citations": 72,
+  "survivor_is_verified": true,
+  "loser_is_verified": true,
+  "survivor_authors_uid": [
+   69
+  ],
+  "loser_authors_uid": [
+   69
+  ],
+  "survivor_title": "Path Planning Models for Mobile Anchor-Assisted Localization in Wireless Sensor Networks",
+  "loser_title": "New path planning model for mobile anchor-assisted localization in wireless sensor networks",
+  "contamination_survivor": [],
+  "contamination_loser": [],
+  "field_diffs": [
+   {
+    "field": "JournalID",
+    "classification": "ONE_SIDED",
+    "why": "loser side empty",
+    "survivor_value": "None",
+    "loser_value": "1104"
+   },
+   {
+    "field": "Title",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "Path Planning Models for Mobile Anchor-Assisted Localization in Wireless Sensor Networks",
+    "loser_value": "New path planning model for mobile anchor-assisted localization in wireless sensor networks"
+   },
+   {
+    "field": "Title_En",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Abstract",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Abstract_En",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Language",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "en",
+    "loser_value": "en"
+   },
+   {
+    "field": "DOI",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "10.1007/s11276-017-1493-2",
+    "loser_value": "None"
+   },
+   {
+    "field": "PubYear",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "2018",
+    "loser_value": "2017"
+   },
+   {
+    "field": "Volume",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Issue",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "Pages",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "IsVerified",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "True",
+    "loser_value": "True"
+   },
+   {
+    "field": "ScrapedAt",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "2026-05-07 10:34:00.588716+00:00",
+    "loser_value": "2026-05-07 10:34:00.588716+00:00"
+   },
+   {
+    "field": "Source",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Scholar",
+    "loser_value": "Scholar"
+   },
+   {
+    "field": "NormalizedTitle",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "path planning models for mobile anchorassisted localization in wireless sensor networks",
+    "loser_value": "new path planning model for mobile anchorassisted localization in wireless sensor networks"
+   },
+   {
+    "field": "Indexing",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "CitationsByYear",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "{'2017': 4, '2018': 5, '2019': 14, '2020': 5, '2021': 13, '2022': 13, '2023': 6, '2024': 7, '2025': 5}",
+    "loser_value": "{'2017': 4, '2018': 5, '2019': 14, '2020': 5, '2021': 13, '2022': 13, '2023': 6, '2024': 7, '2025': 5}"
+   },
+   {
+    "field": "TenantID",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "1",
+    "loser_value": "1"
+   },
+   {
+    "field": "AffiliationVerified",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "True",
+    "loser_value": "True"
+   },
+   {
+    "field": "VerificationSource",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "publisher_html",
+    "loser_value": "publisher_html"
+   },
+   {
+    "field": "VerifiedAt",
+    "classification": "CONFLICT",
+    "why": "both populated, different values",
+    "survivor_value": "2026-08-02 11:24:41.905493",
+    "loser_value": "2026-08-02 12:31:41.246702"
+   },
+   {
+    "field": "VerificationDetails",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "{'url': 'https://link.springer.com/article/10.1007/s11276-017-1493-2', 'tier': 'publisher_html', 'strategy': 'meta_tag', 'meta_name': 'citation_author_institution', 'confidence': 'authoritative', 'dec",
+    "loser_value": "{'url': 'https://link.springer.com/article/10.1007/s11276-017-1493-2', 'tier': 'publisher_html', 'strategy': 'meta_tag', 'meta_name': 'citation_author_institution', 'confidence': 'authoritative', 'dec"
+   },
+   {
+    "field": "VenueType",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Journal",
+    "loser_value": "Journal"
+   },
+   {
+    "field": "DoiResolvedBy",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "DoiResolvedAt",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "OpenAlexWorkID",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "AbstractSource",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "PdfUrl",
+    "classification": "SAME",
+    "why": "both empty",
+    "survivor_value": "None",
+    "loser_value": "None"
+   },
+   {
+    "field": "PdfAccessType",
+    "classification": "ONE_SIDED",
+    "why": "survivor side empty",
+    "survivor_value": "publisher_page_only",
+    "loser_value": "None"
+   },
+   {
+    "field": "PublicationType",
+    "classification": "SAME",
+    "why": "equal values",
+    "survivor_value": "Research Article",
+    "loser_value": "Research Article"
+   }
+  ],
+  "dependencies": {
+   "Citations": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ExternalAuthors": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "PaperKeywords": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "CitationsHistory": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ReportPaperDecision": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "AuthorReviewQueue": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   },
+   "ReportPaperDecision.MissingResolvedToPaperID": {
+    "survivor_rows": 0,
+    "loser_rows": 0
+   }
+  }
+ }
+]

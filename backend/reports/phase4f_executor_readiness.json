@@ -1,0 +1,264 @@
+{
+  "phase": "4F",
+  "generated_read_only": true,
+  "db_writes": 0,
+  "network_calls": 0,
+  "records_merged": 0,
+  "doi_changes": 0,
+  "executor_code_created": false,
+
+  "dependency_map": [
+    {
+      "table": "Authors",
+      "fk_column": "PaperID",
+      "on_delete": "NO ACTION",
+      "nullable": false,
+      "classification": "MUST_REMAP_BEFORE_DELETE",
+      "current_handling": "Special-cased in merge_group(): INSERT...SELECT...ON CONFLICT (UserID,PaperID) DO NOTHING, then DELETE FROM Authors WHERE PaperID=loser, executed before the ResearchPaper delete.",
+      "evidence": "information_schema FK query (re-run this phase, identical to Phase 4B/4D); Authors.PaperID is NOT NULL so SET NULL is not schema-possible; ON DELETE NO ACTION means an unremapped delete would raise a foreign-key violation."
+    },
+    {
+      "table": "Citations",
+      "fk_column": "PaperID",
+      "on_delete": "NO ACTION",
+      "nullable": false,
+      "classification": "MUST_REMAP_BEFORE_DELETE",
+      "current_handling": "Special-cased in merge_group(): GREATEST()-merge of CitationsCount via INSERT...ON CONFLICT(PaperID) DO UPDATE, then DELETE FROM Citations WHERE PaperID=loser, only if a loser row exists.",
+      "evidence": "Same FK query; NOT NULL; NO ACTION."
+    },
+    {
+      "table": "ExternalAuthors",
+      "fk_column": "PaperID",
+      "on_delete": "NO ACTION",
+      "nullable": true,
+      "classification": "MUST_REMAP_BEFORE_DELETE",
+      "current_handling": "In dedup_papers.py's SIMPLE_CHILDREN -- remap_simple_child() bulk UPDATE with a per-row SAVEPOINT/conflict-drop fallback on a unique-constraint violation.",
+      "evidence": "Nullable, but ON DELETE is NO ACTION (not automatic SET NULL) -- an unremapped delete would still raise an FK violation."
+    },
+    {
+      "table": "PaperKeywords",
+      "fk_column": "PaperID",
+      "on_delete": "NO ACTION",
+      "nullable": false,
+      "classification": "MUST_REMAP_BEFORE_DELETE",
+      "current_handling": "Listed in SIMPLE_CHILDREN, but the table does not exist in this database today (confirmed via information_schema.tables) -- dead list entry, currently harmless.",
+      "evidence": "FK definition exists in information_schema regardless of the table being unused; classification reflects the FK rule itself."
+    },
+    {
+      "table": "CitationsHistory",
+      "fk_column": "PaperID",
+      "on_delete": "NO ACTION",
+      "nullable": true,
+      "classification": "MUST_REMAP_BEFORE_DELETE",
+      "current_handling": "In SIMPLE_CHILDREN -- remap_simple_child() bulk UPDATE with conflict-drop fallback.",
+      "evidence": "Nullable, ON DELETE NO ACTION."
+    },
+    {
+      "table": "ReportPaperDecision",
+      "fk_column": "PaperID",
+      "on_delete": "SET NULL",
+      "nullable": true,
+      "classification": "SET_NULL",
+      "current_handling": "In SIMPLE_CHILDREN -- remap_simple_child() runs BEFORE the loser ResearchPaper row is deleted, so this ON DELETE SET NULL rule is a fallback that should not normally fire when merge_group() runs correctly. Re-confirms and corrects an earlier, less precise Phase 4B read that said NO ACTION for this exact column.",
+      "evidence": "Fresh information_schema.referential_constraints query this phase: delete_rule='SET NULL', confirmed 3 times now (Phase 4C, 4D, 4F) with identical results."
+    },
+    {
+      "table": "ReportPaperDecision",
+      "fk_column": "MissingResolvedToPaperID",
+      "on_delete": "SET NULL",
+      "nullable": true,
+      "classification": "SET_NULL",
+      "current_handling": "NOT remapped by any existing logic -- remap_simple_child() only UPDATEs rows WHERE PaperID=loser, a different column/WHERE clause than this one. If a loser PaperID is ever referenced here, an unmodified merge today would let it SET NULL silently on delete: not an error, not a cascade, just a silently orphaned 'resolved to' link.",
+      "evidence": "Same fresh FK query; DB-wide row count with this column populated is 0 (re-verified this phase), so currently zero practical impact, but the code gap is real and unaddressed."
+    },
+    {
+      "table": "AuthorReviewQueue",
+      "fk_column": "PaperID",
+      "on_delete": "CASCADE",
+      "nullable": false,
+      "classification": "AUTOMATIC_CASCADE",
+      "current_handling": "NOT in SIMPLE_CHILDREN, NOT special-cased, NOT included in snapshot_paper()'s captured child tables. If a loser PaperID ever has rows here, deleting the loser ResearchPaper row would CASCADE-delete them with zero recovery snapshot specific to this table.",
+      "evidence": "Fresh FK query confirms CASCADE; DB-wide row count is 0 (re-verified this phase) so currently zero practical impact for any existing plan, but this is the single highest-severity unaddressed gap in the dependency map -- CASCADE with zero remap and zero snapshot is silently irrecoverable the moment this table is populated."
+    }
+  ],
+  "dependency_map_completeness_check": {
+    "method": "Fresh information_schema.table_constraints + key_column_usage + constraint_column_usage + referential_constraints query, filtered to ccu.table_name='ResearchPaper', re-run independently in Phase 4B, Phase 4D, and this phase (Phase 4F).",
+    "result": "Identical 8-row result every time -- no table beyond these 7 tables (8 FK relationships, since ReportPaperDecision has 2) references ResearchPaper.PaperID.",
+    "confidence": "PROVEN FACT, not inferred -- re-derived from live schema metadata this phase, not assumed from any prior report or from dedup_papers.py's own SIMPLE_CHILDREN list."
+  },
+
+  "transaction_steps": [
+    {"step": "Re-read and lock winner/loser records", "inside_transaction": true,
+     "why": "Must happen after the transaction/lock is acquired so no other process can modify either row between the read and the eventual write -- this is exactly what SELECT ... FOR UPDATE exists for, and the pattern is already used elsewhere in this repo (backend/analytics/reconciliation_views.py, backend/accounts/views.py, others -- grep-confirmed this phase).",
+     "failure_requires_rollback": "Row not found (already deleted by a concurrent or prior merge) -> abort, do not proceed.",
+     "invariant_after": "Both PaperIDs exist and are locked for the remainder of the transaction."},
+    {"step": "Verify both records still match the approved plan", "inside_transaction": true,
+     "why": "Must be inside, immediately after the lock -- locking then finding a mismatch and rolling back is safe and cheap; locking is what makes this check meaningful (without it, a TOCTOU gap remains between check and commit).",
+     "failure_requires_rollback": "Any compared field differs from what the plan recorded (see stale_plan_protection).",
+     "invariant_after": "The live row content is provably identical to what the plan's field_actions/journal_state/author_content_conflicts were computed from."},
+    {"step": "Verify plan fingerprint/version", "inside_transaction": true,
+     "why": "Same reasoning as the previous step -- this is the mechanical implementation of that verification, not a separate concern; must be inside so a failure aborts cleanly via the same transaction.",
+     "failure_requires_rollback": "Fingerprint mismatch.",
+     "invariant_after": "The plan being executed is proven to be the one currently valid for these two live rows."},
+    {"step": "Verify execution_permitted == True", "inside_transaction": false,
+     "why": "This is a property of the STORED plan object, not of live DB state -- it can and should be checked before ever opening a transaction or acquiring a lock, as a cheap early exit that avoids taking any lock for a plan that was never approved.",
+     "failure_requires_rollback": "N/A -- never even starts a transaction.",
+     "invariant_after": "No transaction opened for an unapproved plan."},
+    {"step": "Verify human approval where required", "inside_transaction": false,
+     "why": "Same reasoning as execution_permitted -- this is metadata about the plan/approval record, checkable before touching the database at all.",
+     "failure_requires_rollback": "N/A -- never even starts a transaction.",
+     "invariant_after": "No transaction opened without recorded approval where the plan required it."},
+    {"step": "Re-check DOI ownership", "inside_transaction": true,
+     "why": "Must be inside, after the lock -- this is exactly the existing doi_taken()-style live re-check pattern already used in find_missing_dois.py before writing a DOI (a proven, repository-native precedent for 're-verify immediately before the write, inside the same transaction that will perform it'), applied here to guard against the loser's DOI (if any) or the winner's DOI having been claimed elsewhere between plan generation and execution.",
+     "failure_requires_rollback": "The winner's DOI is no longer unique, or a DOI state changed since the plan was built.",
+     "invariant_after": "The uq_paper_doi_normalized constraint cannot be violated by this transaction."},
+    {"step": "Apply deterministic field decisions (JournalID backfill, etc.)", "inside_transaction": true,
+     "why": "A write -- must be inside the transaction that can still be rolled back if anything downstream fails.",
+     "failure_requires_rollback": "Any UPDATE failure (constraint violation, unexpected type error).",
+     "invariant_after": "Winner's ResearchPaper row reflects exactly the field_actions/journal_state the approved plan specified -- no field this phase's plan schema didn't explicitly plan for is touched."},
+    {"step": "Migrate child records", "inside_transaction": true,
+     "why": "Writes across multiple tables that must succeed or fail together -- this is exactly what merge_group() already does today, unchanged.",
+     "failure_requires_rollback": "Any child-table write failure; an author_content_conflicts entry that was somehow not resolved (defensive re-check, see below).",
+     "invariant_after": "Every dependency classified MUST_REMAP_BEFORE_DELETE has been remapped; every UserID linked to either copy is still linked to the winner (the existing profile-preservation assertion)."},
+    {"step": "Resolve unique-key collisions safely", "inside_transaction": true,
+     "why": "Part of the same child-migration writes -- ON CONFLICT DO NOTHING / DO UPDATE and the SAVEPOINT-based conflict-drop fallback are per-statement mechanics inside the larger transaction, not separable from it.",
+     "failure_requires_rollback": "An unexpected constraint violation the existing SAVEPOINT fallback doesn't already catch.",
+     "invariant_after": "No duplicate-key row exists in any child table for the winner PaperID."},
+    {"step": "Create audit records", "inside_transaction": true,
+     "why": "Must be inside and, per the existing code, BEFORE the loser's ResearchPaper row is deleted -- an audit record written outside the transaction could exist for a merge that then rolled back, which is a worse failure mode than a merge with no audit record.",
+     "failure_requires_rollback": "AuditLog insert failure (should be near-impossible, but must still roll back the whole merge if it happens -- an unaudited merge is not acceptable).",
+     "invariant_after": "An AuditLog row with Action='paper.merge.dedup' exists for every loser that was actually merged, and only for those."},
+    {"step": "Delete or retire loser", "inside_transaction": true,
+     "why": "The irreversible step -- must be the last write in the transaction, after every dependency has been migrated and audited, so that if this step's own FK checks fail, everything else rolls back too.",
+     "failure_requires_rollback": "FK violation from an unremapped MUST_REMAP_BEFORE_DELETE dependency (this would mean a bug in the migration step above, not a normal-path failure).",
+     "invariant_after": "The loser PaperID no longer exists in ResearchPaper."},
+    {"step": "Final invariant checks", "inside_transaction": true,
+     "why": "Must run before COMMIT, inside the same transaction, so a violation can still abort cleanly -- this is exactly the existing profile-preservation assertion pattern (raise -> transaction.atomic() rolls back everything).",
+     "failure_requires_rollback": "Any invariant violation -- e.g. a UserID present on the loser is no longer linked to the winner.",
+     "invariant_after": "All stated invariants hold; safe to commit."},
+    {"step": "Commit", "inside_transaction": true,
+     "why": "The transaction boundary itself.",
+     "failure_requires_rollback": "A commit-time failure is handled by the database/transaction manager, not application code.",
+     "invariant_after": "All of the above is now durable and visible to other connections."}
+  ],
+
+  "rollback_points": [
+    "Winner or loser row not found under SELECT ... FOR UPDATE (already deleted).",
+    "Live row content does not match the plan's recorded field values (staleness).",
+    "Plan fingerprint mismatch.",
+    "DOI re-check finds a conflict that did not exist when the plan was built.",
+    "Any child-table write fails (constraint violation not caught by the existing SAVEPOINT fallback).",
+    "AuditLog insert fails.",
+    "Profile-preservation assertion fails (a UserID lost its link to the winner).",
+    "Any new, equivalent invariant a future executor's design adds (e.g. an AuthorNameRaw-conflict re-check, a JournalID FK-target-still-exists re-check)."
+  ],
+
+  "stale_plan_protection": {
+    "schema_evidence": "ResearchPaper has NO updated-at / modified-at column of any kind (confirmed by a fresh information_schema.columns scan this phase for column names matching '%update%' or '%modif%' -- zero results across all 33 columns). A timestamp-based staleness check is therefore not directly supported by the current schema.",
+    "recommended_approach": "Content fingerprint (a deterministic hash of exactly the ResearchPaper column values, Authors rows, and dependency row-counts the plan's field_actions/journal_state/author_content_conflicts were computed from), stored alongside the generated plan, and re-computed + compared immediately after the SELECT ... FOR UPDATE inside the executor's transaction.",
+    "why_this_over_alternatives": "Row fingerprint/content-hash is the only one of the suggested approaches that requires zero schema change and is provably correct: it directly captures 'is this the same data the plan reasoned about', which is the actual safety property needed, rather than a proxy for it (a timestamp only proves 'something changed at some point', not 'this specific data changed'; a bare updated-timestamp column doesn't exist anyway).",
+    "requires_new_implementation": true,
+    "what_would_need_building": [
+      "A canonical serialization of the exact fields the plan already reads (RP_COLUMNS values, Authors UserID+AuthorNameRaw pairs, dependency row counts) -- deterministic ordering, deterministic value formatting.",
+      "A hash function applied to that serialization, stored as a 'plan_fingerprint' field on the generated plan JSON.",
+      "An executor-side re-fingerprint-and-compare step, inside the transaction, after the row lock and before any write.",
+      "None of this exists in the repository today -- merge_plan_generator.py's plans carry no fingerprint field currently; this is 100% new work for a future phase, not a gap in existing code."
+    ],
+    "database_row_locking": {
+      "supported": true,
+      "evidence": "SELECT ... FOR UPDATE is already used in this exact raw-cursor style elsewhere in the repository (backend/analytics/reconciliation_views.py line ~124, inside a transaction.atomic() block with connection.cursor() -- grep-confirmed this phase across 7 files total), so it is a proven, repository-native pattern directly reusable by a future executor, not a new architectural concept.",
+      "role": "Locking prevents a NEW concurrent modification during the transaction; it does not by itself detect that the row already changed BEFORE the transaction started -- that is what the fingerprint check is for. The two mechanisms are complementary, not alternatives."
+    }
+  },
+
+  "idempotency_requirements": {
+    "existing_audit_table": {
+      "table": "AuditLog",
+      "exists": true,
+      "currently_used_for_this_exact_purpose": true,
+      "evidence": "merge_group() already INSERTs an AuditLog row (Action='paper.merge.dedup', TargetType='ResearchPaper', TargetID=<loser PaperID>, Metadata=<kept_paper_id, loser_title, loser_doi, ...>) for every loser merged. A fresh query this phase found 59 such rows already in the live database from real, historical --apply runs -- this is a proven, populated, working mechanism, not a hypothetical one.",
+      "suitable_as_idempotency_source": true,
+      "caveat": "No unique constraint enforces at most one 'paper.merge.dedup' AuditLog row per TargetID -- LogID is a bare auto-increment PK, and idx_audit_action/idx_audit_tenant_date/idx_audit_user are plain (non-unique) indexes. Idempotency is therefore NOT a database-enforced guarantee today; it would have to be an explicit executor preflight check (query AuditLog for an existing row with this TargetID before proceeding), not something the schema prevents on its own."
+    },
+    "primary_existing_mechanism": {
+      "description": "dedup_papers.py's own --apply --plan path already has a real, working idempotency check: on load, it re-reads live ResearchPaper.PaperID membership and drops any plan group whose kept/loser IDs no longer exist (main(), the 'alive' filter). A loser that was already merged away is simply absent from ResearchPaper, so re-running the same plan a second time is already a safe no-op for that group today.",
+      "gap": "This only proves the row is GONE, i.e. 'was deleted by something' -- it does not prove it was deleted BY THIS SPECIFIC PLAN as opposed to a different, possibly conflicting later merge. Combining this existence-check with an AuditLog cross-check (above) closes that gap without inventing a new table."
+    },
+    "prevent_double_execution": "Preflight: (1) does the loser PaperID still exist in ResearchPaper (existing mechanism); (2) does an AuditLog row with Action='paper.merge.dedup' and TargetID=<loser> already exist (existing table, new query). Both must be checked; neither alone is sufficient (see gap above).",
+    "prevent_winner_loser_reversal": "The plan JSON already names survivor/loser explicitly and unambiguously (Phase 4C/4E's plan schema: 'survivor' and 'loser' keys, not positional). A future executor must read the plan's own recorded IDs, never re-derive winner/loser at execution time from a fresh choose_keep() call -- re-deriving could disagree with the approved plan if the underlying data changed (this is exactly what stale-plan protection above catches, but as a design principle: EXECUTE the plan's decision, do not RE-DECIDE it at execution time, mirroring --apply's own documented philosophy for group-level merges: 'it doesn't re-decide it').",
+    "prevent_execution_after_one_record_already_deleted": "Covered by the same existence-check preflight above -- if either winner or loser PaperID is already gone, abort before opening a write transaction.",
+    "prevent_partial_repeat_of_child_migrations": "merge_group()'s own operations are already individually idempotent in isolation (INSERT...ON CONFLICT DO NOTHING, GREATEST()-based UPDATE, remap_simple_child()'s UPDATE-by-PaperID which becomes a no-op once already remapped) -- re-running the same merge_group() call against an already-migrated-but-not-yet-deleted state would not duplicate data. The genuine risk is not partial-repeat corruption within one merge_group() call (already safe), it's a SECOND, independent invocation racing the first without a lock -- which is exactly what the row-locking design in transaction_steps prevents.",
+    "no_new_table_invented": "Per the task's explicit instruction, no new execution-tracking table is proposed here. AuditLog plus the existing ResearchPaper-existence check are evidenced as sufficient building blocks; whether a future phase additionally wants a dedicated table (the repository does have an existing job-tracking convention, SyncJob, confirmed to exist this phase, that a future design COULD look to as precedent) is left as an open decision for a future phase, not decided here."
+  },
+
+  "canary_pair": {
+    "pair": [5232, 5482],
+    "survivor": 5232,
+    "loser": 5482,
+    "read_only_reverification_performed_this_phase": true,
+    "current_db_state": {
+      "5232": {"Title": "Optimal deep learning model for olive disease diagnosis based on an adaptive genetic algorithm", "DOI": "10.1155/2022/8531213", "PubYear": 2022, "JournalID": 1803, "TenantID": 1, "IsVerified": true, "Source": "Scholar"},
+      "5482": {"Title": "Research Article Optimal Deep Learning Model for Olive Disease Diagnosis Based on an Adaptive Genetic Algorithm", "DOI": null, "PubYear": 2022, "JournalID": null, "TenantID": 1, "IsVerified": true, "Source": "Scholar"}
+    },
+    "matches_phase_4e_plan": true,
+    "fresh_plan_regeneration_result": {
+      "classification": "SAFE_PLAN_CANDIDATE",
+      "requires_human_approval": false,
+      "execution_permitted": false,
+      "journal_state": {"state": "WINNER_ONLY", "execution_permitted": true},
+      "author_content_conflicts": []
+    },
+    "dependency_row_counts": {
+      "Authors": {"winner": 1, "loser": 1, "shared_UserID": 97, "AuthorNameRaw_identical": true},
+      "Citations": {"winner": 0, "loser": 0},
+      "ExternalAuthors": {"winner": 0, "loser": 0},
+      "PaperKeywords": {"winner": 0, "loser": 0},
+      "CitationsHistory": {"winner": 0, "loser": 0},
+      "ReportPaperDecision_PaperID": {"winner": 0, "loser": 0},
+      "ReportPaperDecision_MissingResolvedToPaperID": {"winner": 0, "loser": 0},
+      "AuthorReviewQueue": {"winner": 0, "loser": 0}
+    },
+    "prior_merge_attempts": {
+      "auditlog_paper_merge_dedup_rows_for_either_id": 0,
+      "conclusion": "Neither PaperID has ever appeared in a 'paper.merge.dedup' AuditLog entry -- no prior execution to guard against for this specific pair."
+    },
+    "preconditions_a_future_executor_would_need": [
+      "execution_permitted must be flipped true by a human-reviewed approval step for this specific plan (not by this phase, and not automatically -- the plan schema's execution_permitted is hardcoded false everywhere and nothing in this repository can set it true today).",
+      "A plan fingerprint mechanism must exist and be re-verified (does not exist yet -- stale_plan_protection above).",
+      "Row locking (SELECT ... FOR UPDATE) on PaperID 5232 and 5482 at the start of the executor transaction (pattern exists elsewhere in the repo, not yet wired into dedup_papers.py).",
+      "A preflight idempotency check against AuditLog + ResearchPaper existence (both data sources exist; the check itself does not exist as code yet).",
+      "The executor itself does not exist at all (Task G defines its proposed contract only; no code was written this phase)."
+    ],
+    "labeled_unknown": [
+      "Whether TenantID=1 is the only tenant in production, or whether cross-tenant safety (compute_classification's tenant_blocked check) has ever been exercised against a real cross-tenant pair -- UNKNOWN, no evidence gathered this phase either way; both records in this pair happen to share TenantID=1."
+    ]
+  },
+
+  "blocking_unknowns": [
+    "No plan fingerprinting mechanism exists yet -- required before any executor could safely detect a stale plan (stale_plan_protection.requires_new_implementation = true).",
+    "No row-locking is currently wired into dedup_papers.py's --apply path (the pattern exists elsewhere in the repo but is not yet applied here) -- required before any executor could safely run against a live, concurrently-used database.",
+    "No AuditLog-based idempotency preflight check exists as code yet, even though the underlying data (AuditLog rows, ResearchPaper existence) is already sufficient to build one.",
+    "No approval-recording mechanism exists for flipping a specific plan's execution_permitted from false to true -- today it is hardcoded false in merge_plan_generator.py with no code path to change it, which is correct for Phases 4C-4F but means Task G's 'approval requirements' are a pure design proposal with zero existing implementation to point to.",
+    "AuthorReviewQueue (CASCADE, unremapped) and ReportPaperDecision.MissingResolvedToPaperID (SET NULL, unremapped) both remain 0-row and therefore untested in practice DB-wide -- their real-world behavior under a populated scenario is UNKNOWN (not unsafe by evidence, just never exercised)."
+  ],
+
+  "proposed_executor_contract": {
+    "accepted_input": "One previously-generated plan object (the exact JSON shape merge_plan_generator.py already produces, extended with a plan_fingerprint field per stale_plan_protection) plus a reference to a recorded human-approval event where the plan's classification is not SAFE_PLAN_CANDIDATE-with-zero-conflicts. The executor never re-detects duplicates and never re-decides survivor selection -- it only executes an already-approved plan, mirroring --apply --plan's existing philosophy exactly.",
+    "approval_requirements": "execution_permitted must be true on the plan (today this is never true; a future, separate, out-of-scope-for-this-phase approval workflow would need to set it, e.g. an admin action that re-validates the plan is still SAFE and stamps an approval record). A plan whose classification is PLAN_REQUIRES_HUMAN_APPROVAL must carry an explicit, recorded human decision per unresolved_conflicts entry (especially journal_state=CONFLICT and any author_content_conflicts) before execution_permitted may ever be set true for it -- this executor must refuse to run otherwise, full stop.",
+    "required_preflight_checks": [
+      "Plan's execution_permitted == true.",
+      "Recorded human approval exists where the plan's classification required one.",
+      "Both winner and loser PaperIDs still exist in ResearchPaper (existing --apply pattern).",
+      "No prior AuditLog Action='paper.merge.dedup' row for this loser PaperID (idempotency).",
+      "Plan fingerprint matches freshly-computed live-data fingerprint (staleness)."
+    ],
+    "transaction_behavior": "Exactly one transaction.atomic() per pair executed (narrower than --apply's current one-transaction-per-whole-run design, which wraps every group in a single call) -- see transaction_steps for the full ordered sequence. A narrower per-pair transaction is recommended specifically because Phase 4D/4E's evidence shows real pairs can have real, blocking-worthy conflicts discovered only at a granular level (JournalID, AuthorNameRaw); isolating each pair's transaction limits the blast radius of any single pair's unexpected failure without touching --apply's existing, already-tested, all-groups-in-one-transaction behavior for its own (unrelated) call path.",
+    "locking_requirements": "SELECT ... FOR UPDATE on both ResearchPaper rows (winner, loser) as the first statement inside the transaction, using the exact raw-cursor style already present elsewhere in this repository (backend/analytics/reconciliation_views.py and 6 other files, grep-confirmed this phase) -- not a new pattern.",
+    "child_migration_rules": "Reuse merge_group()'s existing, unmodified logic for every dependency already classified MUST_REMAP_BEFORE_DELETE (Authors, Citations, ExternalAuthors, PaperKeywords, CitationsHistory, ReportPaperDecision.PaperID) -- do not rewrite what already works and is tested. Explicitly ADD two operations merge_group() does not perform today, gated by the plan's own journal_state/author_content_conflicts: (a) if journal_state.state == LOSER_ONLY_BACKFILL, UPDATE the winner's JournalID to the loser's value before the loser is deleted; (b) if author_content_conflicts is non-empty, REFUSE to execute (this should already be caught by execution_permitted being false for such a plan, but the executor must defensively re-check rather than trust the plan blindly, matching the existing profile-preservation-assertion philosophy of 'verify the invariant right before it would be violated, not just at plan-generation time').",
+    "conflict_behavior": "Any conflict discovered fresh at execution time that the plan did not already account for (a fingerprint mismatch, a new AuthorReviewQueue row that didn't exist when the plan was built, a JournalID that changed) aborts the transaction entirely -- no partial application, no best-effort merge, no silent skip-and-continue. This matches the existing profile-preservation-assertion pattern in merge_group() exactly: raise, and let transaction.atomic() roll back everything.",
+    "audit_requirements": "Continue using AuditLog exactly as merge_group() does today (Action='paper.merge.dedup', TargetType='ResearchPaper', TargetID=loser, Metadata capturing kept_paper_id/loser fields) -- no new audit mechanism needed, this one is proven (59 real historical rows) and already correctly ordered (written before the loser delete, inside the same transaction). Additionally record, in Metadata, the plan_fingerprint that was verified and the approval reference that authorized this specific execution, so a future audit can answer 'which approved plan, exactly, produced this merge' -- a field the current Metadata shape does not carry, since no plan-approval concept existed before this phase's design.",
+    "idempotency_behavior": "Preflight-checked, not database-enforced (see idempotency_requirements) -- the executor must refuse to re-run against a loser PaperID that either no longer exists in ResearchPaper or already has a 'paper.merge.dedup' AuditLog row, treating both as 'already done, not an error, but also not something to repeat.'",
+    "rollback_guarantees": "Everything inside the one per-pair transaction rolls back atomically on any failure (Postgres/Django transaction.atomic() semantics, already relied upon throughout dedup_papers.py) -- there is no partial-merge state reachable from a failed execution, matching --apply's existing guarantee for its own, coarser-grained transaction today.",
+    "post_merge_verification": "Re-run the existing profile-preservation assertion (every UserID linked to either original copy is still linked to the winner) inside the transaction before COMMIT (already exists, unchanged). Additionally verify, post-commit as a separate read-only check (not inside the transaction, since it's confirming durable state): the loser PaperID is absent from ResearchPaper; the winner's JournalID matches the plan's planned final value; no orphaned child-table row references the now-deleted loser PaperID in any of the 7 dependency tables from the dependency_map."
+  }
+}

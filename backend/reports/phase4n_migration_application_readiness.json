@@ -1,0 +1,117 @@
+{
+  "phase": "4N",
+  "title": "Controlled Migration Application Readiness",
+  "strictly_read_only": true,
+  "migration_applied_this_or_any_prior_phase": false,
+  "merge_approval_table_exists_in_production": false,
+  "canary_pair": {"survivor_paper_id": 5232, "loser_paper_id": 5482},
+  "reference_fingerprint": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb",
+  "fresh_fingerprint_this_phase": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb",
+  "fingerprint_result": "MATCH",
+  "fingerprint_confirmation_count": 11,
+  "migration_file": {
+    "path": "backend/analytics/migrations/sprint11_merge_approval.sql",
+    "sha256": "5b7500cdef5220551b05e86f32479e77d03d94bed8790b31b7833382a01dfe31",
+    "line_count": 135,
+    "modified_this_phase": false
+  },
+  "django_migration_discovery": {
+    "recognizes_this_file": false,
+    "evidence": "python manage.py showmigrations analytics -> '(no migrations)', run live this phase",
+    "reason": ".sql files are not importable Python modules; Django's MigrationLoader only discovers .py migration modules via pkgutil.iter_modules(); no MIGRATION_MODULES override exists in settings.py",
+    "application_mechanism": "backend/apply_migration.py, wraps cur.execute(sql) in Django's transaction.atomic(), entirely outside manage.py migrate's awareness"
+  },
+  "pre_application_gates": [
+    {"gate": "MergeApproval table does not already exist", "status": "PASS", "evidence": "to_regclass('public.\"MergeApproval\"') = NULL, live this phase"},
+    {"gate": "No conflicting table/index/constraint/sequence exists", "status": "PASS", "evidence": "fresh pg_class/pg_constraint/pg_indexes scan for every planned name, zero hits"},
+    {"gate": "Migration file content matches the audited version", "status": "PASS", "evidence": "SHA-256 5b7500cdef5220551b05e86f32479e77d03d94bed8790b31b7833382a01dfe31 recorded this phase as reference"},
+    {"gate": "Required DB privileges still exist", "status": "PASS", "evidence": "has_schema_privilege(neondb_owner,'public','CREATE')=True; has_database_privilege(neondb_owner,'neondb','CREATE')=True"},
+    {"gate": "All referenced parent tables/columns exist with compatible types", "status": "PASS", "evidence": "ResearchPaper.PaperID, Tenant.TenantID, Users.UserID, AuditLog.LogID all integer, live this phase"},
+    {"gate": "Migration dependency state is valid", "status": "PASS", "note": "not applicable in the Django sense -- this file is entirely outside Django's migration graph (see django_migration_discovery); only real dependency is FK-target existence, covered by the prior gate"},
+    {"gate": "Relevant test suites are green", "status": "PASS", "evidence": "224/224, re-run fresh this phase"},
+    {"gate": "No unexpected git/code drift affects the migration contract", "status": "PASS", "evidence": "git diff --stat / git status identical to Phase 4K.1 onward; migration file hash recorded"},
+    {"gate": "No concurrent deployment/schema change is in progress", "status": "PASS", "evidence": "pg_stat_activity and pg_locks on ResearchPaper/Tenant/Users/AuditLog, excluding this session, both empty at time of check", "caveat": "point-in-time snapshot only, not a standing guarantee; must be re-checked immediately before actual future application"},
+    {"gate": "Database backup/rollback strategy exists", "status": "NOT_CHECKABLE_FROM_CURRENT_REPO", "reason": "Neon backup/PITR configuration is an infrastructure/platform fact, not queryable via psycopg2/SQL introspection, and this phase's no-network-calls rule correctly forbids checking externally", "silently_treated_as_pass": false}
+  ],
+  "rollback_recovery_scenarios": [
+    {"scenario": "Failure before transaction begins", "expected_state": "nothing touched", "automatic_rollback": "n/a (nothing started)", "manual_intervention_required": false, "safe_next_action": "fix underlying issue, retry"},
+    {"scenario": "Failure during transactional migration execution", "expected_state": "rolled back automatically", "automatic_rollback": true, "manual_intervention_required": false, "safe_next_action": "diagnose SQL/schema issue, fix, retry"},
+    {"scenario": "Failure after successful schema creation but before process exits normally", "expected_state": "ambiguous until checked; actually clean", "automatic_rollback": true, "manual_intervention_required": "verification query only", "safe_next_action": "run to_regclass check, then re-run if nothing persisted (idempotent via IF NOT EXISTS)"},
+    {"scenario": "Migration recorded as applied but application code not deployed yet", "expected_state": "not a producible state in this repository (no ledger exists)", "automatic_rollback": "n/a", "manual_intervention_required": false, "safe_next_action": "n/a -- does not meaningfully apply to this repo's deploy-together model"},
+    {"scenario": "Application code deployed but migration not applied", "expected_state": "the current, live, continuous production state", "automatic_rollback": "n/a", "manual_intervention_required": false, "safe_next_action": "none -- this is the safe working baseline"},
+    {"scenario": "Manual partial schema state outside any ledger", "expected_state": "unknown shape, must not be assumed", "automatic_rollback": false, "manual_intervention_required": true, "safe_next_action": "always re-run a fresh live schema audit before trusting or applying anything"}
+  ],
+  "table_state_rollback_matrix": [
+    {"state": "1. Migration not yet applied", "rollback_safety": "n/a", "note": "current confirmed production state"},
+    {"state": "2. Migration applied, no approval rows", "rollback_safety": "safe", "note": "DROP TABLE destroys zero rows"},
+    {"state": "3. Migration applied, PENDING/APPROVED rows exist", "rollback_safety": "conditionally_safe", "note": "no ResearchPaper data ever touched by these states, but a human's in-progress review decision would be discarded"},
+    {"state": "4. Migration applied, EXECUTED historical rows exist", "rollback_safety": "unsafe_without_archival", "note": "the bare fact a merge happened remains recoverable via AuditLog (unconstrained), but approval-specific context (who/when/under what fingerprint) would be destroyed"}
+  ],
+  "deployment_compatibility_matrix": [
+    {"order": "A. migration only", "safety": "safe", "reason": "adds a standalone, unused table"},
+    {"order": "B. code only", "safety": "safe", "reason": "the current, continuously-running production state"},
+    {"order": "C. migration before code", "safety": "safe", "reason": "unused table causes no issue"},
+    {"order": "D. code before migration", "safety": "safe", "reason": "the current, continuously-proven production state"},
+    {"order": "E. migration and code together", "safety": "safe", "reason": "no ordering dependency exists -- nothing eagerly queries MergeApproval"}
+  ],
+  "import_trace": {
+    "imports_of_merge_approval_or_merge_executor_outside_backend_tools": [],
+    "merge_approval_referenced_in_django_startup_paths": false,
+    "checked_files": ["litrix_backend/settings.py", "litrix_backend/urls.py", "analytics/urls.py", "accounts/urls.py", "analytics/apps.py", "accounts/apps.py", "analytics/models.py", "accounts/models.py"],
+    "tests_hide_a_real_schema_dependency": true,
+    "tests_hide_a_real_schema_dependency_note": "all 224 tests run against mocked cursors (ExecutorFakeCursor/InMemoryApprovalCursor); none opens a real DB connection; the first real exercise against a genuine MergeApproval table remains a novel, unproven event"
+  },
+  "canary_execution_contract": {
+    "note": "planning reference only -- zero stages executed this phase",
+    "stages": [
+      {"stage": 1, "name": "Schema verification", "writes_to_db": false},
+      {"stage": 2, "name": "Create pending approval", "writes_to_db": true, "note": "first real write in the future sequence; not part of this phase"},
+      {"stage": 3, "name": "Human approval", "writes_to_db": true},
+      {"stage": 4, "name": "Fresh plan generation/revalidation", "writes_to_db": false},
+      {"stage": 5, "name": "Executor preflight", "writes_to_db": false},
+      {"stage": 6, "name": "Transactional merge", "writes_to_db": true, "note": "requires a real transaction-wrapping caller, which does not yet exist anywhere in the repository"},
+      {"stage": 7, "name": "Post-commit verification", "writes_to_db": false},
+      {"stage": 8, "name": "Audit verification", "writes_to_db": false},
+      {"stage": 9, "name": "Idempotency verification", "writes_to_db": false}
+    ]
+  },
+  "unresolved_unknown_items": [
+    {
+      "item": "Database backup/point-in-time-recovery strategy",
+      "status": "NOT_CHECKABLE_FROM_CURRENT_REPO",
+      "affects_verdict": "does not block the specific action of applying an empty-table-creating migration; must be resolved before any phase that creates real approval/execution rows in this table"
+    }
+  ],
+  "carried_forward_findings": {
+    "paperkeywords_schema_drift": {"blocks_migration_application": false},
+    "auditlog_userid_hardcoded_null": {"blocks_migration_application": false},
+    "has_litrix_perm_no_tenant_scoping": {"blocks_migration_application": false}
+  },
+  "regression": {
+    "test_dedup_papers.py": {"passed": 18, "total": 18},
+    "test_merge_plan_generator.py": {"passed": 43, "total": 43},
+    "test_merge_execution_safety.py": {"passed": 68, "total": 68},
+    "test_merge_approval.py": {"passed": 45, "total": 45},
+    "test_merge_executor.py": {"passed": 39, "total": 39},
+    "test_fk_lifecycle.py": {"passed": 11, "total": 11},
+    "total": {"passed": 224, "total": 224, "regressions": 0, "unchanged_from_phase_4m": true}
+  },
+  "accounting": {
+    "code_files_modified": 0,
+    "code_files_created": 0,
+    "migration_files_modified": 0,
+    "report_files_created": 2,
+    "db_writes": 0,
+    "db_schema_changes": 0,
+    "network_calls": 0,
+    "records_merged": 0,
+    "doi_changes": 0,
+    "apply_executions": 0,
+    "production_migrations_applied": 0,
+    "merge_approval_rows_created": 0
+  },
+  "final_decision": "A",
+  "final_decision_label": "READY_FOR_EXPLICITLY_APPROVED_MIGRATION_APPLICATION",
+  "final_decision_disclaimer": "READY does NOT authorize execution. No migration may be applied unless a later instruction explicitly authorizes the database write.",
+  "recommended_next_phase": "A dedicated, narrowly-scoped Migration Application phase, gated on explicit separate authorization: apply sprint11_merge_approval.sql via apply_migration.py (--dry-run first recommended), verify the resulting table against the recorded SHA-256/shape, confirm the backup/PITR unknown before any real row is created, then stop -- no approval rows, no endpoint wiring, no merge execution in that same phase."
+}

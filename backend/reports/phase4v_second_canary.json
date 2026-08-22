@@ -1,0 +1,205 @@
+{
+  "phase": "4V",
+  "title": "Second Canary Selection, Fresh Readiness Audit, and Controlled Execution",
+  "second_canary": {
+    "survivor_paper_id": 3875,
+    "loser_paper_id": 6091,
+    "approval_id": 2,
+    "audit_log_id": 1541,
+    "status": "EXECUTED",
+    "plan_fingerprint": "c1221c70566a52d1a70423b5f77d9942b048e57e16e4ce51ecca0df1e3a36be7"
+  },
+  "first_canary_untouched": {
+    "approval_id": 1,
+    "status": "EXECUTED",
+    "modified_this_phase": false
+  },
+  "task_a_fresh_detection": {
+    "papers_in_scope": 2030,
+    "fuzzy_comparisons_run": 131,
+    "duplicate_groups_found": 23,
+    "high_confidence_groups": 12,
+    "review_groups": 11,
+    "never_before_investigated_pairs_found": [[5019,7559],[5065,4786],[5638,5640],[5645,7618],[6145,6190]],
+    "known_pairs_missing_from_blocking": {
+      "pairs": [[5289,5392],[6107,6109]],
+      "reason": "block_key() blocking heuristic groups by first 3 significant title words; these pairs' titles differ enough there to never be compared in the full-corpus fuzzy pass, despite both being valid high-confidence duplicates under direct pair_confidence() check",
+      "recovered_via_direct_check": true
+    },
+    "total_candidate_pool": 14
+  },
+  "task_a_exclusions": [
+    {"pair": [3875,6091], "status": "CLEAN"},
+    {"pair": [5019,7559], "status": "CLEAN"},
+    {"pair": [5329,5434], "status": "CLEAN"},
+    {"pair": [6645,7572], "status": "CLEAN"},
+    {"pair": [5289,5392], "status": "CLEAN"},
+    {"pair": [5065,4786], "status": "EXCLUDED_AUTHOR_CONFLICT", "note": "substantive conflict, possibly a false-positive duplicate match, flagged for future forensic review, not executed"},
+    {"pair": [5207,5481], "status": "EXCLUDED_AUTHOR_CONFLICT"},
+    {"pair": [5548,5549], "status": "EXCLUDED_AUTHOR_CONFLICT_AND_LOSER_ONLY_BACKFILL"},
+    {"pair": [5638,5640], "status": "EXCLUDED_JOURNAL_CONFLICT"},
+    {"pair": [5645,7618], "status": "EXCLUDED_AUTHOR_CONFLICT"},
+    {"pair": [6086,6088], "status": "EXCLUDED_AUTHOR_CONFLICT_AND_LOSER_ONLY_BACKFILL", "note": "previously suggested pair (Phase 4T); independently re-inspected this phase, not assumed correct; confirmed still blocked"},
+    {"pair": [6145,6190], "status": "EXCLUDED_AUTHOR_CONFLICT"},
+    {"pair": [6153,6189], "status": "EXCLUDED_AUTHOR_CONFLICT"},
+    {"pair": [6107,6109], "status": "EXCLUDED_AUTHOR_CONFLICT"}
+  ],
+  "significant_finding": {
+    "description": "every candidate with JournalID=LOSER_ONLY_BACKFILL also carries a real, unresolved AuthorNameRaw conflict; execute_approved_merge()'s author-conflict check is unconditional and re-derived live, with no mechanism for a human decision to bypass it",
+    "implication": "LOSER_ONLY_BACKFILL cannot currently be exercised by any safely-executable real candidate without a separate, out-of-scope code change (a field-resolution-application mechanism)"
+  },
+  "task_b_selection": {
+    "selected_pair": [3875, 6091],
+    "selection_reasoning": "most structurally distinct new dependency-table coverage among the 5 safe candidates: survivor has 2 Authors rows (partial overlap with loser's 1), exercising ON CONFLICT DO NOTHING against a non-trivial existing set for the first time in production, with zero new risk category introduced",
+    "candidates_considered": 5,
+    "ranking_table_included_in_md_report": true
+  },
+  "task_c_pre_approval_audit": {
+    "all_15_gates_passed": true,
+    "fingerprint_django": "c1221c70566a52d1a70423b5f77d9942b048e57e16e4ce51ecca0df1e3a36be7",
+    "fingerprint_raw_psycopg2": "c1221c70566a52d1a70423b5f77d9942b048e57e16e4ce51ecca0df1e3a36be7",
+    "fingerprint_byte_identical": true,
+    "pair_confidence": "high",
+    "hard_exclusion_reason": null,
+    "doi_claimed_elsewhere": false,
+    "idempotency": "NOT_PREVIOUSLY_EXECUTED",
+    "journal_state": "WINNER_ONLY",
+    "author_conflicts": [],
+    "dependency_gaps": [],
+    "child_table_counts": {
+      "Authors.survivor": 2, "Authors.loser": 1,
+      "Citations.survivor": 0, "Citations.loser": 0,
+      "ExternalAuthors.survivor": 5, "ExternalAuthors.loser": 0,
+      "CitationsHistory.survivor": 0, "CitationsHistory.loser": 0,
+      "ReportPaperDecision.PaperID.survivor": 0, "ReportPaperDecision.PaperID.loser": 0,
+      "ReportPaperDecision.MissingResolvedToPaperID.survivor": 0, "ReportPaperDecision.MissingResolvedToPaperID.loser": 0,
+      "AuthorReviewQueue.survivor": 0, "AuthorReviewQueue.loser": 0
+    },
+    "same_tenant_check_via_real_code_path": {"result": true, "function": "validate_same_tenant(1, 1)", "mocked": false},
+    "concurrent_activity": [],
+    "locks": [],
+    "zero_writes_confirmed": true
+  },
+  "task_d_approval_creation": {
+    "write_1": {"function": "create_pending_approval", "approval_id": 2, "status": "PENDING"},
+    "write_2": {"function": "approve_pending", "approval_id": 2, "status": "APPROVED", "reviewed_by_user_id": 221},
+    "approval_id_1_touched": false,
+    "unintended_rows_created": 0,
+    "final_approval_table_state": [
+      {"approval_id": 1, "survivor": 5232, "loser": 5482, "status": "EXECUTED"},
+      {"approval_id": 2, "survivor": 3875, "loser": 6091, "status": "APPROVED"}
+    ]
+  },
+  "task_e_final_pre_execution_reaudit": {
+    "pair_exists": true,
+    "same_tenant": true,
+    "approval_direction_correct": true,
+    "approval_status_approved": true,
+    "rows_still_exist": true,
+    "validate_against_plan_ok": true,
+    "idempotency_clean": true,
+    "journal_ok": true,
+    "author_conflicts_empty": true,
+    "dependency_gaps_empty": true,
+    "no_concurrent_activity": true,
+    "deterministic_lock_order": [3875, 6091],
+    "any_result_differed_from_approved_plan": false,
+    "transaction_rolled_back_audit_only": true
+  },
+  "task_f_execution": {
+    "outcome": "SUCCESS",
+    "committed": true,
+    "exception_raised": false,
+    "rollback_occurred": false,
+    "retried": false,
+    "second_candidate_attempted": false,
+    "approval_id": 2,
+    "audit_log_id": 1541
+  },
+  "task_g_post_execution_forensics": {
+    "loser_deleted": true,
+    "survivor_exists": true,
+    "protected_fields_preserved": {
+      "DOI": "10.1155/2019/4568368 (unchanged)",
+      "PubYear": "2019 (unchanged)",
+      "TenantID": "1 (unchanged)",
+      "CitationsByYear": "byte-identical to pre-execution capture",
+      "JournalID": "2375 (unchanged, WINNER_ONLY meant no backfill was planned or issued)"
+    },
+    "authors_remapped_correctly": true,
+    "authors_final_state": [{"paper_id": 3875, "user_id": 6}, {"paper_id": 3875, "user_id": 105}],
+    "zero_orphan_rows": {
+      "Authors": 0, "Citations": 0, "ExternalAuthors": 0, "CitationsHistory": 0,
+      "ReportPaperDecision.PaperID": 0, "ReportPaperDecision.MissingResolvedToPaperID": 0,
+      "AuthorReviewQueue": 0, "PaperKeywords": 0
+    },
+    "cross_tenant_data_movement": false,
+    "merge_approval_transitioned_correctly": true,
+    "execution_audit_log_id_correct": true,
+    "audit_log_row_correct": true,
+    "idempotency_after_execution": "ALREADY_EXECUTED",
+    "second_execution_attempted": false,
+    "before_after_counts": {
+      "ResearchPaper": {"before": 2030, "after": 2029, "delta": -1},
+      "MergeApproval": {"before": 1, "after": 2, "delta": 1, "note": "new row, not a modification of ApprovalID=1"},
+      "AuditLog": {"before": 958, "after": 960, "delta": 2, "reconciliation": "958->959 was LogID=1540 (merge_approval.approved cross-reference from Task D's approve_pending()); 959->960 was LogID=1541 (the actual merge record). Fully explained, zero anomaly."}
+    }
+  },
+  "branch_proof_status": {
+    "newly_production_proven_this_phase": [
+      "multi-author (>1 Authors row) partial-overlap remap",
+      "pre-existing unrelated child data (ExternalAuthors) surviving a merge undisturbed",
+      "full approval workflow proven a second, independent time",
+      "Phase 4P.1 fingerprint-determinism fix re-confirmed on a second, different real pair",
+      "Phase 4U cross-tenant ALLOW path proven live a second time",
+      "fresh full-corpus detect_groups()/build_report() proven at real production scale (2030 papers)"
+    ],
+    "still_not_production_proven": [
+      "JournalID LOSER_ONLY_BACKFILL (and confirmed: no currently-safe candidate exists to exercise it without a separate code change)",
+      "JournalID CONFLICT blocking",
+      "AuthorNameRaw conflict blocking",
+      "populated AuthorReviewQueue/ReportPaperDecision.MissingResolvedToPaperID dependency-gap blocking",
+      "cross-tenant REJECT path (no real cross-tenant pair exists in this single-tenant production database)",
+      "real concurrent execution protection",
+      "rollback under a real mid-transaction failure",
+      "approval revocation/rejection lifecycle against production"
+    ]
+  },
+  "task_h_tests_and_accounting": {
+    "code_changed_this_phase": false,
+    "test_dedup_papers.py": {"passed": 18, "total": 18},
+    "test_merge_plan_generator.py": {"passed": 43, "total": 43},
+    "test_merge_execution_safety.py": {"passed": 89, "total": 89},
+    "test_merge_approval.py": {"passed": 50, "total": 50},
+    "test_merge_executor.py": {"passed": 48, "total": 48},
+    "test_fk_lifecycle.py": {"passed": 11, "total": 11},
+    "total_before": {"passed": 259, "total": 259},
+    "total_after": {"passed": 259, "total": 259},
+    "regressions": 0
+  },
+  "safety_accounting": {
+    "code_files_modified": 0,
+    "code_files_created": 0,
+    "migration_files_modified_or_created": 0,
+    "report_files_created": 2,
+    "db_writes": 3,
+    "approval_rows_created": 1,
+    "approval_rows_approved": 1,
+    "records_merged": 1,
+    "records_deleted": 1,
+    "doi_changes": 0,
+    "automatic_retries": 0,
+    "execute_approved_merge_calls": 1
+  },
+  "explicit_confirmations": {
+    "approval_id_1_modified": false,
+    "batch_execution_occurred": false,
+    "automatic_retry_occurred": false,
+    "schema_or_migration_change_occurred": false,
+    "same_tenant_enforcement_weakened_or_bypassed": false
+  },
+  "final_decision": "A",
+  "final_decision_label": "SECOND_CANARY_SUCCESSFUL_STOP",
+  "phase_4w_started": false,
+  "third_merge_attempted": false
+}

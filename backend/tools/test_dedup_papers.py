@@ -17,8 +17,11 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dedup_papers import (  # noqa: E402
-    choose_keep, choose_keep_reason, group_confidence, hard_exclusion_reason,
+    author_content_conflicts, choose_keep, choose_keep_reason,
+    group_confidence, hard_exclusion_reason, journal_id_decision,
     norm_title, pair_confidence,
+    JOURNAL_CONFLICT, JOURNAL_EQUAL, JOURNAL_LOSER_ONLY_BACKFILL,
+    JOURNAL_NO_JOURNAL, JOURNAL_WINNER_ONLY,
 )
 
 
@@ -144,6 +147,89 @@ class ChooseKeepReasonReporting(unittest.TestCase):
         keep, losers = choose_keep([1, 2], papers)
         self.assertEqual(keep, 2)
         self.assertEqual(choose_keep_reason(keep, losers, papers), "citations")
+
+
+class JournalIdDecisionModel(unittest.TestCase):
+    """Phase 4E, Gap 1: merge_group() never touches JournalID today, so a
+    populated loser value can be silently discarded. journal_id_decision()
+    only plans what a future executor would need to do -- it never writes."""
+
+    def test_both_null_is_no_journal(self):
+        state, action = journal_id_decision(None, None)
+        self.assertEqual(state, JOURNAL_NO_JOURNAL)
+
+    def test_winner_only(self):
+        state, action = journal_id_decision(440, None)
+        self.assertEqual(state, JOURNAL_WINNER_ONLY)
+        self.assertIn("no action", action)
+
+    def test_loser_only_is_explicit_backfill_plan(self):
+        state, action = journal_id_decision(None, 676)
+        self.assertEqual(state, JOURNAL_LOSER_ONLY_BACKFILL)
+        self.assertIn("backfill", action.lower())
+
+    def test_equal_values(self):
+        state, action = journal_id_decision(676, 676)
+        self.assertEqual(state, JOURNAL_EQUAL)
+
+    def test_conflicting_values_is_conflict_not_a_silent_choice(self):
+        state, action = journal_id_decision(100, 200)
+        self.assertEqual(state, JOURNAL_CONFLICT)
+        self.assertIn("do not silently choose one", action)
+
+
+class AuthorContentConflictDetection(unittest.TestCase):
+    """Phase 4E, Gap 2: merge_group()'s Authors remap is
+    INSERT ... ON CONFLICT (UserID,PaperID) DO NOTHING -- a shared UserID
+    with a differing AuthorNameRaw is silently discarded with zero
+    detection today. author_content_conflicts() must catch exactly that,
+    using the same (UserID,PaperID) identity the SQL already keys on --
+    no fuzzy matching, no normalization."""
+
+    def test_identical_raw_name_is_no_conflict(self):
+        winner = [{"UserID": 97, "AuthorNameRaw": "K Gasmi, M Krichen"}]
+        loser = [{"UserID": 97, "AuthorNameRaw": "K Gasmi, M Krichen"}]
+        self.assertEqual(author_content_conflicts(winner, loser), [])
+
+    def test_different_raw_formatting_is_an_explicit_conflict(self):
+        winner = [{"UserID": 97, "AuthorNameRaw": "I Ben Ltaifa"}]
+        loser = [{"UserID": 97, "AuthorNameRaw": "IB Ltaifa"}]
+        conflicts = author_content_conflicts(winner, loser)
+        self.assertEqual(len(conflicts), 1)
+        self.assertEqual(conflicts[0]["UserID"], 97)
+        self.assertEqual(conflicts[0]["winner_author_name_raw"], "I Ben Ltaifa")
+        self.assertEqual(conflicts[0]["loser_author_name_raw"], "IB Ltaifa")
+
+    def test_only_the_actually_conflicting_row_is_reported(self):
+        """Multiple shared authors, only one has a differing raw name --
+        the non-conflicting UserID must not appear in the result."""
+        winner = [
+            {"UserID": 6, "AuthorNameRaw": "A Chakrabarty"},
+            {"UserID": 105, "AuthorNameRaw": "MH Al-adaileh"},
+        ]
+        loser = [
+            {"UserID": 6, "AuthorNameRaw": "A Chakrabarty"},
+            {"UserID": 105, "AuthorNameRaw": "MH Al-Adaileh"},
+        ]
+        conflicts = author_content_conflicts(winner, loser)
+        self.assertEqual(len(conflicts), 1)
+        self.assertEqual(conflicts[0]["UserID"], 105)
+
+    def test_no_shared_uid_is_no_false_conflict(self):
+        winner = [{"UserID": 1, "AuthorNameRaw": "A One"}]
+        loser = [{"UserID": 2, "AuthorNameRaw": "B Two"}]
+        self.assertEqual(author_content_conflicts(winner, loser), [])
+
+    def test_conflict_is_not_hidden_by_the_real_merge_paths_on_conflict_do_nothing(self):
+        """The real SQL (INSERT ... ON CONFLICT (UserID,PaperID) DO
+        NOTHING) would silently keep the winner's row and never even look
+        at the loser's AuthorNameRaw. This function must surface the
+        collision explicitly rather than reproducing that silence."""
+        winner = [{"UserID": 104, "AuthorNameRaw": "S Ahmad, NB Aoun"}]
+        loser = [{"UserID": 104, "AuthorNameRaw": "S Ahmad, N Ben Aoun"}]
+        conflicts = author_content_conflicts(winner, loser)
+        self.assertEqual(len(conflicts), 1, "ON CONFLICT DO NOTHING silence must not propagate into detection")
+        self.assertEqual(conflicts[0]["loser_author_name_raw"], "S Ahmad, N Ben Aoun")
 
 
 if __name__ == "__main__":

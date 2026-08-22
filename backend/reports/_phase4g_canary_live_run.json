@@ -1,0 +1,76 @@
+{
+  "survivor_selection": {
+    "choose_keep_result": 5232,
+    "expected_survivor": 5232,
+    "match": true
+  },
+  "pair_confidence": "high",
+  "hard_exclusion_reason": null,
+  "fingerprint": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb",
+  "journal_state": {
+    "winner_JournalID": 1803,
+    "loser_JournalID": null
+  },
+  "author_name_raw": {
+    "winner": [
+      {
+        "UserID": 97,
+        "AuthorNameRaw": "H Alshammari, K Gasmi, M Krichen, LB Ammar, MO Abdelhadi, ..."
+      }
+    ],
+    "loser": [
+      {
+        "UserID": 97,
+        "AuthorNameRaw": "H Alshammari, K Gasmi, M Krichen, LB Ammar, MO Abdelhadi, ..."
+      }
+    ]
+  },
+  "doi_state": {
+    "winner_DOI": "10.1155/2022/8531213",
+    "loser_DOI": null
+  },
+  "dependency_counts_note": "see Phase 4F/4D fresh counts -- all zero for this pair, re-confirmed prior phase",
+  "self_merge_check": {
+    "ok": true,
+    "reason": null
+  },
+  "lock_order": [
+    5232,
+    5482
+  ],
+  "idempotency_verdict": "NOT_PREVIOUSLY_EXECUTED",
+  "idempotency_detail_status": "ELIGIBLE",
+  "idempotency_detail_reason": "no prior paper.merge.dedup history for either PaperID",
+  "approval_storage_verdict": "NEW_APPROVAL_STORAGE_REQUIRED",
+  "canary_simulation_final_verdict": "BLOCKED_APPROVAL",
+  "canary_simulation_steps": {
+    "load_current_pair": {
+      "winner_exists": true,
+      "loser_exists": true
+    },
+    "fingerprint_check": {
+      "current": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb",
+      "reference": "2298ea25fc1c53b842809926bc72a5e0e77ec566e04b4f83f214a85544d705cb",
+      "match": true
+    },
+    "duplicate_safety_check": {
+      "choose_keep_result": 5232,
+      "reversed": false,
+      "pair_confidence": "high",
+      "hard_exclusion_reason": null
+    },
+    "doi_safety_check": {
+      "winner_doi": "10.1155/2022/8531213",
+      "claimed_elsewhere": false
+    },
+    "idempotency_check": {
+      "status": "ELIGIBLE",
+      "reason": "no prior paper.merge.dedup history for either PaperID"
+    },
+    "approval_check": {
+      "artifact_present": false,
+      "valid": false,
+      "reason": "no approval artifact exists for this plan"
+    }
+  }
+}
