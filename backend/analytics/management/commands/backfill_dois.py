@@ -26,7 +26,7 @@ USAGE
 import logging
 import time
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, transaction, IntegrityError, OperationalError
 
 from analytics.lookups import paper_by_title
@@ -78,7 +78,14 @@ def _safe_execute(sql, params=None, max_retries=3):
 
 
 class Command(BaseCommand):
-    help = "Backfill missing DOIs - resilient to connection drops."
+    help = (
+        "DISABLED 2026-08-17 -- DOI safety lock. Writes DOIs from Crossref/"
+        "OpenAlex title-similarity alone (paper_by_title(), threshold 0.72) "
+        "with NO author/year/venue check. Proven capable of assigning a "
+        "wrong paper's DOI (PaperID 7618 case -- see DOI pipeline audit). "
+        "Use backend/find_missing_dois.py in the meantime, or wait for the "
+        "multi-signal resolver (Phase 2 of the DOI pipeline plan)."
+    )
 
     def add_arguments(self, parser):
         parser.add_argument("--year", type=int, default=0)
@@ -87,6 +94,21 @@ class Command(BaseCommand):
                             help="Run lookups, but skip the actual UPDATE")
 
     def handle(self, *args, **opts):
+        raise CommandError(
+            "backfill_dois is disabled (2026-08-17 DOI-pipeline safety lock). "
+            "paper_by_title() matches on title similarity alone (>=0.72), "
+            "with no author/year/venue check -- demonstrated to write a "
+            "wrong paper's DOI onto another paper (PaperID 7618 case, see "
+            "the DOI pipeline audit report). Use backend/find_missing_dois.py "
+            "instead, or wait for the validated multi-signal resolver. The "
+            "previous implementation is preserved below as "
+            "_legacy_handle_DISABLED() for rollback reference -- do not "
+            "re-enable it without the multi-signal resolver in place."
+        )
+
+    def _legacy_handle_DISABLED(self, *args, **opts):
+        """Preserved for rollback reference only. Not called by handle()
+        anymore -- see the DOI pipeline safety-lock CommandError above."""
         year     = opts["year"]
         limit    = opts["limit"]
         dry_run  = opts["dry_run"]

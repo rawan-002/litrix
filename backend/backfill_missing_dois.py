@@ -170,6 +170,36 @@ def load_done():
 
 
 def main():
+    """DISABLED 2026-08-17 -- DOI safety lock.
+
+    Candidate matching here is title(Jaccard>=0.92) + year(+/-1) ONLY --
+    no author/venue/volume/issue/pages check, no doi_taken() duplicate-DOI
+    check before writing, and evidence is written to a local checkpoint
+    file (doi_backfill_checkpoint.jsonl) rather than the DB (DoiResolvedBy/
+    DoiResolvedAt are never set, despite the module docstring's claim).
+    Confirmed lower-risk than backfill_dois.py's SequenceMatcher>=0.72 path
+    (verified: it correctly rejects the known PaperID 7618 false-candidate,
+    jaccard=0.5 << 0.92) -- but still unsafe as an unattended auto-write.
+    Use backend/find_missing_dois.py in the meantime, or wait for the
+    validated multi-signal resolver (Phase 2 of the DOI pipeline plan).
+    The previous implementation is preserved below as
+    _legacy_main_DISABLED() for rollback reference -- do not re-enable it
+    without the multi-signal resolver in place.
+    """
+    print(
+        "DISABLED (2026-08-17 DOI-pipeline safety lock): backfill_missing_dois.py "
+        "matches candidates on title(Jaccard>=0.92)+year(+/-1) only -- no "
+        "author/venue check, no duplicate-DOI check before writing, and no "
+        "DB-level provenance (DoiResolvedBy/At are never set). Use "
+        "backend/find_missing_dois.py instead, or wait for the validated "
+        "multi-signal resolver. See _legacy_main_DISABLED() in this file "
+        "for the previous implementation (rollback reference only).",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+
+def _legacy_main_DISABLED():
     ap = argparse.ArgumentParser(description='Backfill missing DOIs via OpenAlex title search')
     ap.add_argument('--commit', action='store_true', help='write DOIs (default: dry-run)')
     ap.add_argument('--limit', type=int, default=0)
