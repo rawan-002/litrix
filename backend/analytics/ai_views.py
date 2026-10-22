@@ -22,6 +22,7 @@ because a system-prompt instruction is not an access control.
 import json
 import logging
 import os
+import re
 import time
 
 import requests
@@ -151,20 +152,85 @@ def _system_prompt(scope_level='all'):
         f"one department - call get_overview_stats for that instead). If "
         f"no single tool call returns the exact number asked for, say what "
         f"the data does show rather than deriving a new number by "
-        f"arithmetic. Every tool result carries 'data_scope' "
-        f"('university' or 'department') and 'department' - before writing "
-        f"a number into your answer, check it came from the scope the "
+        f"arithmetic. Every tool result carries 'data_scope', one of four "
+        f"values: 'university' (one aggregate number for the whole "
+        f"institution, e.g. get_overview_stats' total paper count), "
+        f"'department' (one specific department only, named in the "
+        f"'department' field), 'all_departments' (compare_departments' "
+        f"side-by-side ranking table covering every department at once - "
+        f"NOT a single total; never quote one department's row from it as "
+        f"a university-wide figure), or 'researcher' (one named individual "
+        f"- never representative of their department or the university). "
+        f"Every result also carries 'source' (which tool produced it) - "
+        f"once you've called more than one tool in this conversation, use "
+        f"'source' to keep straight which number came from which call "
+        f"before combining anything in your answer. THE RULE: a metric may "
+        f"only be used to make a claim at the same scope it was measured "
+        f"at - never take a number from one tool/scope and use it to "
+        f"support a claim whose scope the question is actually asking "
+        f"about a different tool/scope (e.g. get_overview_stats' "
+        f"university-wide q1_papers must never be cited as evidence about "
+        f"one department's quality - compare_departments has its own "
+        f"per-department q1_papers for exactly that). Before writing a "
+        f"number into your answer, check it came from the scope the "
         f"question actually asked about; never present a department-level "
-        f"figure as a university one or vice versa. Never say "
+        f"figure as a university one or vice versa, and never present one "
+        f"row of an 'all_departments' comparison as if it were the "
+        f"university total. Never say "
         f"'top'/'best'/'highest'/'strongest' about a department or "
-        f"researcher unless you're citing an explicit rank from "
-        f"compare_departments (for departments) or a citation count from "
-        f"get_top_researchers (for people) - a single raw number like "
-        f"'212 papers' is not evidence of being 'the best' anything, only "
-        f"evidence of what it literally says. If the data doesn't cover "
-        f"what's needed to answer (e.g. no growth-over-time data was "
-        f"retrieved but the question asks about growth), say plainly you "
-        f"don't have enough data for that rather than inferring an answer. "
+        f"researcher unless you're citing an explicit rank AND naming the "
+        f"metric it's ranked by, from compare_departments (for "
+        f"departments, use its 'rankings' for 'who's #1 by X') or a "
+        f"citation count from get_top_researchers (for people) - a single "
+        f"raw number like '212 papers' is not evidence of being 'the "
+        f"best' anything, only evidence of what it literally says, and "
+        f"'more papers' is not the same claim as 'higher quality' unless "
+        f"the metric you cite is actually a quality metric (q1_papers, "
+        f"scopus_papers, scopus_rate) rather than a volume metric (papers, "
+        f"researchers). If a question asks you to rank/compare on some "
+        f"notion (e.g. 'quality', 'performance', 'best overall') and more "
+        f"than one metric could plausibly apply, name the specific metric "
+        f"you're using rather than presenting the answer as if it settles "
+        f"the vaguer question - different metrics can rank departments "
+        f"differently, and picking one silently understates that. If the "
+        f"data doesn't cover what's needed to answer (e.g. no "
+        f"growth-over-time data was retrieved but the question asks about "
+        f"growth, or no tool measures what was asked about at all, e.g. "
+        f"'teaching quality'), say plainly you don't have enough data for "
+        f"that rather than substituting a different metric or inferring an "
+        f"answer - 'the available data is insufficient to determine this' "
+        f"is a correct, preferred answer, not a failure. Never build an "
+        f"overall 'research quality' verdict for a department out of "
+        f"volume metrics alone (papers, researchers, scopus_papers count) - "
+        f"those measure quantity, not quality; if no department-level "
+        f"quality-shaped metric (q1_papers, scopus_rate) answers what was "
+        f"asked, say the data available cannot establish that rather than "
+        f"leaning on a volume number. get_researcher_topics returns TWO "
+        f"different claims about a person - listed_research_interests is "
+        f"SELF-REPORTED (typed in by them or an admin, not derived from "
+        f"anything they've published) and publication_derived_topics is "
+        f"counted from the words that actually recur across their own "
+        f"paper titles (each backed by real paper IDs). NEVER call "
+        f"listed_research_interests someone's 'most frequent topics', "
+        f"'main research areas based on their work', or similar - that "
+        f"phrasing claims publication evidence that field doesn't have. "
+        f"State which of the two you're citing; if asked for their most "
+        f"frequent/most-published-on topics specifically and "
+        f"publication_derived_topics is null, say Litrix doesn't have "
+        f"enough publication-level analysis for that rather than falling "
+        f"back to listed_research_interests silently. If a superlative "
+        f"question ('strongest', 'best department', 'top department') "
+        f"doesn't specify a metric AND no metric was already established "
+        f"earlier in this conversation, ask which metric they mean "
+        f"(total publications, per-researcher rate, Scopus coverage, Q1 "
+        f"count) rather than picking one yourself - only skip asking if "
+        f"the metric is obvious from context (e.g. they just asked about "
+        f"papers per researcher, then ask 'which is best?'). Never invent "
+        f"a paper title, DOI, citation count, author, or classification "
+        f"that isn't literally present in a tool result you called this "
+        f"turn - if asked for specific papers on a topic and the tool "
+        f"result doesn't contain them, say you don't have verified papers "
+        f"matching that rather than naming plausible-sounding titles. "
         f"Call a tool ONLY when the user's "
         f"LATEST message actually asks for data (paper counts, citations, top "
         f"researchers, department stats, publication trends), and call the "
@@ -327,6 +393,98 @@ def _run_tool_call(call, department_id=None):
         return {'error': f'bad arguments for {name}: {e}'}
 
 
+# Numbers worth checking for grounding in the reply-validation pass below -
+# skips bare years (date references, not data claims) and single digits
+# (too common in ordinary prose - "a", rank positions, list counts - to be
+# a reliable hallucination signal on their own).
+_NUMBER_RE = re.compile(r'\b\d{1,3}(?:,\d{3})*(?:\.\d+)?\b')
+_YEAR_RE = re.compile(r'^(19|20)\d{2}$')
+_QUALITY_WORDS_RE = re.compile(r'\b(quality|strongest|best|superior)\b', re.I)
+_METRIC_HINTS_RE = re.compile(
+    r'\b(q1|q2|q3|q4|scopus|isi|rate|citation|papers?|researchers?|metric|per researcher)\b', re.I)
+
+
+def _grounding_numbers(text):
+    out = set()
+    for m in _NUMBER_RE.findall(text or ''):
+        clean = m.replace(',', '')
+        if _YEAR_RE.match(clean):
+            continue
+        if '.' not in clean and len(clean) < 2:
+            continue
+        out.add(clean)
+    return out
+
+
+def _flag_ungrounded(reply, tool_blob):
+    """Cheap Python heuristics, NOT a semantic verifier - this is a floor,
+    not a proof. It catches the two concrete failure modes live testing
+    actually produced: (1) a number in the reply that traces to nothing any
+    tool call returned this turn, and (2) a vague superiority word
+    ('best'/'quality'/'strongest') asserted with no metric named anywhere
+    in the same reply. Either check can still miss a real problem (a
+    coincidental number match, a hedge sentence that dodges the keyword
+    scan) or, rarely, flag a false positive - that's why a flag triggers a
+    revision pass asking the SAME model to re-ground itself, not an
+    automatic rejection of the reply."""
+    reasons = []
+    reply_numbers = _grounding_numbers(reply)
+    if reply_numbers and tool_blob:
+        ungrounded = {n for n in reply_numbers if n not in tool_blob}
+        if ungrounded:
+            reasons.append(
+                'these numbers appear in your reply but were not found in '
+                'any tool result retrieved this turn: ' + ', '.join(sorted(ungrounded))
+            )
+    if _QUALITY_WORDS_RE.search(reply or '') and not _METRIC_HINTS_RE.search(reply or ''):
+        reasons.append(
+            "you used a quality/superiority word ('quality', 'best', "
+            "'strongest', 'superior') without naming the specific metric "
+            "behind it anywhere in the reply"
+        )
+    return reasons
+
+
+def _regrounded_reply(reply, messages, scope_level):
+    """One cheap, Python-only check on the model's own final reply before
+    it reaches the user (see _flag_ungrounded) - added after live testing
+    produced both a claim built on a wrong-scope number and a bare
+    'highest quality' verdict with no metric attached. If either fires,
+    ask the SAME model to revise using ONLY what it already retrieved -
+    one extra Groq call, only when triggered, never a loop (force_final so
+    it can't spend the correction round calling more tools).
+
+    Any failure in the correction attempt itself (network, unexpected
+    response shape) just falls back to the original reply - this is a
+    safety net layered on top of a working answer, never something that
+    should turn a working reply into an error.
+    """
+    tool_blob = ' '.join(m['content'] for m in messages if m.get('role') == 'tool')
+    reasons = _flag_ungrounded(reply, tool_blob)
+    if not reasons:
+        return reply
+    logger.warning('Litrix AI: reply flagged by grounding check: %s', reasons)
+    try:
+        corrected = _call_groq_with_retry(
+            messages + [
+                {'role': 'assistant', 'content': reply},
+                {'role': 'system', 'content': (
+                    'Your previous reply may not be fully grounded: ' + '; '.join(reasons) +
+                    '. Revise it to only state numbers/claims that literally '
+                    'appear in the tool results already retrieved above, '
+                    'name the specific metric behind any quality/superiority '
+                    "claim, and say plainly if the data doesn't support part "
+                    'of what was asked - do not just repeat the flagged claim.'
+                )},
+            ],
+            scope_level=scope_level, force_final=True, attempts=1,
+        )['choices'][0]['message']
+        return corrected.get('content') or reply
+    except requests.RequestException:
+        logger.exception('Litrix AI: grounding correction pass failed, keeping original reply')
+        return reply
+
+
 def answer_question(question, history, scope):
     if not GROQ_API_KEY:
         return {
@@ -357,6 +515,7 @@ def answer_question(question, history, scope):
                 messages, scope_level=scope_level, force_final=(rounds >= MAX_TOOL_ROUNDS),
             )['choices'][0]['message']
         reply = choice.get('content') or "I couldn't find an answer to that."
+        reply = _regrounded_reply(reply, messages, scope_level)
     except requests.RequestException as e:
         logger.exception('Litrix AI: Groq call failed after retry')
         if _groq_error_code(e) == 'rate_limit_exceeded':
