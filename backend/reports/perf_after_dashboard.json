@@ -1,0 +1,712 @@
+{
+  "all_years_all_dept": {
+    "status": 200,
+    "query_count": 11,
+    "total_backend_ms": 1371.6,
+    "total_db_ms": 1375.0,
+    "non_db_ms": -3.4,
+    "data": {
+      "focus_years": [
+        2011,
+        2012,
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025,
+        2026
+      ],
+      "affiliation_filter": "all",
+      "chart_years": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025,
+        2026
+      ],
+      "totals": {
+        "researchers": 106,
+        "active_researchers": 78,
+        "papers": 1832,
+        "citations": 30037,
+        "q1_papers": 405,
+        "scopus_papers": 827,
+        "isi_papers": 3,
+        "q2_papers": 227,
+        "q3_papers": 129,
+        "q4_papers": 35,
+        "journal_papers": 1246,
+        "conference_papers": 486,
+        "book_papers": 11,
+        "book_chapter_papers": 52,
+        "preprint_papers": 2,
+        "avg_h_index": 7.2,
+        "pending_review": 292
+      },
+      "top_researchers": [
+        {
+          "user_id": 97,
+          "full_name_ar": "معز محمود حسن كريشان",
+          "department_name": "Software Engineering",
+          "total_papers": 286,
+          "total_citations": 6244,
+          "h_index": 0,
+          "full_name_en": "Moez Krichen"
+        },
+        {
+          "user_id": 81,
+          "full_name_ar": "محمد ابراهيم يعن الله آل مشلح",
+          "department_name": "Computer Science",
+          "total_papers": 204,
+          "total_citations": 1332,
+          "h_index": 0,
+          "full_name_en": "Prof. Mohammed. I. Alghamdi"
+        },
+        {
+          "user_id": 6,
+          "full_name_ar": "رحمات سارجان بوديارتو بودياتو",
+          "department_name": "Computer Science",
+          "total_papers": 158,
+          "total_citations": 1887,
+          "h_index": 0,
+          "full_name_en": "RAHMAT BUDIARTO"
+        },
+        {
+          "user_id": 89,
+          "full_name_ar": "محمد قيصر سليم محمد سليم",
+          "department_name": "Software Engineering",
+          "total_papers": 77,
+          "total_citations": 875,
+          "h_index": 0,
+          "full_name_en": "Saleem Muhammad Qaiser"
+        },
+        {
+          "user_id": 59,
+          "full_name_ar": "عبدالحنان عبدالمنان شيخ",
+          "department_name": "Computer Science",
+          "total_papers": 71,
+          "total_citations": 5677,
+          "h_index": 0,
+          "full_name_en": "Dr. Shaikh Abdul Hannan"
+        }
+      ],
+      "top_papers": [
+        {
+          "paper_id": 5570,
+          "title": "A survey of clustering algorithms for big data: Taxonomy and empirical analysis",
+          "pub_year": 2014,
+          "doi": "10.1109/tetc.2014.2330519",
+          "source": "Scholar",
+          "indexing": null,
+          "citations": 1437,
+          "citations_by_year": "{\"2014\": 1, \"2015\": 38, \"2016\": 54, \"2017\": 79, \"2018\": 141, \"2019\": 150, \"2020\": 148, \"2021\": 120, \"2022\": 91, \"2023\": 90, \"2024\": 65, \"2025\": 42, \"2026\": 15}",
+          "journal_name": "IEEE Transactions on Emerging Topics in Computing",
+          "quartile": "Q1",
+          "impact_factor": 1.142,
+          "primary_author_ar": "عادل فهد عتيق العرابي الحارثي",
+          "scraped_at": "2026-05-07 08:36:02.039145+00:00",
+          "affiliation_verified": true
+        },
+        {
+          "paper_id": 5189,
+          "title": "Convolutional neural networks: A survey",
+          "pub_year": 2023,
+          "doi": "10.3390/computers12080151",
+          "source": "Scholar",
+          "indexing": null,
+          "citations": 754,
+          "citations_by_year": "{\"2023\": 49, \"2024\": 191, \"2025\": 232, \"2026\": 57}",
+          "journal_name": "Computers",
+          "quartile": "Q1",
+          "impact_factor": 0.935,
+          "primary_author_ar": "معز محمود حسن كريشان",
+          "scraped_at": "2026-05-07 08:25:22.292383+00:00",
+          "affiliation_verified": true
+        },
+        {
+          "paper_id": 6008,
+          "title": "A survey of topic modeling in text mining",
+          "pub_year": 2015,
+          "doi": "10.14569/ijacsa.2015.060121",
+          "source": "Scholar",
+          "indexing": null,
+          "citations": 713,
+          "citations_by_year": "{\"2015\": 2, \"2016\": 2, \"2017\": 10, \"2018\": 24, \"2019\": 41, \"2020\": 48, \"2021\": 57, \"2022\": 52, \"2023\": 45, \"2024\": 44, \"2025\": 35, \"2026\": 6}",
+          "journal_name": "International Journal of Advanced Computer Science and Applications 6 (1), 2015",
+          "quartile": "Q3",
+          "impact_factor": 0.327,
+          "primary_author_ar": "ربيع عبدالله ربيع الغامدي",
+          "scraped_at": "2026-05-07 10:31:03.583466+00:00",
+          "affiliation_verified": false
+        },
+        {
+          "paper_id": 5877,
+          "title": "Integrating blockchain and the internet of things in precision agriculture: Analysis, opportunities, and challenges",
+          "pub_year": 2020,
+          "doi": "10.1016/j.compag.2020.105476",
+          "source": "Scholar",
+          "indexing": null,
+          "citations": 548,
+          "citations_by_year": "{\"2020\": 5, \"2021\": 51, \"2022\": 91, \"2023\": 67, \"2024\": 83, \"2025\": 70, \"2026\": 12}",
+          "journal_name": "Computers and Electronics in Agriculture",
+          "quartile": "Q1",
+          "impact_factor": 2.165,
+          "primary_author_ar": "محمد فتحي ابراهيم السيد",
+          "scraped_at": "2026-05-07 10:28:06.974749+00:00",
+          "affiliation_verified": false
+        },
+        {
+          "paper_id": 3872,
+          "title": "CICIDS-2017 dataset feature analysis with information gain for anomaly detection",
+          "pub_year": 2020,
+          "doi": "10.1109/access.2020.3009843",
+          "source": "Scopus",
+          "indexing": null,
+          "citations": 420,
+          "citations_by_year": "{\"2020\": 5, \"2021\": 45, \"2022\": 73, \"2023\": 63, \"2024\": 107, \"2025\": 106, \"2026\": 21}",
+          "journal_name": "IEEE Access",
+          "quartile": "Q1",
+          "impact_factor": 0.884,
+          "primary_author_ar": "رحمات سارجان بوديارتو بودياتو",
+          "scraped_at": "2026-06-04 13:50:10.731478+00:00",
+          "affiliation_verified": true
+        }
+      ],
+      "departments": [
+        {
+          "department_id": 3,
+          "department_name": "Computer Science",
+          "college_id": 1,
+          "total_researchers": 58,
+          "active_researchers": 43,
+          "total_papers": 1033,
+          "total_citations": 17451,
+          "total_q1_papers": 237,
+          "total_q2_papers": 124,
+          "total_q3_papers": 76,
+          "total_q4_papers": 16,
+          "total_scopus_papers": 466,
+          "total_isi_papers": 0,
+          "conference_papers": 280,
+          "journal_papers": 722,
+          "book_papers": 5,
+          "book_chapter_papers": 24,
+          "preprint_papers": 2,
+          "by_year": [
+            {
+              "year": 2019,
+              "papers": 55,
+              "citations": 913
+            },
+            {
+              "year": 2020,
+              "papers": 45,
+              "citations": 1036
+            },
+            {
+              "year": 2021,
+              "papers": 78,
+              "citations": 1274
+            },
+            {
+              "year": 2022,
+              "papers": 100,
+              "citations": 1679
+            },
+            {
+              "year": 2023,
+              "papers": 92,
+              "citations": 1991
+            },
+            {
+              "year": 2024,
+              "papers": 173,
+              "citations": 2280
+            },
+            {
+              "year": 2025,
+              "papers": 148,
+              "citations": 2425
+            },
+            {
+              "year": 2026,
+              "papers": 98,
+              "citations": 670
+            }
+          ]
+        },
+        {
+          "department_id": 4,
+          "department_name": "Software Engineering",
+          "college_id": 1,
+          "total_researchers": 7,
+          "active_researchers": 6,
+          "total_papers": 403,
+          "total_citations": 7438,
+          "total_q1_papers": 97,
+          "total_q2_papers": 56,
+          "total_q3_papers": 26,
+          "total_q4_papers": 8,
+          "total_scopus_papers": 189,
+          "total_isi_papers": 0,
+          "conference_papers": 105,
+          "journal_papers": 283,
+          "book_papers": 2,
+          "book_chapter_papers": 12,
+          "preprint_papers": 1,
+          "by_year": [
+            {
+              "year": 2019,
+              "papers": 25,
+              "citations": 168
+            },
+            {
+              "year": 2020,
+              "papers": 28,
+              "citations": 353
+            },
+            {
+              "year": 2021,
+              "papers": 34,
+              "citations": 397
+            },
+            {
+              "year": 2022,
+              "papers": 54,
+              "citations": 662
+            },
+            {
+              "year": 2023,
+              "papers": 89,
+              "citations": 1350
+            },
+            {
+              "year": 2024,
+              "papers": 57,
+              "citations": 1631
+            },
+            {
+              "year": 2025,
+              "papers": 42,
+              "citations": 1766
+            },
+            {
+              "year": 2026,
+              "papers": 16,
+              "citations": 510
+            }
+          ]
+        },
+        {
+          "department_id": 1,
+          "department_name": "Information Technology",
+          "college_id": 1,
+          "total_researchers": 18,
+          "active_researchers": 15,
+          "total_papers": 306,
+          "total_citations": 5469,
+          "total_q1_papers": 64,
+          "total_q2_papers": 60,
+          "total_q3_papers": 25,
+          "total_q4_papers": 10,
+          "total_scopus_papers": 165,
+          "total_isi_papers": 3,
+          "conference_papers": 61,
+          "journal_papers": 230,
+          "book_papers": 2,
+          "book_chapter_papers": 13,
+          "preprint_papers": 0,
+          "by_year": [
+            {
+              "year": 2019,
+              "papers": 24,
+              "citations": 67
+            },
+            {
+              "year": 2020,
+              "papers": 23,
+              "citations": 125
+            },
+            {
+              "year": 2021,
+              "papers": 22,
+              "citations": 351
+            },
+            {
+              "year": 2022,
+              "papers": 40,
+              "citations": 744
+            },
+            {
+              "year": 2023,
+              "papers": 35,
+              "citations": 1127
+            },
+            {
+              "year": 2024,
+              "papers": 35,
+              "citations": 1270
+            },
+            {
+              "year": 2025,
+              "papers": 41,
+              "citations": 1291
+            },
+            {
+              "year": 2026,
+              "papers": 25,
+              "citations": 311
+            }
+          ]
+        },
+        {
+          "department_id": 2,
+          "department_name": "Networks and Systems",
+          "college_id": 1,
+          "total_researchers": 23,
+          "active_researchers": 14,
+          "total_papers": 176,
+          "total_citations": 1865,
+          "total_q1_papers": 23,
+          "total_q2_papers": 8,
+          "total_q3_papers": 16,
+          "total_q4_papers": 3,
+          "total_scopus_papers": 60,
+          "total_isi_papers": 0,
+          "conference_papers": 52,
+          "journal_papers": 117,
+          "book_papers": 2,
+          "book_chapter_papers": 5,
+          "preprint_papers": 0,
+          "by_year": [
+            {
+              "year": 2019,
+              "papers": 10,
+              "citations": 81
+            },
+            {
+              "year": 2020,
+              "papers": 14,
+              "citations": 112
+            },
+            {
+              "year": 2021,
+              "papers": 12,
+              "citations": 176
+            },
+            {
+              "year": 2022,
+              "papers": 20,
+              "citations": 234
+            },
+            {
+              "year": 2023,
+              "papers": 21,
+              "citations": 297
+            },
+            {
+              "year": 2024,
+              "papers": 14,
+              "citations": 341
+            },
+            {
+              "year": 2025,
+              "papers": 13,
+              "citations": 325
+            },
+            {
+              "year": 2026,
+              "papers": 7,
+              "citations": 84
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "year_2025": {
+    "status": 200,
+    "query_count": 11,
+    "total_backend_ms": 1189.0,
+    "total_db_ms": 1188.0,
+    "non_db_ms": 1.0,
+    "data": {
+      "focus_years": [
+        2025
+      ],
+      "affiliation_filter": "all",
+      "chart_years": [
+        2025
+      ],
+      "totals": {
+        "researchers": 106,
+        "active_researchers": 78,
+        "papers": 237,
+        "citations": 5374,
+        "q1_papers": 99,
+        "scopus_papers": 149,
+        "isi_papers": 0,
+        "q2_papers": 26,
+        "q3_papers": 17,
+        "q4_papers": 4,
+        "journal_papers": 188,
+        "conference_papers": 35,
+        "book_papers": 3,
+        "book_chapter_papers": 6,
+        "preprint_papers": 1,
+        "avg_h_index": 7.2,
+        "pending_review": 19
+      },
+      "top_researchers": [
+        {
+          "user_id": 81,
+          "full_name_ar": "محمد ابراهيم يعن الله آل مشلح",
+          "department_name": "Computer Science",
+          "total_papers": 47,
+          "total_citations": 368,
+          "h_index": 0,
+          "full_name_en": "Prof. Mohammed. I. Alghamdi"
+        },
+        {
+          "user_id": 97,
+          "full_name_ar": "معز محمود حسن كريشان",
+          "department_name": "Software Engineering",
+          "total_papers": 24,
+          "total_citations": 1514,
+          "h_index": 0,
+          "full_name_en": "Moez Krichen"
+        },
+        {
+          "user_id": 6,
+          "full_name_ar": "رحمات سارجان بوديارتو بودياتو",
+          "department_name": "Computer Science",
+          "total_papers": 17,
+          "total_citations": 380,
+          "h_index": 0,
+          "full_name_en": "RAHMAT BUDIARTO"
+        },
+        {
+          "user_id": 39,
+          "full_name_ar": "حسن عقيل عطاس الخيري",
+          "department_name": "Computer Science",
+          "total_papers": 11,
+          "total_citations": 42,
+          "h_index": 0,
+          "full_name_en": "Hassan Alkhiri"
+        },
+        {
+          "user_id": 50,
+          "full_name_ar": "سعد ضيف الله حمود القثامي",
+          "department_name": "Computer Science",
+          "total_papers": 11,
+          "total_citations": 22,
+          "h_index": 0,
+          "full_name_en": "Saad Alqithami"
+        }
+      ],
+      "top_papers": [
+        {
+          "paper_id": 5238,
+          "title": "Long short-term memory networks: A comprehensive survey",
+          "pub_year": 2025,
+          "doi": "10.3390/ai6090215",
+          "source": "Scholar",
+          "indexing": null,
+          "citations": 59,
+          "citations_by_year": "{\"2025\": 12, \"2026\": 24}",
+          "journal_name": null,
+          "quartile": null,
+          "impact_factor": null,
+          "primary_author_ar": "معز محمود حسن كريشان",
+          "scraped_at": "2026-05-07 08:26:21.809124+00:00",
+          "affiliation_verified": true
+        },
+        {
+          "paper_id": 4840,
+          "title": "Educational data mining: a 10-year review",
+          "pub_year": 2025,
+          "doi": "10.1007/s10791-025-09589-z",
+          "source": "Scholar",
+          "indexing": null,
+          "citations": 40,
+          "citations_by_year": "{\"2025\": 9, \"2026\": 8}",
+          "journal_name": "Discover Computing",
+          "quartile": "Q2",
+          "impact_factor": 0.386,
+          "primary_author_ar": "يمنى محمد علي ابراهيم",
+          "scraped_at": "2026-05-07 08:16:31.413158+00:00",
+          "affiliation_verified": false
+        },
+        {
+          "paper_id": 6017,
+          "title": "Security risk assessment in IoT environments: A taxonomy and survey",
+          "pub_year": 2025,
+          "doi": "10.2139/ssrn.5090068",
+          "source": "Scholar",
+          "indexing": null,
+          "citations": 30,
+          "citations_by_year": "{\"2025\": 30}",
+          "journal_name": "Computers & Security",
+          "quartile": "Q1",
+          "impact_factor": 1.598,
+          "primary_author_ar": "مفرح عبدالله شايع وقدان",
+          "scraped_at": "2026-05-07 10:31:16.193256+00:00",
+          "affiliation_verified": false
+        },
+        {
+          "paper_id": 4746,
+          "title": "Enhancing adaptive learning with generative ai for tailored educational support for students with disabilities",
+          "pub_year": 2025,
+          "doi": "10.57197/jdr-2025-0012",
+          "source": "Scholar",
+          "indexing": null,
+          "citations": 28,
+          "citations_by_year": "{\"2025\": 5, \"2026\": 8}",
+          "journal_name": "Journal of Disability Research",
+          "quartile": "Q2",
+          "impact_factor": 0.416,
+          "primary_author_ar": "احمد عبدالله احمد القرني",
+          "scraped_at": "2026-05-07 08:14:55.535441+00:00",
+          "affiliation_verified": null
+        },
+        {
+          "paper_id": 5530,
+          "title": "Automatic Liver Tumor Segmentation of CT and MRI Volumes Using Ensemble ResUNet-InceptionV4 Model",
+          "pub_year": 2025,
+          "doi": "10.1016/j.ins.2025.121966",
+          "source": "Scholar",
+          "indexing": null,
+          "citations": 27,
+          "citations_by_year": "{\"2025\": 13, \"2026\": 9}",
+          "journal_name": "Information Sciences",
+          "quartile": "Q1",
+          "impact_factor": 1.507,
+          "primary_author_ar": "نجيب علي محمد بنعون",
+          "scraped_at": "2026-05-07 08:32:13.204421+00:00",
+          "affiliation_verified": true
+        }
+      ],
+      "departments": [
+        {
+          "department_id": 3,
+          "department_name": "Computer Science",
+          "college_id": 1,
+          "total_researchers": 58,
+          "active_researchers": 43,
+          "total_papers": 148,
+          "total_citations": 2425,
+          "total_q1_papers": 63,
+          "total_q2_papers": 17,
+          "total_q3_papers": 10,
+          "total_q4_papers": 0,
+          "total_scopus_papers": 92,
+          "total_isi_papers": 0,
+          "conference_papers": 24,
+          "journal_papers": 119,
+          "book_papers": 1,
+          "book_chapter_papers": 3,
+          "preprint_papers": 1,
+          "by_year": [
+            {
+              "year": 2025,
+              "papers": 148,
+              "citations": 2425
+            }
+          ]
+        },
+        {
+          "department_id": 4,
+          "department_name": "Software Engineering",
+          "college_id": 1,
+          "total_researchers": 7,
+          "active_researchers": 6,
+          "total_papers": 42,
+          "total_citations": 1766,
+          "total_q1_papers": 17,
+          "total_q2_papers": 5,
+          "total_q3_papers": 4,
+          "total_q4_papers": 2,
+          "total_scopus_papers": 28,
+          "total_isi_papers": 0,
+          "conference_papers": 6,
+          "journal_papers": 33,
+          "book_papers": 1,
+          "book_chapter_papers": 2,
+          "preprint_papers": 0,
+          "by_year": [
+            {
+              "year": 2025,
+              "papers": 42,
+              "citations": 1766
+            }
+          ]
+        },
+        {
+          "department_id": 1,
+          "department_name": "Information Technology",
+          "college_id": 1,
+          "total_researchers": 18,
+          "active_researchers": 15,
+          "total_papers": 41,
+          "total_citations": 1291,
+          "total_q1_papers": 17,
+          "total_q2_papers": 5,
+          "total_q3_papers": 3,
+          "total_q4_papers": 2,
+          "total_scopus_papers": 28,
+          "total_isi_papers": 0,
+          "conference_papers": 4,
+          "journal_papers": 34,
+          "book_papers": 1,
+          "book_chapter_papers": 2,
+          "preprint_papers": 0,
+          "by_year": [
+            {
+              "year": 2025,
+              "papers": 41,
+              "citations": 1291
+            }
+          ]
+        },
+        {
+          "department_id": 2,
+          "department_name": "Networks and Systems",
+          "college_id": 1,
+          "total_researchers": 23,
+          "active_researchers": 14,
+          "total_papers": 13,
+          "total_citations": 325,
+          "total_q1_papers": 6,
+          "total_q2_papers": 0,
+          "total_q3_papers": 1,
+          "total_q4_papers": 0,
+          "total_scopus_papers": 7,
+          "total_isi_papers": 0,
+          "conference_papers": 1,
+          "journal_papers": 12,
+          "book_papers": 0,
+          "book_chapter_papers": 0,
+          "preprint_papers": 0,
+          "by_year": [
+            {
+              "year": 2025,
+              "papers": 13,
+              "citations": 325
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

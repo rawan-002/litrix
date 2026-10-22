@@ -475,8 +475,45 @@ def overview(request):
             kpi_params.append(hod_dept_id)
         kpi_sql += ')'
         kpi_sql += AFFIL_CLAUSE
-        cur.execute(kpi_sql, kpi_params)
-        paper_count_row = cur.fetchone()
+
+        # Pending-review indicator: papers in scope whose Al-Baha affiliation is
+        # NOT yet verified (AffiliationVerified IS NULL). These are NOT in the
+        # confirmed Al-Baha totals above (which are TRUE-only) — they're an
+        # INDEPENDENT data-quality metric. Computed WITHOUT the affiliation
+        # filter (and regardless of the toggle) so the reviewer always sees the
+        # size of the unverified backlog. Same scope (year window + HoD dept).
+        pend_sql = (
+            'SELECT COUNT(DISTINCT rp."PaperID") '
+            'FROM "ResearchPaper" rp '
+            'WHERE rp."PubYear" = ANY(%s) '
+            '  AND rp."AffiliationVerified" IS NULL '
+            '  AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"'
+        )
+        pend_params = [years]
+        if hod_dept_id:
+            pend_sql += (
+                ' AND EXISTS (SELECT 1 FROM "Works_In" w2 '
+                '              WHERE w2."UserID" = a."UserID" '
+                '                AND w2."DepartmentID" = %s '
+                '                AND w2."IsCurrentPosition" = TRUE)'
+            )
+            pend_params.append(hod_dept_id)
+        pend_sql += ')'
+
+        # kpi_sql and pend_sql are two independent scalar-aggregate queries
+        # (no shared rows/filters - pend_sql deliberately ignores the
+        # affiliation toggle, see comment above). Sharing one round-trip via a
+        # CROSS JOIN of both subqueries as-is (each inner query's text/params
+        # are byte-for-byte unchanged) saves a network round-trip without
+        # touching either query's filter logic.
+        cur.execute(
+            f'SELECT kpi.*, pend.pending_review '
+            f'FROM ({kpi_sql}) kpi, ({pend_sql}) pend(pending_review)',
+            kpi_params + pend_params,
+        )
+        combined_row = cur.fetchone()
+        paper_count_row = combined_row[:-1]
+        pending_review = combined_row[-1] or 0
 
         # Citations received in the window, summed per-paper over the selected
         # years across ALL the scope's papers (any publication year) — not
@@ -504,32 +541,6 @@ def overview(request):
         cit_sql += AFFIL_CLAUSE
         cur.execute(cit_sql, cit_params)
         citations_row = cur.fetchone()
-
-        # Pending-review indicator: papers in scope whose Al-Baha affiliation is
-        # NOT yet verified (AffiliationVerified IS NULL). These are NOT in the
-        # confirmed Al-Baha totals above (which are TRUE-only) — they're an
-        # INDEPENDENT data-quality metric. Computed WITHOUT the affiliation
-        # filter (and regardless of the toggle) so the reviewer always sees the
-        # size of the unverified backlog. Same scope (year window + HoD dept).
-        pend_sql = (
-            'SELECT COUNT(DISTINCT rp."PaperID") '
-            'FROM "ResearchPaper" rp '
-            'WHERE rp."PubYear" = ANY(%s) '
-            '  AND rp."AffiliationVerified" IS NULL '
-            '  AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"'
-        )
-        pend_params = [years]
-        if hod_dept_id:
-            pend_sql += (
-                ' AND EXISTS (SELECT 1 FROM "Works_In" w2 '
-                '              WHERE w2."UserID" = a."UserID" '
-                '                AND w2."DepartmentID" = %s '
-                '                AND w2."IsCurrentPosition" = TRUE)'
-            )
-            pend_params.append(hod_dept_id)
-        pend_sql += ')'
-        cur.execute(pend_sql, pend_params)
-        pending_review = cur.fetchone()[0] or 0
 
         # paper_count_row is (papers, q1, scopus, isi, q2, q3, q4); splice the
         # citation total in to get (papers, citations, q1, scopus, isi, q2, q3, q4).
@@ -700,52 +711,60 @@ def overview(request):
         # never return an empty chart.
         chart_years = [y for y in years if y >= CHART_YEAR_FLOOR] or years
 
-        # Papers published per (dept, year) — DISTINCT so a paper shared by
-        # several co-authored faculty isn't double-counted.
+        # Papers published per (dept, year) - DISTINCT so a paper shared by
+        # several co-authored faculty isn't double-counted - and per-year
+        # citations per department (same per-paper graph source as the KPI,
+        # so the affiliation filter applies) share one round-trip via two
+        # CTEs + a FULL OUTER JOIN on (dept, year). Each CTE's inner
+        # query/filters/params are unchanged from the two separate queries
+        # this replaced; only the round-trip is shared. COALESCE(...,0) on
+        # the join just recreates the same zero-default the two separate
+        # dicts' .get(did, {}).get(y, 0) callers already relied on below.
         cur.execute(f'''
-            SELECT w."DepartmentID", rp."PubYear",
-                   COUNT(DISTINCT rp."PaperID") AS papers
-            FROM "Works_In" w
-            JOIN "Authors" a ON a."UserID" = w."UserID"
-            JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
-            WHERE w."IsCurrentPosition" = TRUE
-              AND rp."PubYear" = ANY(%s)
-              AND (%s::int IS NULL OR w."DepartmentID" = %s::int){AFFIL_CLAUSE}
-            GROUP BY w."DepartmentID", rp."PubYear"
-        ''', [chart_years, hod_dept_id, hod_dept_id])
-        papers_by_dept_year = {}
-        for did, yr, n in cur.fetchall():
-            papers_by_dept_year.setdefault(did, {})[int(yr)] = int(n)
-
-        # Per-year citations per department from the per-paper graph (same source
-        # as the KPI, so the affiliation filter applies). DISTINCT on (dept,
-        # paper, year) keeps a paper co-authored within one department from being
-        # double-counted; a paper spanning two departments still counts once per
-        # department, which is intended.
-        cur.execute(f'''
-            SELECT dept, yr, SUM(cites) AS citations
-            FROM (
-                SELECT DISTINCT
-                    w."DepartmentID"      AS dept,
-                    rp."PaperID"          AS pid,
-                    year_kv.key::int      AS yr,
-                    (year_kv.value)::int  AS cites
+            WITH papers_q AS (
+                SELECT w."DepartmentID" AS dept, rp."PubYear" AS yr,
+                       COUNT(DISTINCT rp."PaperID") AS papers
                 FROM "Works_In" w
                 JOIN "Authors" a ON a."UserID" = w."UserID"
                 JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
-                CROSS JOIN LATERAL jsonb_each_text(
-                    COALESCE(rp."CitationsByYear", '{{}}'::jsonb)
-                ) AS year_kv
                 WHERE w."IsCurrentPosition" = TRUE
-                  AND year_kv.value ~ '^[0-9]+$'
-                  AND year_kv.key::int = ANY(%s)
+                  AND rp."PubYear" = ANY(%s)
                   AND (%s::int IS NULL OR w."DepartmentID" = %s::int){AFFIL_CLAUSE}
-            ) ded
-            GROUP BY dept, yr
-        ''', [chart_years, hod_dept_id, hod_dept_id])
+                GROUP BY w."DepartmentID", rp."PubYear"
+            ),
+            cites_q AS (
+                SELECT dept, yr, SUM(cites) AS citations
+                FROM (
+                    SELECT DISTINCT
+                        w."DepartmentID"      AS dept,
+                        rp."PaperID"          AS pid,
+                        year_kv.key::int      AS yr,
+                        (year_kv.value)::int  AS cites
+                    FROM "Works_In" w
+                    JOIN "Authors" a ON a."UserID" = w."UserID"
+                    JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
+                    CROSS JOIN LATERAL jsonb_each_text(
+                        COALESCE(rp."CitationsByYear", '{{}}'::jsonb)
+                    ) AS year_kv
+                    WHERE w."IsCurrentPosition" = TRUE
+                      AND year_kv.value ~ '^[0-9]+$'
+                      AND year_kv.key::int = ANY(%s)
+                      AND (%s::int IS NULL OR w."DepartmentID" = %s::int){AFFIL_CLAUSE}
+                ) ded
+                GROUP BY dept, yr
+            )
+            SELECT COALESCE(p.dept, c.dept) AS dept,
+                   COALESCE(p.yr, c.yr)     AS yr,
+                   COALESCE(p.papers, 0)    AS papers,
+                   COALESCE(c.citations, 0) AS citations
+            FROM papers_q p
+            FULL OUTER JOIN cites_q c ON c.dept = p.dept AND c.yr = p.yr
+        ''', [chart_years, hod_dept_id, hod_dept_id, chart_years, hod_dept_id, hod_dept_id])
+        papers_by_dept_year = {}
         cites_by_dept_year = {}
-        for did, yr, n in cur.fetchall():
-            cites_by_dept_year.setdefault(did, {})[int(yr)] = int(n)
+        for did, yr, papers_n, cites_n in cur.fetchall():
+            papers_by_dept_year.setdefault(did, {})[int(yr)] = int(papers_n)
+            cites_by_dept_year.setdefault(did, {})[int(yr)] = int(cites_n)
 
         # Attach by_year to each department row over chart_years, so the chart
         # axis stays reasonable even though the KPIs span 2011+.
