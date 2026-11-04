@@ -97,7 +97,7 @@ export const routes: Routes = [
       },
       {
         // Visible to anyone who can manage campaigns or view reports.
-        path: 'admin/campaigns',
+        path: 'admin/research-reports',
         component: CampaignsComponent,
         canActivate: [permissionGuard('manage_campaigns', 'view_campaign_reports')],
       },

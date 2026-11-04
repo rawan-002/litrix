@@ -125,11 +125,10 @@ export class LayoutComponent implements OnInit {
       admin.push({ label: 'Roles & Permissions', icon: 'shield-check', route: '/admin/roles' });
     }
 
-    // For campaign managers and HoD-style read access. Route stays
-    // /admin/campaigns; only the label needed to read as "official".
+    // For campaign managers and HoD-style read access.
     if (this.auth.hasPermission('manage_campaigns') ||
         this.auth.hasPermission('view_campaign_reports')) {
-      admin.push({ label: 'Research Reports', icon: 'clipboard-list', route: '/admin/campaigns' });
+      admin.push({ label: 'Research Reports', icon: 'clipboard-list', route: '/admin/research-reports' });
     }
 
     if (this.auth.hasPermission('trigger_sync')) {
