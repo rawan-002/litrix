@@ -29,26 +29,17 @@
       </div>
       @for (section of navSections(); track section.heading) {
         @if (section.heading) {
-          <!-- Collapsible section header: click toggles its items below. -->
-          <button (click)="toggleSection(section.heading)"
-                  class="w-full flex items-center justify-between gap-2 px-3 mt-6 mb-2
-                         text-[10px] uppercase tracking-wider text-ink-400
-                         hover:text-ink-600 transition-colors">
-            <span>{{ section.heading }}</span>
-            <app-icon name="chevron-down" [size]="14"
-                      class="transition-transform duration-150"
-                      [class.-rotate-90]="!isSectionOpen(section.heading)"></app-icon>
-          </button>
+          <div class="text-[10px] uppercase tracking-wider text-ink-400 px-3 mt-6 mb-2">
+            {{ section.heading }}
+          </div>
         }
-        @if (!section.heading || isSectionOpen(section.heading)) {
-          <ul class="space-y-0.5">
-            @for (item of section.items; track item.route) {
-              <li>
-                <ng-container *ngTemplateOutlet="navLink; context: { item: item }" />
-              </li>
-            }
-          </ul>
-        }
+        <ul class="space-y-0.5">
+          @for (item of section.items; track item.route) {
+            <li>
+              <ng-container *ngTemplateOutlet="navLink; context: { item: item }" />
+            </li>
+          }
+        </ul>
       }
     </nav>
 

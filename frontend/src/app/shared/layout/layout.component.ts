@@ -53,16 +53,6 @@ export class LayoutComponent implements OnInit {
   // my-reports page calls reloadPendingReports() after a submit.
   readonly pendingReports = signal(0);
 
-  // Which collapsible sections (by heading) are expanded. Starts collapsed
-  // except whichever section contains the current route, so landing
-  // directly on e.g. /admin/users doesn't hide its own nav entry. Manual
-  // toggles persist in localStorage as a per-viewer convenience only - it's
-  // never read back by anything else, so a missing/corrupt value just means
-  // "start collapsed".
-  readonly openSections = signal<Set<string>>(new Set());
-
-  private readonly OPEN_SECTIONS_KEY = 'litrix.sidebar.openSections';
-
   ngOnInit() {
     this.notifs.load(true).subscribe({ error: () => {} });
     this.reloadPendingReports();
@@ -70,47 +60,6 @@ export class LayoutComponent implements OnInit {
     // photo_url) populate without forcing a re-login. Silent on failure -
     // the stored session stays valid.
     this.auth.fetchMe().subscribe({ error: () => {} });
-    this.initOpenSections();
-  }
-
-  private initOpenSections() {
-    const stored = this.loadStoredOpenSections();
-    const active = this.sectionHeadingForUrl(this.router.url);
-    if (active) stored.add(active);
-    this.openSections.set(stored);
-  }
-
-  private loadStoredOpenSections(): Set<string> {
-    try {
-      const raw = localStorage.getItem(this.OPEN_SECTIONS_KEY);
-      if (raw) return new Set(JSON.parse(raw));
-    } catch {}
-    return new Set();
-  }
-
-  private sectionHeadingForUrl(url: string): string | null {
-    for (const section of this.navSections()) {
-      if (section.heading &&
-          section.items.some(i => i.route !== '/' && url.startsWith(i.route))) {
-        return section.heading;
-      }
-    }
-    return null;
-  }
-
-  toggleSection(heading: string) {
-    this.openSections.update(set => {
-      const next = new Set(set);
-      next.has(heading) ? next.delete(heading) : next.add(heading);
-      try {
-        localStorage.setItem(this.OPEN_SECTIONS_KEY, JSON.stringify([...next]));
-      } catch {}
-      return next;
-    });
-  }
-
-  isSectionOpen(heading: string): boolean {
-    return this.openSections().has(heading);
   }
 
   reloadPendingReports() {
