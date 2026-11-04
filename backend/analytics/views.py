@@ -25,7 +25,7 @@ from .stats import (
     _cites_expr, verified_affil_clause, active_affil_clause,
     _dept_cards_windowed, _researcher_rows_windowed,
 )
-from .exports import export_excel  # re-exported for urls.py
+from .exports import export_excel, export_my_papers  # re-exported for urls.py
 from .researcher_views import ResearcherViewSet  # re-exported for urls.py
 
 

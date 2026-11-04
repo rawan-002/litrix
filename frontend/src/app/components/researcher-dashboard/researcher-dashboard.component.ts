@@ -6,12 +6,14 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
 import { LitrixApiService } from '../../services/litrix-api.service';
 import { AffiliationService } from '../../core/services/affiliation.service';
 import { ResearcherProfilePayload } from '../../models/litrix.models';
 import { isLatinName, joinEnglishName } from '../../shared/utils/researcher-name';
 import { CitationsChartComponent } from '../citations-chart/citations-chart.component';
 import { PaperDetailModalComponent } from '../paper-detail-modal/paper-detail-modal.component';
+import { environment } from '../../../environments/environment';
 
 interface DonutSlice {
   label: string;
@@ -32,6 +34,11 @@ interface DonutSlice {
 export class ResearcherDashboardComponent implements OnInit {
   private readonly api = inject(LitrixApiService);
   private readonly affiliation = inject(AffiliationService);
+  private readonly http = inject(HttpClient);
+
+  /** Blocks the Export button while a download is in flight - same name/
+   *  purpose as the admin dashboard's. */
+  readonly exporting = signal(false);
 
   /** Litrix-ID of the researcher to render. Required. */
   @Input({ required: true }) litrixId!: string;
@@ -119,6 +126,52 @@ export class ResearcherDashboardComponent implements OnInit {
   readonly selectedPaperId = signal<number | null>(null);
   openPaper(p: { paper_id: number }) { this.selectedPaperId.set(p.paper_id); }
   closePaper() { this.selectedPaperId.set(null); }
+
+  // Export: same blob-download pattern as the admin dashboard's
+  // triggerExport() (HttpClient, not a direct navigation, so the auth header
+  // actually goes out), just pointed at the self-scoped endpoint with no
+  // options to pick.
+  exportMyPapers() {
+    this.exporting.set(true);
+    this.http.get(
+      `${environment.apiBaseUrl}/export/my-papers/`,
+      { responseType: 'blob', observe: 'response' },
+    ).subscribe({
+      next: res => {
+        const blob = res.body!;
+        const filename = this.parseFilename(
+          res.headers.get('Content-Disposition'),
+        ) || `my-papers-${new Date().toISOString().slice(0, 10)}.xlsx`;
+        this.saveBlob(blob, filename);
+        this.exporting.set(false);
+      },
+      error: err => {
+        this.exporting.set(false);
+        const msg = err?.error?.detail
+                 || err?.message
+                 || `Export failed (HTTP ${err?.status ?? '?'})`;
+        alert(msg);
+      },
+    });
+  }
+
+  /** Pull the filename out of a Content-Disposition header, if present. */
+  private parseFilename(cd: string | null): string | null {
+    if (!cd) return null;
+    const m = /filename\*?=(?:UTF-8'')?"?([^"]+?)"?(?:;|$)/i.exec(cd);
+    return m ? decodeURIComponent(m[1]) : null;
+  }
+
+  private saveBlob(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
 
   readonly hoveredCitYear = signal<number | null>(null);
   readonly hoveredPubYear = signal<number | null>(null);

@@ -595,3 +595,66 @@ def export_excel(request):
     resp = _excel_response(fname)
     wb.save(resp)
     return resp
+
+
+@decorators.api_view(['GET'])
+def export_my_papers(request):
+    """GET /api/export/my-papers/ - one researcher's own papers, for the
+    personal dashboard's Export button. Self-scoped to request.user, so
+    (unlike export_excel above) no view_all_researchers/view_dept_researchers
+    permission is required - a researcher can always see/export their own
+    data, the same way they can always edit their own profile."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+    from django.db import connection
+
+    with connection.cursor() as cur:
+        # Same join shape as public_views.researcher_profile's papers list -
+        # Journal/Quartile live on Journals/JournalRankings, not ResearchPaper
+        # itself, and citations come from the same RawData_Log fallback chain.
+        cur.execute('''
+            SELECT
+                rp."Title", rp."PubYear", j."JournalName", rp."VenueType",
+                jr."Quartile",
+                COALESCE(
+                    (rp."RawData_Log"->'cited_by'->>'value')::int,
+                    (rp."RawData_Log"->>'cited_by_count')::int,
+                    0)                                            AS citations,
+                rp."DOI"
+            FROM "ResearchPaper" rp
+            JOIN "Authors" a ON a."PaperID" = rp."PaperID"
+            LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
+            LEFT JOIN LATERAL (
+                SELECT "Quartile" FROM "JournalRankings"
+                WHERE "JournalID" = rp."JournalID"
+                ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1
+            ) jr ON TRUE
+            WHERE a."UserID" = %s
+            ORDER BY rp."PubYear" DESC NULLS LAST, citations DESC NULLS LAST
+        ''', [request.user.user_id])
+        rows = cur.fetchall()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'My Papers'
+
+    header_font = Font(bold=True, color='FFFFFF')
+    header_fill = PatternFill('solid', fgColor='1D1D1F')
+    headers = ['Title', 'Year', 'Journal', 'Venue Type', 'Quartile', 'Citations', 'DOI']
+    ws.append(headers)
+    for col in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col)
+        cell.font = header_font
+        cell.fill = header_fill
+
+    for row in rows:
+        ws.append(list(row))
+
+    widths = [50, 8, 30, 14, 10, 10, 24]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
+
+    fname = f"my-papers-{request.user.litrix_id or request.user.user_id}.xlsx"
+    resp = _excel_response(fname)
+    wb.save(resp)
+    return resp
