@@ -89,17 +89,6 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     this.bookType.set(v);
   }
 
-  /** Small emoji marker so Journal/Conference/Book/Book Chapter read apart
-   *  at a glance in a mixed results list. */
-  venueIcon(vt: string | null | undefined): string {
-    switch ((vt || '').toLowerCase()) {
-      case 'journal':      return '📄';
-      case 'book':         return '📘';
-      case 'bookchapter':  return '📖';
-      default:             return vt?.toLowerCase().startsWith('conf') ? '🎤' : '';
-    }
-  }
-
   readonly query    = signal<string>('');
   readonly loading  = signal<boolean>(false);
   readonly loadingMore = signal<boolean>(false);
