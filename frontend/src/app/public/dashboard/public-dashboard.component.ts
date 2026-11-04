@@ -91,7 +91,7 @@ Chart.register(...registerables);
             <span>
               <span class="font-semibold">{{ overview()?.pending_review | number }}</span>
               publications pending affiliation verification
-              <span class="text-amber-600">— not included in the totals above.</span>
+              <span class="text-amber-600">not included in the totals above.</span>
             </span>
           </div>
         }

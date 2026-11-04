@@ -27,33 +27,44 @@
       <div class="text-[10px] uppercase tracking-wider text-ink-400 px-3 mb-2">
         {{ auth.role() || 'Researcher' }}
       </div>
-      <ul class="space-y-0.5">
-        @for (item of navItems(); track item.route) {
-          <li>
-            <!-- Hover goes accent blue against the monochrome sidebar;
-                 the active route stays inked-in (bg-ink-100). -->
-            <a [routerLink]="item.route"
-               (click)="closeSidebar()"
-               routerLinkActive="bg-ink-100 text-ink-900"
-               [routerLinkActiveOptions]="{ exact: item.route === '/' }"
-               class="flex items-center gap-3 px-3 py-2 rounded-lg
-                      text-sm text-ink-500
-                      hover:bg-accent-light hover:text-accent
-                      transition-colors">
-              <app-icon [name]="item.icon" class="w-5 flex justify-center shrink-0"></app-icon>
-              <span class="flex-1">{{ item.label }}</span>
-              @if (item.badge && item.badge() > 0) {
-                <span class="min-w-[20px] h-5 px-1.5 rounded-full bg-accent
-                             text-white text-[10px] font-semibold
-                             flex items-center justify-center">
-                  {{ item.badge() }}
-                </span>
-              }
-            </a>
-          </li>
+      @for (section of navSections(); track section.heading) {
+        @if (section.heading) {
+          <div class="text-[10px] uppercase tracking-wider text-ink-400 px-3 mt-6 mb-2">
+            {{ section.heading }}
+          </div>
         }
-      </ul>
+        <ul class="space-y-0.5">
+          @for (item of section.items; track item.route) {
+            <li>
+              <ng-container *ngTemplateOutlet="navLink; context: { item: item }" />
+            </li>
+          }
+        </ul>
+      }
     </nav>
+
+    <ng-template #navLink let-item="item">
+      <!-- Hover goes accent blue against the monochrome sidebar;
+           the active route stays inked-in (bg-ink-100). -->
+      <a [routerLink]="item.route"
+         (click)="closeSidebar()"
+         routerLinkActive="bg-ink-100 text-ink-900"
+         [routerLinkActiveOptions]="{ exact: item.route === '/' }"
+         class="flex items-center gap-3 px-3 py-2 rounded-lg
+                text-sm text-ink-500
+                hover:bg-accent-light hover:text-accent
+                transition-colors">
+        <app-icon [name]="item.icon" class="w-5 flex justify-center shrink-0"></app-icon>
+        <span class="flex-1">{{ item.label }}</span>
+        @if (item.badge && item.badge() > 0) {
+          <span class="min-w-[20px] h-5 px-1.5 rounded-full bg-accent
+                       text-white text-[10px] font-semibold
+                       flex items-center justify-center">
+            {{ item.badge() }}
+          </span>
+        }
+      </a>
+    </ng-template>
 
     <div class="border-t border-ink-100 p-3 relative">
       <button (click)="toggleUserMenu()"

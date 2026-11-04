@@ -16,7 +16,7 @@
 
   <!-- Filter pills -->
   <div class="flex gap-2 mb-6">
-    @for (f of ['all', 'draft', 'active', 'closed']; track f) {
+    @for (f of ['all', 'draft', 'active', 'closed', 'archived']; track f) {
       <button (click)="statusFilter.set($any(f))"
               [class.bg-ink-900]="statusFilter() === f"
               [class.text-white]="statusFilter() === f"
@@ -116,6 +116,16 @@
                                font-medium hover:bg-ink-50 transition">
                   {{ expandedId() === c.campaign_id ? 'Hide' : 'Submissions' }}
                 </button>
+                <!-- Delete (archive): active campaigns must be closed first,
+                     enforced server-side too. -->
+                @if (c.status === 'draft' || c.status === 'closed') {
+                  <button (click)="archive(c)"
+                          [disabled]="busyId() === c.campaign_id"
+                          class="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs
+                                 font-medium hover:bg-red-50 transition disabled:opacity-50">
+                    Delete
+                  </button>
+                }
               </div>
             </div>
 

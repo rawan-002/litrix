@@ -152,20 +152,20 @@
                 {{ formatDate(inv.ExpiresAt) }}
               </td>
               <td class="px-4 py-3 text-right">
-                @if (inv.status === 'pending') {
-                  <div class="flex justify-end gap-1.5">
+                <div class="flex justify-end gap-1.5">
+                  @if (inv.status === 'pending') {
                     <button (click)="copyLink(inv.Token)"
                             class="text-xs px-3 py-1 rounded-lg border border-ink-200
                                    hover:bg-ink-50 transition">
                       Copy link
                     </button>
-                    <button (click)="revoke(inv)"
-                            class="text-xs px-3 py-1 rounded-lg border border-red-200
-                                   text-red-600 hover:bg-red-50 transition">
-                      Revoke
-                    </button>
-                  </div>
-                }
+                  }
+                  <button (click)="revoke(inv)"
+                          class="text-xs px-3 py-1 rounded-lg border border-red-200
+                                 text-red-600 hover:bg-red-50 transition">
+                    {{ actionLabel(inv) }}
+                  </button>
+                </div>
               </td>
             </tr>
           }

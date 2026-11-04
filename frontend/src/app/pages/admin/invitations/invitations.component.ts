@@ -106,12 +106,20 @@ export class InvitationsComponent {
     });
   }
 
+  // Pending: soft-revokes (invalidates the token). Any other status: the
+  // backend hard-deletes instead, since the row no longer protects anything
+  // and would otherwise sit in the list forever - see revoke_invitation().
   revoke(inv: Invitation) {
-    if (!confirm(`Revoke invitation for ${inv.InvitedEmail}?`)) return;
+    const verb = this.actionLabel(inv);
+    if (!confirm(`${verb} invitation for ${inv.InvitedEmail}?`)) return;
     this.http.delete(`${this.API}/invitations/${inv.InvitationID}/`).subscribe({
       next: () => this.load(),
-      error: err => alert(err?.error?.error || 'Failed to revoke'),
+      error: err => alert(err?.error?.error || `Failed to ${verb.toLowerCase()}`),
     });
+  }
+
+  actionLabel(inv: Invitation): string {
+    return inv.status === 'pending' ? 'Revoke' : 'Delete';
   }
 
   copyLink(token: string) {

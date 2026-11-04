@@ -204,6 +204,11 @@ def _create_invitation(request):
 
 @api_view(['DELETE'])
 def revoke_invitation(request, invitation_id: int):
+    """Still pending: soft-revoke (invalidates the token, row stays for the
+    audit trail). Already used/revoked/expired: nothing left to protect by
+    keeping the row, so hard-delete it instead - otherwise dead invitations
+    pile up in the admin list forever with no way to clear them. Nothing else
+    references Invitation as a foreign key, so this is safe."""
     if not request.user.has_litrix_perm('manage_users'):
         return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
 
@@ -217,13 +222,19 @@ def revoke_invitation(request, invitation_id: int):
                AND "RevokedAt" IS NULL
             RETURNING "InvitationID"
         ''', [invitation_id, request.user.tenant_id])
-        if not cur.fetchone():
-            return Response(
-                {'error': 'Invitation not found or already used/revoked'},
-                status=404,
-            )
+        if cur.fetchone():
+            return Response({'message': 'Revoked'})
 
-    return Response({'message': 'Revoked'})
+        cur.execute('''
+            DELETE FROM "Invitation"
+             WHERE "InvitationID" = %s
+               AND "TenantID"     = %s
+            RETURNING "InvitationID"
+        ''', [invitation_id, request.user.tenant_id])
+        if not cur.fetchone():
+            return Response({'error': 'Invitation not found'}, status=404)
+
+    return Response({'message': 'Deleted'})
 
 
 # Called from accounts.views.register.

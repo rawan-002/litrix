@@ -83,14 +83,15 @@ export class CampaignsComponent {
     scope_type:    'all' as 'all' | 'department' | 'custom',
   });
 
-  // Filter pills at the top
-  readonly statusFilter = signal<'all' | 'draft' | 'active' | 'closed'>('all');
+  // Filter pills at the top. "all" deliberately excludes archived (deleted)
+  // campaigns so the list stays uncluttered; "archived" is its own pill for
+  // the rare case an admin needs to look one up again.
+  readonly statusFilter = signal<'all' | 'draft' | 'active' | 'closed' | 'archived'>('all');
 
   readonly filtered = computed(() => {
     const f = this.statusFilter();
-    return f === 'all'
-      ? this.campaigns()
-      : this.campaigns().filter(c => c.status === f);
+    if (f === 'all') return this.campaigns().filter(c => c.status !== 'archived');
+    return this.campaigns().filter(c => c.status === f);
   });
 
   constructor() {
@@ -172,6 +173,26 @@ export class CampaignsComponent {
     }
     this.busyId.set(c.campaign_id);
     this.api.closeCampaign(c.campaign_id).subscribe({
+      next: () => {
+        this.busyId.set(null);
+        this.refresh();
+      },
+      error: e => {
+        this.busyId.set(null);
+        this.error.set(this.errMsg(e));
+      },
+    });
+  }
+
+  // Soft-delete: only draft/closed campaigns are eligible (enforced
+  // server-side too) - an active one must be closed first.
+  archive(c: Campaign) {
+    if (!confirm(`Delete "${c.title}"? This removes it from the list; the ` +
+                 `submission data is kept, not erased.`)) {
+      return;
+    }
+    this.busyId.set(c.campaign_id);
+    this.api.archiveCampaign(c.campaign_id).subscribe({
       next: () => {
         this.busyId.set(null);
         this.refresh();

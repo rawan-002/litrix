@@ -257,6 +257,12 @@ export class LitrixApiService {
     );
   }
 
+  // Soft-delete: the backend archives (draft/closed only) rather than
+  // hard-deleting, so researcher submission data is never destroyed.
+  archiveCampaign(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/campaigns/${id}/`);
+  }
+
   listCampaignSubmissions(id: number): Observable<{ submissions: any[] }> {
     return this.http.get<any>(
       `${this.baseUrl}/campaigns/${id}/submissions/`

@@ -229,8 +229,8 @@ def _create_campaign(request):
                     status=status.HTTP_201_CREATED)
 
 
-# Detail + edit.
-@api_view(['GET', 'PATCH'])
+# Detail + edit + archive.
+@api_view(['GET', 'PATCH', 'DELETE'])
 def campaign_detail(request, campaign_id):
     if request.method == 'GET':
         if not _can_view(request.user):
@@ -239,6 +239,9 @@ def campaign_detail(request, campaign_id):
 
     if not _can_manage(request.user):
         return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method == 'DELETE':
+        return _archive(request, campaign_id)
     return _edit(request, campaign_id)
 
 
@@ -356,6 +359,51 @@ def _edit(request, campaign_id):
         list(d.keys()), request=request,
     )
     return Response({'message': 'Updated'})
+
+
+def _archive(request, campaign_id):
+    """"Delete" from the admin's point of view, but a soft one: ReportSubmission
+    has ON DELETE CASCADE on CampaignID, so a real DELETE here would silently
+    wipe every researcher's already-submitted confirmations for this campaign.
+    Archiving just flips Status + ArchivedAt so the list can hide it - the
+    data stays intact and queryable.
+
+    Only draft/closed campaigns are eligible: an active campaign still has
+    researchers submitting against it, and archiving it would pull it out
+    from under them without going through the validated close() transition.
+    """
+    with transaction.atomic():
+        with connection.cursor() as cur:
+            cur.execute(
+                '''SELECT "Status" FROM "ReportCampaign"
+                   WHERE "CampaignID" = %s AND "TenantID" = %s
+                   FOR UPDATE''',
+                [campaign_id, request.user.tenant_id],
+            )
+            row = cur.fetchone()
+            if not row:
+                return Response({'error': 'Not found'},
+                                status=status.HTTP_404_NOT_FOUND)
+            if row[0] not in ('draft', 'closed'):
+                return Response(
+                    {'error': f'Cannot delete a campaign in status={row[0]}. '
+                              'Close it first.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            cur.execute(
+                '''UPDATE "ReportCampaign"
+                   SET "Status" = 'archived', "ArchivedAt" = NOW()
+                   WHERE "CampaignID" = %s''',
+                [campaign_id],
+            )
+
+    audit(
+        request.user.user_id, request.user.tenant_id,
+        'campaign.archive', 'ReportCampaign', campaign_id,
+        {'previous_status': row[0]}, request=request,
+    )
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(['POST'])

@@ -20,6 +20,14 @@ interface NavItem {
   badge?: () => number;
 }
 
+// Sidebar sections, rendered as three separate lists with a small header
+// between them so the nav reads as organized instead of one long flat
+// column - everyday items, then admin-only tools, then account links.
+interface NavSection {
+  heading: string | null;
+  items: NavItem[];
+}
+
 
 @Component({
   selector: 'app-layout',
@@ -70,8 +78,8 @@ export class LayoutComponent implements OnInit {
     }
   }
 
-  readonly navItems = computed<NavItem[]>(() => {
-    const items: NavItem[] = [
+  readonly navSections = computed<NavSection[]>(() => {
+    const main: NavItem[] = [
       { label: 'Dashboard',     icon: 'home',   route: '/' },
       { label: 'Search',        icon: 'search', route: '/search' },
 
@@ -90,48 +98,59 @@ export class LayoutComponent implements OnInit {
     if (this.auth.hasPermission('view_all_researchers') ||
         this.auth.hasPermission('view_dept_researchers') ||
         this.auth.hasPermission('manage_departments')) {
-      items.push({ label: 'Departments', icon: 'building', route: '/departments' });
+      main.push({ label: 'Departments', icon: 'building', route: '/departments' });
     }
 
     // Open to everyone; route stays /network even though the label is
     // now "Collaboration" (renaming the route wasn't worth the churn).
-    items.push({ label: 'Collaboration', icon: 'share', route: '/network' });
+    main.push({ label: 'Collaboration', icon: 'share', route: '/network' });
 
     // Up top so it reads as a first-class feature (RAG wiring lands later).
-    items.push({ label: 'Litrix AI', icon: 'sparkles', route: '/ai' });
+    main.push({ label: 'Litrix AI', icon: 'sparkles', route: '/ai' });
+
+    // Admin-only tools, grouped under their own heading instead of blending
+    // into the everyday nav above.
+    const admin: NavItem[] = [];
 
     if (this.auth.hasPermission('approve_registrations')) {
-      items.push({ label: 'Registrations', icon: 'user-check', route: '/admin/registrations' });
+      admin.push({ label: 'Registrations', icon: 'user-check', route: '/admin/registrations' });
     }
 
     if (this.auth.hasPermission('manage_users')) {
-      items.push({ label: 'Users', icon: 'users', route: '/admin/users' });
-      items.push({ label: 'Invitations', icon: 'mail', route: '/admin/invitations' });
+      admin.push({ label: 'Users', icon: 'users', route: '/admin/users' });
+      admin.push({ label: 'Invitations', icon: 'mail', route: '/admin/invitations' });
     }
 
     if (this.auth.hasPermission('manage_roles')) {
-      items.push({ label: 'Roles & Permissions', icon: 'shield-check', route: '/admin/roles' });
+      admin.push({ label: 'Roles & Permissions', icon: 'shield-check', route: '/admin/roles' });
     }
 
     // For campaign managers and HoD-style read access. Route stays
     // /admin/campaigns; only the label needed to read as "official".
     if (this.auth.hasPermission('manage_campaigns') ||
         this.auth.hasPermission('view_campaign_reports')) {
-      items.push({ label: 'Research Reports', icon: 'clipboard-list', route: '/admin/campaigns' });
+      admin.push({ label: 'Research Reports', icon: 'clipboard-list', route: '/admin/campaigns' });
     }
 
     if (this.auth.hasPermission('trigger_sync')) {
-      items.push({ label: 'Sync Control', icon: 'refresh', route: '/admin/sync' });
+      admin.push({ label: 'Sync Control', icon: 'refresh', route: '/admin/sync' });
     }
 
     if (this.auth.hasPermission('view_audit_log')) {
-      items.push({ label: 'Audit Log', icon: 'scroll', route: '/admin/audit' });
+      admin.push({ label: 'Audit Log', icon: 'scroll', route: '/admin/audit' });
     }
 
-    items.push({ label: 'My Profile',     icon: 'user', route: '/me' });
-    items.push({ label: 'Notifications',  icon: 'bell', route: '/notifications' });
+    // Account links live here too (not just in the avatar menu at the
+    // bottom) so they're reachable in one place without hunting.
+    const account: NavItem[] = [
+      { label: 'My Profile',    icon: 'user', route: '/me' },
+      { label: 'Notifications', icon: 'bell', route: '/notifications' },
+    ];
 
-    return items;
+    const sections: NavSection[] = [{ heading: null, items: main }];
+    if (admin.length) sections.push({ heading: 'Administration', items: admin });
+    sections.push({ heading: 'Account', items: account });
+    return sections;
   });
 
   readonly initials = computed(() => {
