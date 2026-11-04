@@ -24,9 +24,6 @@
     </div>
 
     <nav class="flex-1 px-3 py-4 overflow-y-auto">
-      <div class="text-[10px] uppercase tracking-wider text-ink-400 px-3 mb-2">
-        {{ auth.role() || 'Researcher' }}
-      </div>
       @for (section of navSections(); track section.heading) {
         @if (section.heading) {
           <div class="text-[10px] uppercase tracking-wider text-ink-400 px-3 mt-6 mb-2">
