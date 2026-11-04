@@ -37,7 +37,17 @@ from .stats import _hod_scope_department_id
 logger = logging.getLogger(__name__)
 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
-GROQ_MODEL = os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile')
+
+# 2026-11-04: llama-3.3-70b-versatile was retired from Groq (confirmed via a
+# live /openai/v1/models call - it's no longer in the account's model list),
+# which is why the chatbot started returning the generic "temporarily
+# unavailable" fallback. qwen/qwen3.8-27b is the replacement verified end to
+# end against the real tool registry and system prompt: clean, well-formed
+# tool_calls arguments and a correct final answer. The two openai/gpt-oss-*
+# models on the same account returned malformed arguments for a no-parameter
+# tool call (e.g. '{"":{}}' instead of '{}') and allam-2-7b doesn't support
+# tool calling at all - ruled both out.
+GROQ_MODEL = os.getenv('GROQ_MODEL', 'qwen/qwen3.8-27b')
 GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 
 MAX_MESSAGE_LENGTH = 2000
