@@ -44,7 +44,7 @@
   } @else if (filtered().length === 0) {
     <div class="text-center text-ink-400 py-16 bg-white rounded-2xl border border-ink-200">
       <div class="text-3xl mb-2">❒</div>
-      <div class="text-sm">No campaigns in this filter</div>
+      <div class="text-sm">No reports in this filter</div>
     </div>
   } @else {
     <div class="space-y-3">
@@ -156,7 +156,7 @@
                 <div class="text-center text-ink-400 py-4 text-sm">Loading submissions...</div>
               } @else if (submissions().length === 0) {
                 <div class="text-center text-ink-400 py-4 text-sm">
-                  No submissions yet - campaign hasn't been opened or no researchers in scope.
+                  No submissions yet - report hasn't been opened or no researchers in scope.
                 </div>
               } @else {
                 <table class="w-full text-sm">
