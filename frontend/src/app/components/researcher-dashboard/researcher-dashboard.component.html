@@ -30,14 +30,16 @@
       <section class="bg-white rounded-2xl border border-ink-100 p-6">
         <h2 class="text-sm font-semibold text-ink-900 mb-4">Key Metrics</h2>
         <div class="grid grid-cols-2 gap-3">
-          <div class="rounded-xl bg-ink-50 p-4">
+          <button type="button"
+                  (click)="openPapersModal('All Publications', null)"
+                  class="rounded-xl bg-ink-50 p-4 text-left hover:bg-ink-100 transition">
             <div class="text-[10px] uppercase tracking-widest text-ink-500 font-medium">
               Publications
             </div>
             <div class="text-3xl font-bold text-ink-900 mt-1">
               {{ fmt(kpiPublications()) }}
             </div>
-          </div>
+          </button>
           <div class="rounded-xl bg-ink-50 p-4">
             <div class="text-[10px] uppercase tracking-widest text-ink-500 font-medium">
               Citations
@@ -54,14 +56,16 @@
               {{ fmt(hIndex()) }}
             </div>
           </div>
-          <div class="rounded-xl bg-ink-50 p-4">
+          <button type="button"
+                  (click)="openPapersByQuartile('Q1')"
+                  class="rounded-xl bg-ink-50 p-4 text-left hover:bg-ink-100 transition">
             <div class="text-[10px] uppercase tracking-widest text-ink-500 font-medium">
               Q1 Papers
             </div>
             <div class="text-3xl font-bold text-ink-900 mt-1">
               {{ fmt(kpiQ1()) }}
             </div>
-          </div>
+          </button>
         </div>
       </section>
 
@@ -96,7 +100,9 @@
                     stroke="#f5f5f4" stroke-width="1" />
             }
             @for (b of p.bars; track b.year) {
-              <g (mouseenter)="hoveredPubYear.set(b.year)">
+              <g (mouseenter)="hoveredPubYear.set(b.year)"
+                 (click)="openPapersByYear(b.year)"
+                 class="cursor-pointer">
                 <rect [attr.x]="b.x" [attr.y]="b.y"
                       [attr.width]="b.w" [attr.height]="b.h"
                       rx="3"
@@ -164,18 +170,23 @@
             <!-- Legend -->
             <ul class="flex-1 space-y-2">
               @for (s of q.slices; track s.label) {
-                <li class="flex items-center justify-between text-xs">
-                  <div class="flex items-center gap-2">
-                    <span class="w-2.5 h-2.5 rounded-full inline-block"
-                          [style.background]="s.color"></span>
-                    <span class="text-ink-700 font-medium">{{ s.label }}</span>
-                  </div>
-                  <div class="text-ink-500 tabular-nums">
-                    {{ s.value }}
-                    <span class="text-ink-400 ml-1">
-                      ({{ (s.pct * 100).toFixed(0) }}%)
-                    </span>
-                  </div>
+                <li>
+                  <button type="button"
+                          (click)="openPapersByQuartile(s.label)"
+                          class="w-full flex items-center justify-between text-xs
+                                 px-1 py-0.5 rounded hover:bg-ink-50 transition">
+                    <div class="flex items-center gap-2">
+                      <span class="w-2.5 h-2.5 rounded-full inline-block"
+                            [style.background]="s.color"></span>
+                      <span class="text-ink-700 font-medium">{{ s.label }}</span>
+                    </div>
+                    <div class="text-ink-500 tabular-nums">
+                      {{ s.value }}
+                      <span class="text-ink-400 ml-1">
+                        ({{ (s.pct * 100).toFixed(0) }}%)
+                      </span>
+                    </div>
+                  </button>
                 </li>
               }
             </ul>
@@ -187,6 +198,55 @@
         }
       </section>
 
+    </div>
+  }
+
+  <!-- Papers drill-down modal, opened from a KPI tile, a quartile slice, or
+       a year bar. Filters client-side off statsPapers() - no extra fetch. -->
+  @if (papersModalOpen()) {
+    <div class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+         (click)="closePapersModal()">
+      <div class="bg-white rounded-2xl shadow-card max-w-2xl w-full max-h-[80vh]
+                  overflow-hidden flex flex-col"
+           (click)="$event.stopPropagation()">
+        <div class="px-6 py-4 border-b border-ink-100 flex items-center justify-between">
+          <h2 class="text-sm font-semibold text-ink-900">
+            {{ papersModalTitle() }}
+            <span class="text-ink-400 font-normal">({{ papersModalList().length }})</span>
+          </h2>
+          <button (click)="closePapersModal()"
+                  class="text-ink-400 hover:text-ink-700 text-xl leading-none">×</button>
+        </div>
+        <div class="overflow-y-auto flex-1">
+          @if (papersModalList().length === 0) {
+            <div class="text-center py-16 text-sm text-ink-400">No papers in this filter</div>
+          } @else {
+            <ul class="divide-y divide-ink-100">
+              @for (p of papersModalList(); track p.paper_id) {
+                <li class="px-6 py-4">
+                  <div class="text-sm font-medium text-ink-900 leading-snug">{{ p.title }}</div>
+                  <div class="flex flex-wrap items-center gap-2 text-xs text-ink-500 mt-1.5">
+                    @if (p.pub_year) {
+                      <span class="font-medium text-ink-700">{{ p.pub_year }}</span>
+                      <span class="text-ink-300">·</span>
+                    }
+                    @if (p.journal_name) {
+                      <span class="truncate max-w-xs">{{ p.journal_name }}</span>
+                    }
+                    @if (p.quartile) {
+                      <span class="px-2 py-0.5 rounded bg-ink-900 text-white text-[10px]">
+                        {{ p.quartile }}
+                      </span>
+                    }
+                    <span class="text-ink-300">·</span>
+                    <span>{{ p.citations }} citations</span>
+                  </div>
+                </li>
+              }
+            </ul>
+          }
+        </div>
+      </div>
     </div>
   }
 </div>

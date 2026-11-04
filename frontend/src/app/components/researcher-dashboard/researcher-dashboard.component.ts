@@ -56,6 +56,46 @@ export class ResearcherDashboardComponent implements OnInit {
   readonly loading = signal<boolean>(true);
   readonly error   = signal<string | null>(null);
 
+  // Drill-down modal: clicking a KPI, a quartile slice, or a year bar opens
+  // the matching papers - all filtered client-side from statsPapers(), which
+  // is already fully loaded, so this never needs another network call.
+  readonly papersModalOpen  = signal(false);
+  readonly papersModalTitle = signal('');
+  private papersModalFilter: ((p: ResearcherProfilePayload['papers'][number]) => boolean) | null = null;
+
+  readonly papersModalList = computed(() => {
+    const f = this.papersModalFilter;
+    const list = this.statsPapers();
+    return f ? list.filter(f) : list;
+  });
+
+  openPapersModal(
+    title: string,
+    filter: ((p: ResearcherProfilePayload['papers'][number]) => boolean) | null,
+  ) {
+    this.papersModalTitle.set(title);
+    this.papersModalFilter = filter;
+    this.papersModalOpen.set(true);
+  }
+
+  openPapersByQuartile(label: string) {
+    const match = label === 'Unranked'
+      ? (p: ResearcherProfilePayload['papers'][number]) => !p.quartile || !/^Q[1-4]$/.test(p.quartile)
+      : (p: ResearcherProfilePayload['papers'][number]) => p.quartile === label;
+    this.openPapersModal(`${label} Papers`, match);
+  }
+
+  openPapersByYear(year: number) {
+    this.openPapersModal(
+      `Papers published in ${year}`,
+      p => p.pub_year === year,
+    );
+  }
+
+  closePapersModal() {
+    this.papersModalOpen.set(false);
+  }
+
   readonly hoveredCitYear = signal<number | null>(null);
   readonly hoveredPubYear = signal<number | null>(null);
   readonly hoveredQuartile = signal<string | null>(null);
