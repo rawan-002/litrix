@@ -1,12 +1,13 @@
 import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { NotificationsService } from '../../core/services/notifications.service';
+import { IconComponent } from '../../shared/icon/icon.component';
 
 
 @Component({
   selector: 'app-notifications',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, IconComponent],
   templateUrl: './notifications.component.html',
 })
 export class NotificationsComponent {
@@ -38,6 +39,10 @@ export class NotificationsComponent {
 
   markAllRead() {
     this.svc.markAllRead().subscribe();
+  }
+
+  delete(id: number) {
+    this.svc.delete(id).subscribe();
   }
 
   formatDate(s: string): string {

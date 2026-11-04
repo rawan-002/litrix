@@ -53,4 +53,14 @@ export class NotificationsService {
       }),
     );
   }
+
+  delete(id: number) {
+    return this.http.delete(`${this.API}/notifications/${id}/`).pipe(
+      tap(() => {
+        const wasUnread = this.notifications().find(n => n.NotificationID === id)?.IsRead === false;
+        this.notifications.update(arr => arr.filter(n => n.NotificationID !== id));
+        if (wasUnread) this.unreadCount.update(c => Math.max(0, c - 1));
+      }),
+    );
+  }
 }

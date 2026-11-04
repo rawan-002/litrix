@@ -48,3 +48,18 @@ def mark_all_read(request):
             WHERE "UserID" = %s AND "IsRead" = FALSE
         ''', [request.user.user_id])
     return Response({'message': 'All marked read'})
+
+
+@api_view(['DELETE'])
+def delete_notification(request, notif_id):
+    # Nothing references Notification as a foreign key, so a hard delete is
+    # safe - there's no read-state worth preserving once the user dismisses it.
+    with connection.cursor() as cur:
+        cur.execute('''
+            DELETE FROM "Notification"
+             WHERE "NotificationID" = %s AND "UserID" = %s
+            RETURNING "NotificationID"
+        ''', [notif_id, request.user.user_id])
+        if not cur.fetchone():
+            return Response({'error': 'Notification not found'}, status=404)
+    return Response(status=204)

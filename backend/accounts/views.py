@@ -21,6 +21,7 @@ from .role_views import (
 )
 from .notification_views import (
     list_notifications, mark_notification_read, mark_all_read,
+    delete_notification,
 )
 
 

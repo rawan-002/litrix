@@ -33,6 +33,7 @@ urlpatterns = [
     path('notifications/',                            views.list_notifications,         name='notifications-list'),
     path('notifications/<int:notif_id>/read/',        views.mark_notification_read,     name='notifications-read'),
     path('notifications/mark-all-read/',              views.mark_all_read,              name='notifications-mark-all'),
+    path('notifications/<int:notif_id>/',             views.delete_notification,        name='notifications-delete'),
 
     path('audit-log/',                                views.list_audit_log,             name='audit-log'),
 
