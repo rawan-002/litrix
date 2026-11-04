@@ -6,7 +6,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { LitrixApiService } from '../../services/litrix-api.service';
 import { AffiliationService } from '../../core/services/affiliation.service';
 import { ResearcherProfilePayload } from '../../models/litrix.models';
@@ -127,23 +127,75 @@ export class ResearcherDashboardComponent implements OnInit {
   openPaper(p: { paper_id: number }) { this.selectedPaperId.set(p.paper_id); }
   closePaper() { this.selectedPaperId.set(null); }
 
-  // Export: same blob-download pattern as the admin dashboard's
-  // triggerExport() (HttpClient, not a direct navigation, so the auth header
-  // actually goes out), just pointed at the self-scoped endpoint with no
-  // options to pick.
-  exportMyPapers() {
+  // --- Export modal - same years-picker interaction as the admin
+  // dashboard's (selectAllExportYears/clearExportYears/exporting), with a
+  // file-format choice standing in for the admin modal's institution-wide
+  // sheet picker (Summary/Departments/Researchers/...), which doesn't apply
+  // to a single person's data. ---
+  readonly showExportModal = signal(false);
+  exportYears: Record<number, boolean> = {};
+  readonly exportFormat = signal<'excel' | 'json' | 'csv'>('excel');
+
+  /** Years that actually appear in this researcher's own papers, newest
+   *  first - the personal-dashboard equivalent of the admin modal's
+   *  availableYears (which there comes from the whole institution). */
+  readonly availableExportYears = computed(() => {
+    const years = new Set<number>();
+    for (const p of this.statsPapers()) {
+      if (p.pub_year != null) years.add(p.pub_year);
+    }
+    return [...years].sort((a, b) => b - a);
+  });
+
+  selectAllExportYears() {
+    this.availableExportYears().forEach(y => this.exportYears[y] = true);
+  }
+
+  clearExportYears() {
+    this.availableExportYears().forEach(y => this.exportYears[y] = false);
+  }
+
+  openExportModal() {
+    this.selectAllExportYears();
+    this.exportFormat.set('excel');
+    this.showExportModal.set(true);
+  }
+
+  closeExportModal() {
+    this.showExportModal.set(false);
+  }
+
+  // Blob-download pattern, same as the admin dashboard's triggerExport()
+  // (HttpClient, not a direct navigation, so the auth header actually goes
+  // out instead of 401ing).
+  triggerExport() {
+    const years = Object.entries(this.exportYears)
+      .filter(([_, v]) => v)
+      .map(([y]) => y)
+      .join(',');
+
+    if (!years) {
+      alert('Please select at least one year');
+      return;
+    }
+
     this.exporting.set(true);
+    const params = new HttpParams()
+      .set('years', years)
+      .set('filetype', this.exportFormat());
+
     this.http.get(
       `${environment.apiBaseUrl}/export/my-papers/`,
-      { responseType: 'blob', observe: 'response' },
+      { params, responseType: 'blob', observe: 'response' },
     ).subscribe({
       next: res => {
         const blob = res.body!;
         const filename = this.parseFilename(
           res.headers.get('Content-Disposition'),
-        ) || `my-papers-${new Date().toISOString().slice(0, 10)}.xlsx`;
+        ) || `my-papers-${new Date().toISOString().slice(0, 10)}.${this.exportFormat()}`;
         this.saveBlob(blob, filename);
         this.exporting.set(false);
+        this.closeExportModal();
       },
       error: err => {
         this.exporting.set(false);

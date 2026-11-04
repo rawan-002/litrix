@@ -599,20 +599,51 @@ def export_excel(request):
 
 @decorators.api_view(['GET'])
 def export_my_papers(request):
-    """GET /api/export/my-papers/ - one researcher's own papers, for the
-    personal dashboard's Export button. Self-scoped to request.user, so
-    (unlike export_excel above) no view_all_researchers/view_dept_researchers
-    permission is required - a researcher can always see/export their own
-    data, the same way they can always edit their own profile."""
-    from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill
+    """GET /api/export/my-papers/?years=2024,2025&filetype=excel|json|csv
+
+    One researcher's own papers, for the personal dashboard's Export button
+    - same years picker as the admin dashboard's export modal, but
+    self-scoped to request.user (no view_all_researchers/view_dept_researchers
+    permission needed - a researcher can always see/export their own data,
+    same as always being able to edit their own profile) and with a format
+    choice instead of the admin modal's institution-wide sheet picker, which
+    doesn't translate to a single person's data.
+
+    Query param is `filetype`, not `format` - DRF reserves `?format=` for its
+    own content-negotiation (URL_FORMAT_OVERRIDE defaults to 'format'), so
+    `?format=excel` gets intercepted before this view ever runs and 404s.
+    """
+    import csv
+    import io
+    import json as json_lib
     from django.db import connection
+
+    fmt = (request.GET.get('filetype') or 'excel').strip().lower()
+    if fmt not in ('excel', 'json', 'csv'):
+        return response.Response(
+            {'error': f"filetype must be one of excel/json/csv, got '{fmt}'"},
+            status=400,
+        )
+
+    years_param = (request.GET.get('years') or '').strip()
+    years = None
+    if years_param:
+        try:
+            years = [int(y) for y in years_param.split(',') if y.strip()]
+        except ValueError:
+            return response.Response({'error': 'years must be a comma-separated list of integers'}, status=400)
+
+    where = ['a."UserID" = %s']
+    params = [request.user.user_id]
+    if years:
+        where.append('rp."PubYear" = ANY(%s)')
+        params.append(years)
 
     with connection.cursor() as cur:
         # Same join shape as public_views.researcher_profile's papers list -
         # Journal/Quartile live on Journals/JournalRankings, not ResearchPaper
         # itself, and citations come from the same RawData_Log fallback chain.
-        cur.execute('''
+        cur.execute(f'''
             SELECT
                 rp."Title", rp."PubYear", j."JournalName", rp."VenueType",
                 jr."Quartile",
@@ -629,10 +660,37 @@ def export_my_papers(request):
                 WHERE "JournalID" = rp."JournalID"
                 ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1
             ) jr ON TRUE
-            WHERE a."UserID" = %s
+            WHERE {' AND '.join(where)}
             ORDER BY rp."PubYear" DESC NULLS LAST, citations DESC NULLS LAST
-        ''', [request.user.user_id])
+        ''', params)
         rows = cur.fetchall()
+
+    headers = ['Title', 'Year', 'Journal', 'Venue Type', 'Quartile', 'Citations', 'DOI']
+    stamp = request.user.litrix_id or request.user.user_id
+
+    if fmt == 'json':
+        keys = ['title', 'year', 'journal', 'venue_type', 'quartile', 'citations', 'doi']
+        data = [dict(zip(keys, row)) for row in rows]
+        resp = HttpResponse(
+            json_lib.dumps(data, indent=2, default=str, ensure_ascii=False),
+            content_type='application/json',
+        )
+        resp['Content-Disposition'] = f'attachment; filename="my-papers-{stamp}.json"'
+        return resp
+
+    if fmt == 'csv':
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(headers)
+        for row in rows:
+            writer.writerow(row)
+        resp = HttpResponse(buf.getvalue(), content_type='text/csv')
+        resp['Content-Disposition'] = f'attachment; filename="my-papers-{stamp}.csv"'
+        return resp
+
+    # fmt == 'excel' (default)
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
 
     wb = Workbook()
     ws = wb.active
@@ -640,7 +698,6 @@ def export_my_papers(request):
 
     header_font = Font(bold=True, color='FFFFFF')
     header_fill = PatternFill('solid', fgColor='1D1D1F')
-    headers = ['Title', 'Year', 'Journal', 'Venue Type', 'Quartile', 'Citations', 'DOI']
     ws.append(headers)
     for col in range(1, len(headers) + 1):
         cell = ws.cell(row=1, column=col)
@@ -654,7 +711,6 @@ def export_my_papers(request):
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
 
-    fname = f"my-papers-{request.user.litrix_id or request.user.user_id}.xlsx"
-    resp = _excel_response(fname)
+    resp = _excel_response(f"my-papers-{stamp}.xlsx")
     wb.save(resp)
     return resp
