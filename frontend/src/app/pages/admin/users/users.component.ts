@@ -8,12 +8,14 @@ import { isLatinName, joinEnglishName } from '../../../shared/utils/researcher-n
 
 interface User {
   UserID: number;
-  Email: string;
+  // Nullable in practice - 3 live rows have no Email (verified live) - the
+  // old `string` type here is what let the search crash past TypeScript.
+  Email: string | null;
   FullName_Ar: string | null;
   ScholarDisplayName: string | null;
-  FirstName: string;
+  FirstName: string | null;
   MiddleName: string | null;
-  LastName: string;
+  LastName: string | null;
   UserType: string;
   AccountStatus: string;
   IsActive: boolean;
@@ -72,7 +74,7 @@ export class UsersComponent {
   displayName(u: User): string {
     const fallbackEn = joinEnglishName(u.FirstName, u.LastName);
     const en = u.ScholarDisplayName || fallbackEn;
-    return (isLatinName(en) ? en : '') || u.Email;
+    return (isLatinName(en) ? en : '') || u.Email || `User #${u.UserID}`;
   }
 
   // Row currently being deleted - drives its spinner / disabled state.
@@ -90,16 +92,21 @@ export class UsersComponent {
   // displayName() (ScholarDisplayName, or First+Last), so searching the
   // exact text on screen did nothing most of the time. Now matches
   // everything a name could plausibly be typed as.
+  //
+  // Email is nullable in practice (3 live rows have none) even though the
+  // old User interface claimed `string` - `u.Email.toLowerCase()` crashed
+  // this whole computed for every search keystroke once one of those rows
+  // was in the list. Every field here is guarded with `|| ''` now.
   readonly filtered = computed(() => {
     const q = this.search().trim().toLowerCase();
     if (!q) return this.users();
     return this.users().filter(u =>
-      u.Email.toLowerCase().includes(q) ||
+      (u.Email || '').toLowerCase().includes(q) ||
       (u.FullName_Ar || '').toLowerCase().includes(q) ||
       (u.ScholarDisplayName || '').toLowerCase().includes(q) ||
       (u.FirstName || '').toLowerCase().includes(q) ||
       (u.LastName || '').toLowerCase().includes(q) ||
-      this.displayName(u).toLowerCase().includes(q)
+      (this.displayName(u) || '').toLowerCase().includes(q)
     );
   });
 
