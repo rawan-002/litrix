@@ -1,13 +1,17 @@
 // At-a-glance dashboard for the logged-in researcher: KPIs + charts, no
 // paper list (the profile page is the authoritative full archive). Reuses the
 // getResearcherProfile endpoint and derives every chart client-side.
-import { Component, OnInit, Input, inject, signal, computed } from '@angular/core';
+import {
+  Component, OnInit, Input, inject, signal, computed, effect, untracked,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { LitrixApiService } from '../../services/litrix-api.service';
 import { AffiliationService } from '../../core/services/affiliation.service';
 import { ResearcherProfilePayload } from '../../models/litrix.models';
 import { isLatinName, joinEnglishName } from '../../shared/utils/researcher-name';
 import { CitationsChartComponent } from '../citations-chart/citations-chart.component';
+import { PaperDetailModalComponent } from '../paper-detail-modal/paper-detail-modal.component';
 
 interface DonutSlice {
   label: string;
@@ -22,7 +26,7 @@ interface DonutSlice {
 @Component({
   selector: 'app-researcher-dashboard',
   standalone: true,
-  imports: [CommonModule, CitationsChartComponent],
+  imports: [CommonModule, FormsModule, CitationsChartComponent, PaperDetailModalComponent],
   templateUrl: './researcher-dashboard.component.html',
 })
 export class ResearcherDashboardComponent implements OnInit {
@@ -56,45 +60,65 @@ export class ResearcherDashboardComponent implements OnInit {
   readonly loading = signal<boolean>(true);
   readonly error   = signal<string | null>(null);
 
-  // Drill-down modal: clicking a KPI, a quartile slice, or a year bar opens
-  // the matching papers - all filtered client-side from statsPapers(), which
-  // is already fully loaded, so this never needs another network call.
-  readonly papersModalOpen  = signal(false);
-  readonly papersModalTitle = signal('');
-  private papersModalFilter: ((p: ResearcherProfilePayload['papers'][number]) => boolean) | null = null;
+  // "View all classified papers" modal - same interaction as the admin
+  // overview dashboard's donut (openClassifiedModal/classifiedTier/
+  // classifiedSearch/showMoreClassifiedPapers), just filtered client-side
+  // from statsPapers() (already fully loaded) instead of an API call.
+  readonly classifiedModalOpen = signal(false);
+  readonly classifiedTier      = signal<string | null>(null);
+  readonly classifiedSearch    = signal('');
+  readonly CLASSIFIED_BATCH     = 40;
+  readonly classifiedShown      = signal(this.CLASSIFIED_BATCH);
 
-  readonly papersModalList = computed(() => {
-    const f = this.papersModalFilter;
+  readonly classifiedTierPapers = computed(() => {
+    const tier = this.classifiedTier();
     const list = this.statsPapers();
-    return f ? list.filter(f) : list;
+    if (!tier) return list;
+    if (tier === 'Other') return list.filter(p => !p.quartile || !/^Q[1-4]$/.test(p.quartile));
+    return list.filter(p => p.quartile === tier);
   });
 
-  openPapersModal(
-    title: string,
-    filter: ((p: ResearcherProfilePayload['papers'][number]) => boolean) | null,
-  ) {
-    this.papersModalTitle.set(title);
-    this.papersModalFilter = filter;
-    this.papersModalOpen.set(true);
-  }
-
-  openPapersByQuartile(label: string) {
-    const match = label === 'Unranked'
-      ? (p: ResearcherProfilePayload['papers'][number]) => !p.quartile || !/^Q[1-4]$/.test(p.quartile)
-      : (p: ResearcherProfilePayload['papers'][number]) => p.quartile === label;
-    this.openPapersModal(`${label} Papers`, match);
-  }
-
-  openPapersByYear(year: number) {
-    this.openPapersModal(
-      `Papers published in ${year}`,
-      p => p.pub_year === year,
+  readonly filteredClassifiedPapers = computed(() => {
+    const q = this.classifiedSearch().trim().toLowerCase();
+    const list = this.classifiedTierPapers();
+    if (!q) return list;
+    return list.filter(p =>
+      p.title.toLowerCase().includes(q) ||
+      (p.journal_name || '').toLowerCase().includes(q)
     );
+  });
+
+  readonly visibleClassifiedPapers = computed(() =>
+    this.filteredClassifiedPapers().slice(0, this.classifiedShown())
+  );
+
+  private readonly classifiedResetEffect = effect(() => {
+    this.classifiedTierPapers();
+    this.classifiedSearch();
+    untracked(() => this.classifiedShown.set(this.CLASSIFIED_BATCH));
+  });
+
+  showMoreClassifiedPapers() {
+    this.classifiedShown.update(n => n + this.CLASSIFIED_BATCH);
   }
 
-  closePapersModal() {
-    this.papersModalOpen.set(false);
+  /** `tier` is a donut slice label ('Q1'/'Q2'/'Q3'/'Q4'/'Unranked'), mapped to
+   *  'Other' to match the admin modal's "Unindexed" option value, or omitted
+   *  to show every paper ("view all papers" link). */
+  openClassifiedModal(tier?: string) {
+    this.classifiedSearch.set('');
+    this.classifiedTier.set(tier === 'Unranked' ? 'Other' : (tier ?? null));
+    this.classifiedModalOpen.set(true);
   }
+
+  closeClassifiedModal() {
+    this.classifiedModalOpen.set(false);
+  }
+
+  // Opens the shared paper-detail modal, same as the admin dashboard / search.
+  readonly selectedPaperId = signal<number | null>(null);
+  openPaper(p: { paper_id: number }) { this.selectedPaperId.set(p.paper_id); }
+  closePaper() { this.selectedPaperId.set(null); }
 
   readonly hoveredCitYear = signal<number | null>(null);
   readonly hoveredPubYear = signal<number | null>(null);

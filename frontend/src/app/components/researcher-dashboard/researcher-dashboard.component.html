@@ -30,16 +30,14 @@
       <section class="bg-white rounded-2xl border border-ink-100 p-6">
         <h2 class="text-sm font-semibold text-ink-900 mb-4">Key Metrics</h2>
         <div class="grid grid-cols-2 gap-3">
-          <button type="button"
-                  (click)="openPapersModal('All Publications', null)"
-                  class="rounded-xl bg-ink-50 p-4 text-left hover:bg-ink-100 transition">
+          <div class="rounded-xl bg-ink-50 p-4">
             <div class="text-[10px] uppercase tracking-widest text-ink-500 font-medium">
               Publications
             </div>
             <div class="text-3xl font-bold text-ink-900 mt-1">
               {{ fmt(kpiPublications()) }}
             </div>
-          </button>
+          </div>
           <div class="rounded-xl bg-ink-50 p-4">
             <div class="text-[10px] uppercase tracking-widest text-ink-500 font-medium">
               Citations
@@ -56,16 +54,14 @@
               {{ fmt(hIndex()) }}
             </div>
           </div>
-          <button type="button"
-                  (click)="openPapersByQuartile('Q1')"
-                  class="rounded-xl bg-ink-50 p-4 text-left hover:bg-ink-100 transition">
+          <div class="rounded-xl bg-ink-50 p-4">
             <div class="text-[10px] uppercase tracking-widest text-ink-500 font-medium">
               Q1 Papers
             </div>
             <div class="text-3xl font-bold text-ink-900 mt-1">
               {{ fmt(kpiQ1()) }}
             </div>
-          </button>
+          </div>
         </div>
       </section>
 
@@ -80,7 +76,8 @@
           [height]="220" />
       </section>
 
-      <!-- Publications per Year -->
+      <!-- Publications per Year - hover-only (clicks disabled per UX
+           request), matching the admin dashboard's equivalent chart. -->
       <section class="bg-white rounded-2xl border border-ink-100 p-6">
         <div class="flex items-baseline justify-between mb-4">
           <h2 class="text-sm font-semibold text-ink-900">Publications per Year</h2>
@@ -100,9 +97,7 @@
                     stroke="#f5f5f4" stroke-width="1" />
             }
             @for (b of p.bars; track b.year) {
-              <g (mouseenter)="hoveredPubYear.set(b.year)"
-                 (click)="openPapersByYear(b.year)"
-                 class="cursor-pointer">
+              <g (mouseenter)="hoveredPubYear.set(b.year)">
                 <rect [attr.x]="b.x" [attr.y]="b.y"
                       [attr.width]="b.w" [attr.height]="b.h"
                       rx="3"
@@ -133,29 +128,39 @@
         }
       </section>
 
-      <!-- Quartile distribution donut -->
+      <!-- Quartile distribution donut - same interaction as the admin
+           overview dashboard: click a slice (or "view all papers") to open
+           the classified-papers modal. -->
       <section class="bg-white rounded-2xl border border-ink-100 p-6">
         <div class="flex items-baseline justify-between mb-4">
           <h2 class="text-sm font-semibold text-ink-900">Quartile Distribution</h2>
-          <div class="text-[10px] text-ink-400">share of papers by tier</div>
+          <button type="button" (click)="openClassifiedModal()"
+                  class="text-[10px] text-accent hover:underline">
+            view all papers
+          </button>
         </div>
         @if (quartileChart(); as q) {
-          <div class="flex items-center gap-6">
+          <div class="flex items-center gap-6"
+               (mouseleave)="hoveredQuartile.set(null)">
             <!-- Donut -->
-            <svg viewBox="-80 -80 160 160" class="w-44 h-44 -rotate-90">
+            <svg viewBox="-80 -80 160 160" class="w-44 h-44 -rotate-90 select-none">
               <!-- Track -->
               <circle r="56" cx="0" cy="0" fill="none"
                       stroke="#f5f5f4" stroke-width="20" />
               <!-- Slices -->
               @for (s of q.slices; track s.label) {
                 <circle r="56" cx="0" cy="0" fill="none"
-                        [attr.stroke]="s.color" stroke-width="20"
+                        [attr.stroke]="s.color"
+                        [attr.stroke-width]="hoveredQuartile() === s.label ? 26 : 20"
                         stroke-linecap="butt"
+                        class="cursor-pointer transition-all"
                         [attr.stroke-dasharray]="s.dashLength + ' ' + (q.circumference - s.dashLength)"
-                        [attr.stroke-dashoffset]="s.dashOffset" />
+                        [attr.stroke-dashoffset]="s.dashOffset"
+                        (mouseenter)="hoveredQuartile.set(s.label)"
+                        (click)="openClassifiedModal(s.label)" />
               }
               <!-- Center label (rotated back upright) -->
-              <g class="rotate-90">
+              <g class="rotate-90 pointer-events-none">
                 <text x="0" y="-3" text-anchor="middle"
                       class="text-[20px] fill-ink-900 font-bold">
                   {{ q.total }}
@@ -170,23 +175,18 @@
             <!-- Legend -->
             <ul class="flex-1 space-y-2">
               @for (s of q.slices; track s.label) {
-                <li>
-                  <button type="button"
-                          (click)="openPapersByQuartile(s.label)"
-                          class="w-full flex items-center justify-between text-xs
-                                 px-1 py-0.5 rounded hover:bg-ink-50 transition">
-                    <div class="flex items-center gap-2">
-                      <span class="w-2.5 h-2.5 rounded-full inline-block"
-                            [style.background]="s.color"></span>
-                      <span class="text-ink-700 font-medium">{{ s.label }}</span>
-                    </div>
-                    <div class="text-ink-500 tabular-nums">
-                      {{ s.value }}
-                      <span class="text-ink-400 ml-1">
-                        ({{ (s.pct * 100).toFixed(0) }}%)
-                      </span>
-                    </div>
-                  </button>
+                <li class="flex items-center justify-between text-xs">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full inline-block"
+                          [style.background]="s.color"></span>
+                    <span class="text-ink-700 font-medium">{{ s.label }}</span>
+                  </div>
+                  <div class="text-ink-500 tabular-nums">
+                    {{ s.value }}
+                    <span class="text-ink-400 ml-1">
+                      ({{ (s.pct * 100).toFixed(0) }}%)
+                    </span>
+                  </div>
                 </li>
               }
             </ul>
@@ -201,52 +201,98 @@
     </div>
   }
 
-  <!-- Papers drill-down modal, opened from a KPI tile, a quartile slice, or
-       a year bar. Filters client-side off statsPapers() - no extra fetch. -->
-  @if (papersModalOpen()) {
-    <div class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
-         (click)="closePapersModal()">
-      <div class="bg-white rounded-2xl shadow-card max-w-2xl w-full max-h-[80vh]
-                  overflow-hidden flex flex-col"
+  <!-- "View all classified papers" modal - identical interaction to the
+       admin overview dashboard's (tier dropdown, search, lazy "Load more"),
+       just filtered client-side from statsPapers() instead of an API call. -->
+  @if (classifiedModalOpen()) {
+    <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+         (click)="closeClassifiedModal()">
+      <div class="bg-white rounded-apple shadow-hover max-w-3xl w-full max-h-[85vh] flex flex-col p-6"
            (click)="$event.stopPropagation()">
-        <div class="px-6 py-4 border-b border-ink-100 flex items-center justify-between">
-          <h2 class="text-sm font-semibold text-ink-900">
-            {{ papersModalTitle() }}
-            <span class="text-ink-400 font-normal">({{ papersModalList().length }})</span>
-          </h2>
-          <button (click)="closePapersModal()"
-                  class="text-ink-400 hover:text-ink-700 text-xl leading-none">×</button>
+
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-lg font-semibold text-ink-700">Classified Papers</h2>
+            <div class="text-xs text-ink-400 mt-0.5">
+              {{ classifiedTier() ? (classifiedTier() === 'Other' ? 'Unindexed' : classifiedTier()) : 'All tiers' }}
+            </div>
+          </div>
+          <button (click)="closeClassifiedModal()"
+                  class="text-ink-400 hover:text-ink-700 text-2xl leading-none">×</button>
         </div>
-        <div class="overflow-y-auto flex-1">
-          @if (papersModalList().length === 0) {
-            <div class="text-center py-16 text-sm text-ink-400">No papers in this filter</div>
+
+        <div class="flex items-center gap-2 mb-4">
+          <select [ngModel]="classifiedTier()"
+                  (ngModelChange)="openClassifiedModal($event || undefined)"
+                  class="text-xs border border-ink-200 rounded-full px-3 py-1.5 text-ink-700">
+            <option [ngValue]="null">All tiers</option>
+            <option value="Q1">Q1</option>
+            <option value="Q2">Q2</option>
+            <option value="Q3">Q3</option>
+            <option value="Q4">Q4</option>
+            <option value="Other">Unindexed</option>
+          </select>
+          <input type="text" [(ngModel)]="classifiedSearch"
+                 placeholder="Search title or journal…"
+                 class="flex-1 text-xs border border-ink-200 rounded-full px-3 py-1.5
+                        text-ink-700 placeholder:text-ink-400" />
+          <span class="text-xs text-ink-400 tabular-nums whitespace-nowrap">
+            {{ filteredClassifiedPapers().length }} / {{ classifiedTierPapers().length }}
+          </span>
+        </div>
+
+        <div class="overflow-y-auto flex-1 -mx-2 px-2">
+          @if (filteredClassifiedPapers().length === 0) {
+            <div class="text-center py-16 text-sm text-ink-400">No papers match</div>
           } @else {
             <ul class="divide-y divide-ink-100">
-              @for (p of papersModalList(); track p.paper_id) {
-                <li class="px-6 py-4">
-                  <div class="text-sm font-medium text-ink-900 leading-snug">{{ p.title }}</div>
-                  <div class="flex flex-wrap items-center gap-2 text-xs text-ink-500 mt-1.5">
-                    @if (p.pub_year) {
-                      <span class="font-medium text-ink-700">{{ p.pub_year }}</span>
-                      <span class="text-ink-300">·</span>
-                    }
-                    @if (p.journal_name) {
-                      <span class="truncate max-w-xs">{{ p.journal_name }}</span>
-                    }
-                    @if (p.quartile) {
-                      <span class="px-2 py-0.5 rounded bg-ink-900 text-white text-[10px]">
-                        {{ p.quartile }}
+              @for (p of visibleClassifiedPapers(); track p.paper_id) {
+                <li (click)="openPaper(p)"
+                    class="py-3 px-2 hover:bg-ink-50 rounded cursor-pointer transition-colors">
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                      <div class="text-sm text-ink-900 font-medium truncate">{{ p.title }}</div>
+                      <div class="text-xs text-ink-500 mt-1 flex items-center gap-2 flex-wrap">
+                        <span>{{ p.pub_year }}</span>
+                        @if (p.journal_name) {
+                          <span class="text-ink-300">·</span>
+                          <span class="truncate">{{ p.journal_name }}</span>
+                        }
+                        @if (p.venue_type) {
+                          <span class="text-ink-300">·</span>
+                          <span>{{ p.venue_type }}</span>
+                        }
+                      </div>
+                    </div>
+                    <div class="flex flex-col items-end gap-1 flex-shrink-0">
+                      <span class="px-2 py-0.5 rounded text-[10px] font-medium"
+                            [class.bg-ink-900]="p.quartile === 'Q1'"
+                            [class.text-white]="p.quartile === 'Q1'"
+                            [class.bg-accent-light]="p.quartile !== 'Q1'"
+                            [class.text-accent]="p.quartile !== 'Q1'">
+                        {{ p.quartile || 'Unindexed' }}
                       </span>
-                    }
-                    <span class="text-ink-300">·</span>
-                    <span>{{ p.citations }} citations</span>
+                      <span class="text-[10px] text-ink-400">{{ p.citations }} cites</span>
+                    </div>
                   </div>
                 </li>
               }
             </ul>
+            @if (filteredClassifiedPapers().length > visibleClassifiedPapers().length) {
+              <div class="text-center py-3">
+                <button (click)="showMoreClassifiedPapers()"
+                        class="text-xs text-accent hover:underline">
+                  Load more ({{ filteredClassifiedPapers().length - visibleClassifiedPapers().length }} more)
+                </button>
+              </div>
+            }
           }
         </div>
       </div>
     </div>
   }
 </div>
+
+<app-paper-detail-modal
+  [paperId]="selectedPaperId()"
+  (closed)="closePaper()" />
