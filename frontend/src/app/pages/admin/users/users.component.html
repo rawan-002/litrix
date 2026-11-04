@@ -68,13 +68,22 @@
                 </div>
               </td>
               <td class="px-4 py-3">
-                <select [value]="u.RoleID || ''"
+                <!-- [ngValue]/ngModel, not [value]/$event.target.value: plain
+                     DOM [value] binds against <option> elements that don't
+                     exist yet on first render (roles() loads via a separate,
+                     later HTTP call), so it never matches and silently shows
+                     "- No role -" for every row regardless of the real
+                     RoleID - confirmed live, every row's actual RoleID was
+                     correct in the DB the whole time. ngValue re-matches
+                     once the options arrive; the Edit modal already used it
+                     for the same select and never had this bug. -->
+                <select [ngModel]="u.RoleID"
+                        (ngModelChange)="changeRole(u, $event)"
                         [disabled]="busyId() === u.UserID"
-                        (change)="changeRole(u, $any($event.target).value ? +$any($event.target).value : null)"
                         class="text-xs px-2 py-1 rounded border border-ink-200 bg-white disabled:opacity-50">
-                  <option value="">- No role -</option>
+                  <option [ngValue]="null">- No role -</option>
                   @for (r of roles(); track r.RoleID) {
-                    <option [value]="r.RoleID">{{ r.Name }}</option>
+                    <option [ngValue]="r.RoleID">{{ r.Name }}</option>
                   }
                 </select>
                 @if (busyId() === u.UserID) {
