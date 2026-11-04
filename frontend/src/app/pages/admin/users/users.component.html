@@ -4,12 +4,19 @@
       <h1 class="text-2xl font-semibold text-ink-900 tracking-tight">Users</h1>
       <p class="text-sm text-ink-500 mt-1">Manage user accounts, roles, and access</p>
     </div>
-    <input type="text"
-           [ngModel]="search()"
-           (ngModelChange)="search.set($event)"
-           placeholder="Search by name or email..."
-           class="px-4 py-2 rounded-lg border border-ink-200 text-sm w-64
-                  focus:border-accent outline-none" />
+    <div class="flex items-center gap-2">
+      @if (!loading()) {
+        <span class="text-xs text-ink-400 tabular-nums whitespace-nowrap">
+          {{ filtered().length }} / {{ users().length }}
+        </span>
+      }
+      <input type="text"
+             [ngModel]="search()"
+             (ngModelChange)="search.set($event)"
+             placeholder="Search by name or email..."
+             class="px-4 py-2 rounded-lg border border-ink-200 text-sm w-64
+                    focus:border-accent outline-none" />
+    </div>
   </div>
 
   @if (loading()) {
@@ -31,7 +38,7 @@
           </tr>
         </thead>
         <tbody>
-          @for (u of filtered(); track u.UserID) {
+          @for (u of visibleUsers(); track u.UserID) {
             <tr class="border-b border-ink-100 hover:bg-ink-50/50">
               <td class="px-4 py-3">
                 <div class="font-medium text-ink-900" dir="auto">
@@ -62,13 +69,17 @@
               </td>
               <td class="px-4 py-3">
                 <select [value]="u.RoleID || ''"
-                        (change)="changeRole(u, +$any($event.target).value)"
-                        class="text-xs px-2 py-1 rounded border border-ink-200 bg-white">
+                        [disabled]="busyId() === u.UserID"
+                        (change)="changeRole(u, $any($event.target).value ? +$any($event.target).value : null)"
+                        class="text-xs px-2 py-1 rounded border border-ink-200 bg-white disabled:opacity-50">
                   <option value="">- No role -</option>
                   @for (r of roles(); track r.RoleID) {
                     <option [value]="r.RoleID">{{ r.Name }}</option>
                   }
                 </select>
+                @if (busyId() === u.UserID) {
+                  <span class="text-[10px] text-ink-400 ml-1">saving…</span>
+                }
               </td>
               <td class="px-4 py-3">
                 @if (u.IsActive) {
@@ -90,20 +101,20 @@
               <td class="px-4 py-3 text-right">
                 <div class="flex items-center justify-end gap-1.5">
                   <button (click)="askEdit(u)"
-                          [disabled]="deletingId() === u.UserID"
+                          [disabled]="deletingId() === u.UserID || busyId() === u.UserID"
                           title="Edit this user's profile"
                           class="text-xs px-3 py-1 rounded-lg border border-ink-200
                                  hover:bg-ink-50 transition disabled:opacity-50">
                     Edit
                   </button>
                   <button (click)="toggleActive(u)"
-                          [disabled]="deletingId() === u.UserID"
+                          [disabled]="deletingId() === u.UserID || busyId() === u.UserID"
                           class="text-xs px-3 py-1 rounded-lg border border-ink-200
                                  hover:bg-ink-50 transition disabled:opacity-50">
-                    {{ u.IsActive ? 'Deactivate' : 'Activate' }}
+                    {{ busyId() === u.UserID ? 'Saving…' : (u.IsActive ? 'Deactivate' : 'Activate') }}
                   </button>
                   <button (click)="askDelete(u)"
-                          [disabled]="deletingId() === u.UserID"
+                          [disabled]="deletingId() === u.UserID || busyId() === u.UserID"
                           title="Delete this researcher and all their links"
                           class="text-xs px-3 py-1 rounded-lg border border-red-200
                                  text-red-600 hover:bg-red-50 transition disabled:opacity-50">
@@ -120,6 +131,15 @@
         </tbody>
       </table>
     </div>
+    @if (filtered().length > visibleUsers().length) {
+      <div class="text-center pt-4">
+        <button (click)="showMoreUsers()"
+                class="text-sm text-accent hover:text-accent-hover font-medium
+                       px-5 py-2 rounded-full hover:bg-accent-light transition-colors">
+          Load more ({{ filtered().length - visibleUsers().length }} more)
+        </button>
+      </div>
+    }
   }
 
   <!-- Edit user modal -->

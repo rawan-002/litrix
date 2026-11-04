@@ -1,4 +1,4 @@
-import { Component, inject, signal, computed } from '@angular/core';
+import { Component, inject, signal, computed, effect, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -86,14 +86,47 @@ export class UsersComponent {
   readonly editForm   = signal<EditForm | null>(null);
   readonly savingEdit = signal(false);
 
+  // Previously only matched Email/FullName_Ar - but the row shows
+  // displayName() (ScholarDisplayName, or First+Last), so searching the
+  // exact text on screen did nothing most of the time. Now matches
+  // everything a name could plausibly be typed as.
   readonly filtered = computed(() => {
-    const q = this.search().toLowerCase();
-    return q
-      ? this.users().filter(u =>
-          u.Email.toLowerCase().includes(q) ||
-          (u.FullName_Ar || '').toLowerCase().includes(q))
-      : this.users();
+    const q = this.search().trim().toLowerCase();
+    if (!q) return this.users();
+    return this.users().filter(u =>
+      u.Email.toLowerCase().includes(q) ||
+      (u.FullName_Ar || '').toLowerCase().includes(q) ||
+      (u.ScholarDisplayName || '').toLowerCase().includes(q) ||
+      (u.FirstName || '').toLowerCase().includes(q) ||
+      (u.LastName || '').toLowerCase().includes(q) ||
+      this.displayName(u).toLowerCase().includes(q)
+    );
   });
+
+  // Lazy-render in batches instead of dumping every row into the DOM at
+  // once, same pattern as the admin dashboard's classified-papers modal.
+  readonly USERS_BATCH = 30;
+  readonly usersShown = signal(this.USERS_BATCH);
+
+  readonly visibleUsers = computed(() =>
+    this.filtered().slice(0, this.usersShown())
+  );
+
+  showMoreUsers() {
+    this.usersShown.update(n => n + this.USERS_BATCH);
+  }
+
+  // Reset to one batch whenever the search (or the underlying list) changes,
+  // so "load more" always starts from the top of the new result set.
+  private readonly usersBatchResetEffect = effect(() => {
+    this.filtered();
+    untracked(() => this.usersShown.set(this.USERS_BATCH));
+  });
+
+  // Per-row "a mutation is in flight" marker - drives the busy/disabled
+  // state for role-change and activate/deactivate the same way deletingId
+  // already does for delete.
+  readonly busyId = signal<number | null>(null);
 
   constructor() {
     this.load();
@@ -116,18 +149,37 @@ export class UsersComponent {
   }
 
   toggleActive(user: User) {
+    const verb = user.IsActive ? 'Deactivate' : 'Activate';
+    if (!confirm(`${verb} ${this.displayName(user)}? ` +
+                 (user.IsActive ? 'They will not be able to log in.' : 'They will be able to log in again.'))) {
+      return;
+    }
     this.update(user.UserID, { is_active: !user.IsActive });
   }
 
-  changeRole(user: User, roleId: number) {
+  // roleId is null for "- No role -": the <select>'s empty-string value
+  // coerced with a bare `+` becomes 0 (Number('') === 0), not null, which
+  // used to get sent straight through and fail Users.RoleID's foreign key
+  // (0 isn't a real RoleID) with a raw DB error instead of clearing the role.
+  changeRole(user: User, roleId: number | null) {
+    const roleName = roleId ? (this.roles().find(r => r.RoleID === roleId)?.Name ?? `#${roleId}`) : 'No role';
+    if (!confirm(`Change ${this.displayName(user)}'s role to "${roleName}"?`)) {
+      this.load();  // re-render the <select> back to the unchanged value
+      return;
+    }
     this.update(user.UserID, { role_id: roleId });
   }
 
   private update(userId: number, payload: any) {
+    this.busyId.set(userId);
     this.http.patch(`${this.API}/users/${userId}/`, payload).subscribe({
-      next: () => this.load(),
+      next: () => { this.busyId.set(null); this.load(); },
       // Re-sync on failure so the row doesn't keep an optimistic, wrong value.
-      error: (err) => { alert(err?.error?.error || 'Failed to update user'); this.load(); },
+      error: (err) => {
+        this.busyId.set(null);
+        alert(err?.error?.error || 'Failed to update user');
+        this.load();
+      },
     });
   }
 
