@@ -41,13 +41,24 @@ GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 # 2026-11-04: llama-3.3-70b-versatile was retired from Groq (confirmed via a
 # live /openai/v1/models call - it's no longer in the account's model list),
 # which is why the chatbot started returning the generic "temporarily
-# unavailable" fallback. qwen/qwen3.8-27b is the replacement verified end to
-# end against the real tool registry and system prompt: clean, well-formed
-# tool_calls arguments and a correct final answer. The two openai/gpt-oss-*
-# models on the same account returned malformed arguments for a no-parameter
-# tool call (e.g. '{"":{}}' instead of '{}') and allam-2-7b doesn't support
-# tool calling at all - ruled both out.
-GROQ_MODEL = os.getenv('GROQ_MODEL', 'qwen/qwen3.8-27b')
+# unavailable" fallback.
+#
+# First swapped in qwen/qwen3.8-27b, which looked clean on an initial check,
+# but a live report of "I don't have a tool to look up a researcher" (despite
+# find_researcher existing) led to a repro: qwen intermittently emits its
+# tool call in a non-JSON, XML-ish format Groq's schema validator rejects
+# outright (code=tool_use_failed, e.g. for find_researcher(name=...)) -
+# confirmed live, not inferred. That either surfaces as the generic
+# "temporarily unavailable" after the one retry also fails, or - worse - as
+# a plain-text hallucinated "I can't do that" when the model gives up on the
+# tool call silently instead of erroring.
+#
+# openai/gpt-oss-120b replaced it: verified against the REAL tool registry
+# (not just a synthetic no-property test tool) across overview stats and
+# find_researcher(name=...) - clean, well-formed tool_calls every time it
+# wasn't rate-limited by the shared free-tier quota. allam-2-7b doesn't
+# support tool calling at all - ruled out outright.
+GROQ_MODEL = os.getenv('GROQ_MODEL', 'openai/gpt-oss-120b')
 GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 
 MAX_MESSAGE_LENGTH = 2000
