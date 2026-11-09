@@ -242,6 +242,16 @@ def _run_project_script(job_id, steps):
             'UPDATE "SyncJob" SET "Status" = %s, "StartedAt" = NOW() WHERE "JobID" = %s',
             ['running', job_id],
         )
+    # This thread's Django connection would otherwise sit open-but-idle for
+    # the entire subprocess chain below (each step can legitimately run for
+    # many minutes) - Neon (and most managed Postgres) drops idle
+    # connections after a while, which surfaced as a real
+    # "SSL connection has been closed unexpectedly" crash on the FINAL
+    # status write after a long chain (2026-08-10). Closing here is safe -
+    # Django transparently opens a fresh connection the next time this
+    # thread's `connection` is used (the final UPDATE below), regardless of
+    # how long the steps took.
+    connection.close()
 
     env = os.environ.copy()
     env['PYTHONIOENCODING'] = 'utf-8'
@@ -270,6 +280,10 @@ def _run_project_script(job_id, steps):
             error_msg = f'[{label}] {e}'
             break
 
+    # Same reasoning as above - the connection may have gone idle-stale
+    # again over however long the loop just took; force a fresh one before
+    # the write that actually matters (recording the outcome).
+    connection.close()
     with connection.cursor() as cur:
         cur.execute('''
             UPDATE "SyncJob"
@@ -294,7 +308,7 @@ def _run_citation_refresh(job_id, args):
     ])
 
 
-def _run_new_papers_scrape(job_id, args):
+def _run_new_papers_scrape(job_id, args, user_id=None):
     """Scrape new papers, then verify their affiliation — scraping must
     always be followed by the affiliation check (user requirement).
 
@@ -305,13 +319,42 @@ def _run_new_papers_scrape(job_id, args):
     the still-unverified Scholar papers, including whatever step 1 inserted.
     Confirmed non-Al-Baha papers get AffiliationVerified=FALSE and drop out of
     the dashboards; unresolvable ones stay NULL for manual review.
+
+    Step 3 (openalex_new_papers.py, added 2026-08-10) covers researchers who
+    have NO Scholar_ID but DO have a confirmed Researcher.OpenAlex_AuthorID -
+    completely disjoint from step 1's Scholar_ID-based selection (see that
+    script's own WHERE clause: OpenAlex_AuthorID IS NOT NULL AND Scholar_ID
+    IS NULL), so a researcher with both identifiers is step 1's alone and is
+    never touched here. Free API, no --budget needed.
+
+    Step 4 mirrors step 2 exactly, for the OpenAlex-sourced papers step 3 just
+    inserted: a paper existing under a researcher's name is NOT the same
+    claim as "this paper is actually Al-Baha's" (the whole reason step 2
+    exists for Scholar) - that risk applies identically to OpenAlex-sourced
+    papers, so it gets the same multi-tier check, just filtered to
+    --source OpenAlex instead of Scholar. affiliation_verifier.py already
+    accepts 'OpenAlex' as a --source value (no changes needed there).
+
+    Steps 1-2 are completely UNCHANGED by this addition - same args, same
+    order, same all-or-nothing chain behavior (a failed step still aborts
+    the rest, matching _run_project_script's existing contract) - so a
+    Scholar-only run behaves exactly as it did before this function grew
+    two more steps.
     """
+    openalex_args = ['--apply']
+    if user_id:
+        openalex_args += ['--user', str(user_id)]
     _run_project_script(job_id, [
         ('scrape-new-papers',
          BACKEND_DIR / 'scrapers' / 'scholar_new_papers.py', args, 3600),
         ('affiliation-verify',
          BACKEND_DIR / 'affiliation_verifier.py',
          ['--apply', '--source', 'Scholar'], 1800),
+        ('scrape-new-papers-openalex',
+         BACKEND_DIR / 'scrapers' / 'openalex_new_papers.py', openalex_args, 1800),
+        ('affiliation-verify-openalex',
+         BACKEND_DIR / 'affiliation_verifier.py',
+         ['--apply', '--source', 'OpenAlex'], 1800),
     ])
 
 
@@ -459,7 +502,8 @@ def trigger_new_papers_scrape(request):
         job_id = cur.fetchone()[0]
 
     threading.Thread(
-        target=_run_new_papers_scrape, args=(job_id, args), daemon=True,
+        target=_run_new_papers_scrape,
+        args=(job_id, args, int(user_id) if user_id else None), daemon=True,
     ).start()
 
     return Response({
