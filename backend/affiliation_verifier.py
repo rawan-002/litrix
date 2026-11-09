@@ -1521,6 +1521,21 @@ def main():
         else:
             cmd_verify(conn, args)
             if args.apply:
+                # cmd_verify can run for a long time on a large backlog
+                # (many slow external HTTP calls per paper) - the single
+                # connection opened at the top of main() can go stale/get
+                # dropped by the DB provider by the time we get here
+                # (observed live: "SSL connection has been closed
+                # unexpectedly" from cmd_report right after a long verify
+                # run, 2026-08-10). Reconnect rather than reuse a
+                # connection that's been open the whole time cmd_verify
+                # was running - same fix as sync_views.py's
+                # _run_project_script for the identical failure mode.
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                conn = psycopg2.connect(connect_timeout=15, **DB_KWARGS)
                 cmd_report(conn, report_years, all_years=all_years)
     finally:
         conn.close()
