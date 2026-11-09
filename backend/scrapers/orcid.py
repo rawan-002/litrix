@@ -43,8 +43,18 @@ def normalize_orcid(orcid):
 
 
 def openalex_get(path, params=None, retries=3):
+    """Same contract as before (returns the parsed JSON dict, or None on
+    failure) - callers that already handle a None return are unaffected.
+    The only change is that giving up is no longer SILENT: a failure here
+    used to be indistinguishable from "the query genuinely has zero
+    results" everywhere downstream (openalex_works_by_author_id turns a
+    None into an empty list identically either way) - print the real
+    reason so a human reading a script's stdout, or a run-report file, can
+    tell "API failed" apart from "really zero" instead of quietly
+    misreporting the latter."""
     p = dict(params or {})
     p["mailto"] = OPENALEX_MAILTO
+    last_reason = None
     for attempt in range(retries):
         try:
             r = httpx.get(f"https://api.openalex.org/{path}", params=p, timeout=25)
@@ -52,18 +62,40 @@ def openalex_get(path, params=None, retries=3):
             return r.json()
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 429:
+                last_reason = 'rate_limited (429)'
                 time.sleep(2 + attempt * 2)
                 continue
+            last_reason = f'HTTP {e.response.status_code}'
+            print(f"  [openalex_get] giving up on {path!r}: {last_reason}")
             return None
-        except Exception:
+        except Exception as e:
+            last_reason = f'{type(e).__name__}: {e}'
             time.sleep(1)
+    print(f"  [openalex_get] giving up on {path!r} after {retries} attempts: {last_reason}")
     return None
+
+
+def openalex_resolve_institution_id(name):
+    """OpenAlex institution ID (e.g. 'I52207611') for an institution name,
+    or None. Used to scope an author search to a real institution filter -
+    'affiliations.institution.display_name.search:<name>' (the filter this
+    replaced) is not a valid OpenAlex filter path and silently matched
+    nothing, so --affiliation on mode_search/openalex_search_authors was
+    never actually narrowing results; this resolves a real institution ID
+    and filters on that instead."""
+    data = openalex_get("institutions", {"search": name, "per-page": 1})
+    results = (data or {}).get("results") or []
+    if not results:
+        return None
+    return (results[0].get("id") or "").replace("https://openalex.org/", "") or None
 
 
 def openalex_search_authors(name, affiliation=None):
     params = {"search": name, "per-page": 10}
     if affiliation:
-        params["filter"] = f"affiliations.institution.display_name.search:{affiliation}"
+        inst_id = openalex_resolve_institution_id(affiliation)
+        if inst_id:
+            params["filter"] = f"affiliations.institution.id:{inst_id}"
     data = openalex_get("authors", params)
     return (data or {}).get("results", []) or []
 
@@ -338,6 +370,7 @@ def upsert_work(cur, w, user_id):
         return None, False
     norm = normalize_title(title)
     doi = (w.get("doi") or "").replace("https://doi.org/", "").lower() or None
+    openalex_work_id = (w.get("id") or "").replace("https://openalex.org/", "") or None
     pub_year = w.get("publication_year")
     cited = w.get("cited_by_count") or 0
     primary_loc = w.get("primary_location") or {}
@@ -351,12 +384,33 @@ def upsert_work(cur, w, user_id):
         for a in authorships
     )
 
-    cur.execute(
-        'SELECT "PaperID", "DOI", "JournalID" FROM "ResearchPaper" '
-        'WHERE "NormalizedTitle" = %s OR LOWER("Title") = LOWER(%s) LIMIT 1',
-        (norm, title),
-    )
-    row = cur.fetchone()
+    # Dedup priority: DOI (globally unique) -> OpenAlex Work ID (equally
+    # unique, covers works OpenAlex hasn't DOI-matched yet) -> title as a
+    # last resort. Title-only matching used to be the ONLY check here -
+    # two sources describing the same paper with slightly different title
+    # formatting could both insert instead of the second one correctly
+    # recognizing the first. A DOI or Work ID match is definitionally the
+    # same paper; title match stays as the fallback for works with neither.
+    row = None
+    if doi:
+        cur.execute(
+            'SELECT "PaperID", "DOI", "JournalID" FROM "ResearchPaper" '
+            'WHERE LOWER("DOI") = %s LIMIT 1', (doi,),
+        )
+        row = cur.fetchone()
+    if not row and openalex_work_id:
+        cur.execute(
+            'SELECT "PaperID", "DOI", "JournalID" FROM "ResearchPaper" '
+            'WHERE "OpenAlexWorkID" = %s LIMIT 1', (openalex_work_id,),
+        )
+        row = cur.fetchone()
+    if not row:
+        cur.execute(
+            'SELECT "PaperID", "DOI", "JournalID" FROM "ResearchPaper" '
+            'WHERE "NormalizedTitle" = %s OR LOWER("Title") = LOWER(%s) LIMIT 1',
+            (norm, title),
+        )
+        row = cur.fetchone()
 
     raw_log = {
         "title": title, "authors": authors_str,
@@ -377,29 +431,35 @@ def upsert_work(cur, w, user_id):
         # missing them — never overwrite data that's already there.
         cur.execute('''
             UPDATE "ResearchPaper"
-            SET "DOI"       = COALESCE("DOI", %s),
-                "JournalID" = COALESCE("JournalID", %s),
-                "Abstract"  = COALESCE("Abstract", %s),
+            SET "DOI"            = COALESCE("DOI", %s),
+                "JournalID"      = COALESCE("JournalID", %s),
+                "Abstract"       = COALESCE("Abstract", %s),
+                "OpenAlexWorkID" = COALESCE("OpenAlexWorkID", %s),
+                "AbstractSource" = CASE WHEN "Abstract" IS NULL AND %s IS NOT NULL
+                                        THEN 'openalex' ELSE "AbstractSource" END,
                 "RawData_Log" = jsonb_set(
                     COALESCE("RawData_Log", '{}'::jsonb),
                     '{cited_by_count}', to_jsonb(%s::int)
                 )
             WHERE "PaperID" = %s
-        ''', (doi, jid, abstract, cited, paper_id))
+        ''', (doi, jid, abstract, openalex_work_id, abstract, cited, paper_id))
         return paper_id, False
 
     jid = find_journal_id(cur, issn, journal_name)
     src = 'Manual' if w.get("_orcid_fallback") else 'OpenAlex'
+    abstract_source = 'openalex' if abstract else None
     try:
         cur.execute('SAVEPOINT sp_paper')
         cur.execute('''
             INSERT INTO "ResearchPaper" (
                 "Title", "NormalizedTitle", "PubYear", "DOI", "JournalID",
-                "Abstract", "Source", "RawData_Log", "ScrapedAt", "IsVerified"
+                "Abstract", "AbstractSource", "OpenAlexWorkID",
+                "Source", "RawData_Log", "ScrapedAt", "IsVerified"
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), TRUE)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), TRUE)
             RETURNING "PaperID"
-        ''', (title, norm, pub_year, doi, jid, abstract, src, Json(raw_log)))
+        ''', (title, norm, pub_year, doi, jid, abstract, abstract_source,
+              openalex_work_id, src, Json(raw_log)))
         paper_id = cur.fetchone()[0]
         cur.execute('RELEASE SAVEPOINT sp_paper')
         return paper_id, True
