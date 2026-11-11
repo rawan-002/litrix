@@ -54,8 +54,10 @@ def _display_name_expr(alias):
     )
 
 
-def _resolve_user_id(pk):
-    """Accept either a numeric UserID or a Litrix-ID and return UserID."""
+def _resolve_user_id(pk, tenant_id):
+    """Accept either a numeric UserID or a Litrix-ID and return UserID,
+    scoped to tenant_id. Returns None if pk is malformed or belongs to a
+    different tenant."""
     if pk is None:
         return None
     m = LITRIX_ID_RE.match(str(pk).strip())
@@ -67,15 +69,22 @@ def _resolve_user_id(pk):
                 'WHERE "Litrix_ID" IS NOT NULL '
                 '  AND "Litrix_ID" ~* \'^lit-[0-9]+$\' '
                 '  AND CAST(SUBSTRING("Litrix_ID" FROM 5) AS INTEGER) = %s '
+                '  AND "TenantID" = %s '
                 'LIMIT 1',
-                [seq],
+                [seq, tenant_id],
             )
             row = cur.fetchone()
             return row[0] if row else None
     try:
-        return int(pk)
+        candidate_id = int(pk)
     except (TypeError, ValueError):
         return None
+    with connection.cursor() as cur:
+        cur.execute(
+            'SELECT 1 FROM "Users" WHERE "UserID" = %s AND "TenantID" = %s',
+            [candidate_id, tenant_id],
+        )
+        return candidate_id if cur.fetchone() else None
 
 
 INTERESTS_SQL = '''
@@ -312,7 +321,7 @@ def researcher_interests(request, pk):
     import json
     from datetime import datetime, timezone as _tz
 
-    user_id = _resolve_user_id(pk)
+    user_id = _resolve_user_id(pk, request.user.tenant_id)
     if not user_id:
         return response.Response({'error': 'Invalid researcher id'}, status=404)
 
@@ -385,7 +394,7 @@ def researcher_interests(request, pk):
 
 @decorators.api_view(['GET'])
 def researcher_network(request, pk):
-    user_id = _resolve_user_id(pk)
+    user_id = _resolve_user_id(pk, request.user.tenant_id)
     if not user_id:
         return response.Response({'error': 'Invalid researcher id'}, status=404)
 

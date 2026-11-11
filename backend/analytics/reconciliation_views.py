@@ -46,10 +46,10 @@ def review_queue_list(request):
     except ValueError:
         limit = 50
 
-    where = ''
-    params = []
+    where = 'WHERE rp."TenantID" = %s'
+    params = [request.user.tenant_id]
     if status_filter != 'ALL':
-        where = 'WHERE q."Status" = %s'
+        where += ' AND q."Status" = %s'
         params.append(status_filter)
 
     with connection.cursor() as cur:
@@ -69,7 +69,7 @@ def review_queue_list(request):
                 q."Status",
                 q."CreatedAt"
             FROM "AuthorReviewQueue" q
-            LEFT JOIN "ResearchPaper" rp ON rp."PaperID"  = q."PaperID"
+            JOIN "ResearchPaper" rp      ON rp."PaperID"  = q."PaperID"
             LEFT JOIN "Users" u          ON u."UserID"    = q."SuggestedUserID"
             LEFT JOIN "Works_In" w       ON w."UserID"    = q."SuggestedUserID"
                                           AND w."IsCurrentPosition" = TRUE
@@ -116,13 +116,15 @@ def review_queue_decide(request, review_id: int):
     with transaction.atomic():
         with connection.cursor() as cur:
             cur.execute('''
-                SELECT "ReviewID", "PaperID", "ScrapedName",
-                       "SuggestedUserID", "SuggestedConfidence",
-                       "Status"
-                FROM "AuthorReviewQueue"
-                WHERE "ReviewID" = %s
-                FOR UPDATE
-            ''', (review_id,))
+                SELECT q."ReviewID", q."PaperID", q."ScrapedName",
+                       q."SuggestedUserID", q."SuggestedConfidence",
+                       q."Status"
+                FROM "AuthorReviewQueue" q
+                JOIN "ResearchPaper" rp ON rp."PaperID" = q."PaperID"
+                WHERE q."ReviewID" = %s
+                  AND rp."TenantID" = %s
+                FOR UPDATE OF q
+            ''', (review_id, request.user.tenant_id))
             row = cur.fetchone()
             if not row:
                 return Response({'error': 'not_found'}, status=http.HTTP_404_NOT_FOUND)
@@ -201,18 +203,21 @@ def review_queue_stats(request):
 
     with connection.cursor() as cur:
         cur.execute('''
-            SELECT "Status", COUNT(*)
-            FROM "AuthorReviewQueue"
-            GROUP BY "Status"
-        ''')
+            SELECT q."Status", COUNT(*)
+            FROM "AuthorReviewQueue" q
+            JOIN "ResearchPaper" rp ON rp."PaperID" = q."PaperID"
+            WHERE rp."TenantID" = %s
+            GROUP BY q."Status"
+        ''', [request.user.tenant_id])
         by_status = {r[0]: r[1] for r in cur.fetchall()}
 
         cur.execute('''
             SELECT COUNT(*) FROM "ResearchPaper" rp
-            WHERE NOT EXISTS (
+            WHERE rp."TenantID" = %s
+              AND NOT EXISTS (
                 SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"
             )
-        ''')
+        ''', [request.user.tenant_id])
         orphans = cur.fetchone()[0]
 
     return Response({

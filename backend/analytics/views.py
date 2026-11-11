@@ -9,6 +9,7 @@ are scoped to FOCUS_YEARS, so widen or narrow that list to move the window.
 from rest_framework import viewsets, filters, decorators, response
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Avg
+from django.db.models.expressions import RawSQL
 
 
 from .models import (
@@ -68,7 +69,8 @@ def paper_detail(request, paper_id):
             LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
             LEFT JOIN LATERAL (    SELECT "Quartile", "ImpactFactor"    FROM "JournalRankings"    WHERE "JournalID" = j."JournalID"    ORDER BY "RankingYear" DESC NULLS LAST, "Source"    LIMIT 1) jr ON TRUE
             WHERE rp."PaperID" = %s
-        ''', [paper_id])
+              AND rp."TenantID" = %s
+        ''', [paper_id, request.user.tenant_id])
         row = cur.fetchone()
         if not row:
             return response.Response(
@@ -170,8 +172,9 @@ def paper_detail(request, paper_id):
             LEFT JOIN "Works_In" w ON w."UserID" = u."UserID" AND w."IsCurrentPosition" = TRUE
             LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
             WHERE a."PaperID" = %s
+              AND u."TenantID" = %s
             ORDER BY a."AuthorOrder" NULLS LAST
-        ''', [paper_id])
+        ''', [paper_id, request.user.tenant_id])
         paper['albaha_authors'] = [
             {'user_id': r[0], 'full_name_ar': r[1], 'full_name_en': r[2], 'department_name': r[3]}
             for r in cur.fetchall()
@@ -200,7 +203,12 @@ class DepartmentViewSet(viewsets.ReadOnlyModelViewSet):
     ordering = ['-total_papers']
 
     def get_queryset(self):
-        qs = DepartmentStats.objects.all()
+        qs = DepartmentStats.objects.filter(
+            department_id__in=RawSQL(
+                'SELECT "DepartmentID" FROM "Department" WHERE "TenantID" = %s',
+                (self.request.user.tenant_id,),
+            )
+        )
         scope = _hod_scope_department_id(self.request)
         if scope is not None:
             qs = qs.filter(department_id=scope)
@@ -229,7 +237,12 @@ class DepartmentViewSet(viewsets.ReadOnlyModelViewSet):
                 {'error': 'You can only view your own department.'},
                 status=403,
             )
-        qs = ResearcherStats.objects.filter(department_id=pk).order_by(
+        qs = ResearcherStats.objects.filter(department_id=pk).filter(
+            user_id__in=RawSQL(
+                'SELECT "UserID" FROM "Users" WHERE "TenantID" = %s',
+                (request.user.tenant_id,),
+            )
+        ).order_by(
             '-h_index', '-total_papers'
         )
         page = self.paginate_queryset(qs)
@@ -248,12 +261,19 @@ class TopPaperViewSet(viewsets.ReadOnlyModelViewSet):
     GET /api/papers/top/?quartile=Q1
     GET /api/papers/top/?pub_year=2024
     """
-    queryset = TopPaper.objects.all()
     serializer_class = TopPaperSerializer
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['quartile', 'pub_year', 'source']
     ordering_fields = ['citations', 'pub_year', 'impact_factor']
     ordering = ['-citations']
+
+    def get_queryset(self):
+        return TopPaper.objects.filter(
+            paper_id__in=RawSQL(
+                'SELECT "PaperID" FROM "ResearchPaper" WHERE "TenantID" = %s',
+                (self.request.user.tenant_id,),
+            )
+        )
 
 
 class PublicationTrendViewSet(viewsets.ReadOnlyModelViewSet):
@@ -270,7 +290,12 @@ class PublicationTrendViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         # A HoD only sees their own department's trend; Admin/Dean see all
         # (consistent with the overview + departments scoping).
-        qs = PublicationTrend.objects.all()
+        qs = PublicationTrend.objects.filter(
+            department_id__in=RawSQL(
+                'SELECT "DepartmentID" FROM "Department" WHERE "TenantID" = %s',
+                (self.request.user.tenant_id,),
+            )
+        )
         scope = _hod_scope_department_id(self.request)
         if scope is not None:
             qs = qs.filter(department_id=scope)
@@ -322,11 +347,14 @@ def yearly_breakdown(request):
                 COUNT(*)                                           AS total_papers,
                 COALESCE(SUM(citations), 0)                        AS total_citations
             FROM v_paper_details
+            JOIN "ResearchPaper" rp_tenant
+                ON rp_tenant."PaperID" = v_paper_details.paper_id
+               AND rp_tenant."TenantID" = %s
             WHERE pub_year = %s
               AND department_id IS NOT NULL{dept_clause}
             GROUP BY department_id, department_name
             ORDER BY total_papers DESC
-        ''', [year_int] + dept_param)
+        ''', [request.user.tenant_id, year_int] + dept_param)
         dept_rows = cur.fetchall()
         departments = [
             {
@@ -356,10 +384,13 @@ def yearly_breakdown(request):
                   WHERE a."PaperID" = v_paper_details.paper_id
                     AND u."UserType" = 'Researcher') AS authors_en
             FROM v_paper_details
+            JOIN "ResearchPaper" rp_tenant
+                ON rp_tenant."PaperID" = v_paper_details.paper_id
+               AND rp_tenant."TenantID" = %s
             WHERE pub_year = %s
               AND department_id IS NOT NULL{dept_clause}
             ORDER BY citations DESC NULLS LAST, paper_id
-        ''', [year_int] + dept_param)
+        ''', [request.user.tenant_id, year_int] + dept_param)
         cols = [c[0] for c in cur.description]
         papers = [dict(zip(cols, row)) for row in cur.fetchall()]
 
@@ -428,8 +459,9 @@ def overview(request):
                              AND w."IsCurrentPosition" = TRUE
             LEFT JOIN "Researcher" r ON r."UserID" = u."UserID"
             WHERE u."UserType" = 'Researcher'
+              AND u."TenantID" = %s
               AND (%s::int IS NULL OR w."DepartmentID" = %s::int)
-        ''', [hod_dept_id, hod_dept_id])
+        ''', [request.user.tenant_id, hod_dept_id, hod_dept_id])
         _hc_row = _hc_cur.fetchone()
     dept_agg['researchers'] = _hc_row[0]
     dept_agg['active'] = _hc_row[1]
@@ -462,9 +494,10 @@ def overview(request):
             'LEFT JOIN LATERAL (SELECT "Quartile","ImpactFactor" FROM "JournalRankings" '
             '  WHERE "JournalID" = rp."JournalID" ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1) jr ON TRUE '
             'WHERE rp."PubYear" = ANY(%s) '
+            '  AND rp."TenantID" = %s '
             '  AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"'
         )
-        kpi_params = [years]
+        kpi_params = [years, request.user.tenant_id]
         if hod_dept_id:
             kpi_sql += (
                 ' AND EXISTS (SELECT 1 FROM "Works_In" w2 '
@@ -486,10 +519,11 @@ def overview(request):
             'SELECT COUNT(DISTINCT rp."PaperID") '
             'FROM "ResearchPaper" rp '
             'WHERE rp."PubYear" = ANY(%s) '
+            '  AND rp."TenantID" = %s '
             '  AND rp."AffiliationVerified" IS NULL '
             '  AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"'
         )
-        pend_params = [years]
+        pend_params = [years, request.user.tenant_id]
         if hod_dept_id:
             pend_sql += (
                 ' AND EXISTS (SELECT 1 FROM "Works_In" w2 '
@@ -526,9 +560,10 @@ def overview(request):
         cit_sql = (
             f'SELECT COALESCE(SUM({cites_year_expr}), 0) AS citations '
             'FROM "ResearchPaper" rp '
-            'WHERE EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"'
+            'WHERE rp."TenantID" = %s '
+            '  AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"'
         )
-        cit_params = [str(y) for y in years]
+        cit_params = [str(y) for y in years] + [request.user.tenant_id]
         if hod_dept_id:
             cit_sql += (
                 ' AND EXISTS (SELECT 1 FROM "Works_In" w2 '
@@ -564,7 +599,7 @@ def overview(request):
                        COUNT(DISTINCT rp."PaperID") AS focus_papers
                 FROM "Authors" a
                 JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
-                WHERE rp."PubYear" = ANY(%s){AFFIL_CLAUSE}
+                WHERE rp."PubYear" = ANY(%s) AND rp."TenantID" = %s{AFFIL_CLAUSE}
                 GROUP BY a."UserID"
             ),
             citations_in_window AS (
@@ -572,7 +607,7 @@ def overview(request):
                        COALESCE(SUM({year_keys_expr_alias}), 0) AS focus_citations
                 FROM "Authors" a
                 JOIN "ResearchPaper" rp_all ON rp_all."PaperID" = a."PaperID"
-                WHERE 1=1{AFFIL_CLAUSE_RPALL}
+                WHERE rp_all."TenantID" = %s{AFFIL_CLAUSE_RPALL}
                 GROUP BY a."UserID"
             )
             SELECT
@@ -589,11 +624,13 @@ def overview(request):
             LEFT JOIN "Works_In"   w ON w."UserID" = u."UserID" AND w."IsCurrentPosition" = TRUE
             LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
             WHERE u."UserType" = 'Researcher'
+              AND u."TenantID" = %s
               AND COALESCE(p.focus_papers, 0) > 0
               AND (%s::int IS NULL OR w."DepartmentID" = %s::int)
             ORDER BY focus_papers DESC, focus_citations DESC
             LIMIT 5
-        ''', [years] + [str(y) for y in years] + [hod_dept_id, hod_dept_id])
+        ''', [years, request.user.tenant_id] + [str(y) for y in years] +
+             [request.user.tenant_id, request.user.tenant_id, hod_dept_id, hod_dept_id])
         top_researchers_rows = cur.fetchall()
 
         # For a HoD, restrict to papers authored by someone currently in their
@@ -605,9 +642,12 @@ def overview(request):
             'SELECT v_top_papers.*, '
             '(SELECT rp_af."AffiliationVerified" FROM "ResearchPaper" rp_af '
             ' WHERE rp_af."PaperID" = v_top_papers.paper_id) AS affiliation_verified '
-            'FROM v_top_papers WHERE pub_year = ANY(%s)'
+            'FROM v_top_papers '
+            'JOIN "ResearchPaper" rp_tp ON rp_tp."PaperID" = v_top_papers.paper_id '
+            '  AND rp_tp."TenantID" = %s '
+            'WHERE pub_year = ANY(%s)'
         )
-        top_papers_params = [years]
+        top_papers_params = [request.user.tenant_id, years]
         if hod_dept_id is not None:
             top_papers_sql += (
                 ' AND EXISTS (SELECT 1 FROM "Authors" a '
@@ -697,10 +737,11 @@ def overview(request):
             LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
             LEFT JOIN LATERAL (    SELECT "Quartile", "ImpactFactor"    FROM "JournalRankings"    WHERE "JournalID" = rp."JournalID"    ORDER BY "RankingYear" DESC NULLS LAST, "Source"    LIMIT 1) jr ON TRUE
             LEFT JOIN dept_citations dc ON dc."DepartmentID" = d."DepartmentID"
+            WHERE d."TenantID" = %s
             GROUP BY d."DepartmentID", d."DepartmentName", d."CollegeID"
             HAVING (%s::int IS NULL OR d."DepartmentID" = %s::int)
             ORDER BY total_papers DESC NULLS LAST
-        ''', [str(y) for y in years] + [years] + [hod_dept_id, hod_dept_id])
+        ''', [str(y) for y in years] + [years] + [request.user.tenant_id] + [hod_dept_id, hod_dept_id])
         dept_cols = [c[0] for c in cur.description]
         departments = [dict(zip(dept_cols, row)) for row in cur.fetchall()]
 
@@ -729,7 +770,8 @@ def overview(request):
                 JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
                 WHERE w."IsCurrentPosition" = TRUE
                   AND rp."PubYear" = ANY(%s)
-                  AND (%s::int IS NULL OR w."DepartmentID" = %s::int){AFFIL_CLAUSE}
+                  AND (%s::int IS NULL OR w."DepartmentID" = %s::int)
+                  AND rp."TenantID" = %s{AFFIL_CLAUSE}
                 GROUP BY w."DepartmentID", rp."PubYear"
             ),
             cites_q AS (
@@ -749,7 +791,8 @@ def overview(request):
                     WHERE w."IsCurrentPosition" = TRUE
                       AND year_kv.value ~ '^[0-9]+$'
                       AND year_kv.key::int = ANY(%s)
-                      AND (%s::int IS NULL OR w."DepartmentID" = %s::int){AFFIL_CLAUSE}
+                      AND (%s::int IS NULL OR w."DepartmentID" = %s::int)
+                      AND rp."TenantID" = %s{AFFIL_CLAUSE}
                 ) ded
                 GROUP BY dept, yr
             )
@@ -759,7 +802,8 @@ def overview(request):
                    COALESCE(c.citations, 0) AS citations
             FROM papers_q p
             FULL OUTER JOIN cites_q c ON c.dept = p.dept AND c.yr = p.yr
-        ''', [chart_years, hod_dept_id, hod_dept_id, chart_years, hod_dept_id, hod_dept_id])
+        ''', [chart_years, hod_dept_id, hod_dept_id, request.user.tenant_id,
+              chart_years, hod_dept_id, hod_dept_id, request.user.tenant_id])
         papers_by_dept_year = {}
         cites_by_dept_year = {}
         for did, yr, papers_n, cites_n in cur.fetchall():
@@ -876,9 +920,10 @@ def classified_papers(request):
         '  WHERE "JournalID" = rp."JournalID" '
         '  ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1) jr ON TRUE '
         'WHERE rp."PubYear" = ANY(%s) '
+        '  AND rp."TenantID" = %s '
         '  AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"'
     )
-    params = [str(y) for y in years] + [years]
+    params = [str(y) for y in years] + [years, request.user.tenant_id]
     if dept_id is not None:
         sql += (
             ' AND EXISTS (SELECT 1 FROM "Works_In" w2 '
@@ -1024,7 +1069,7 @@ def universal_search(request):
                 LIMIT 1
             ) w ON TRUE
             LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
-            WHERE 1=1
+            WHERE u."TenantID" = %s
               {user_type_filter}
               AND (
                    u."FullName_Ar" ILIKE %s
@@ -1040,7 +1085,7 @@ def universal_search(request):
               )
             ORDER BY papers DESC NULLS LAST, u."FullName_Ar"
             LIMIT %s
-        ''', [like, like, like, like, like, like, PROFILE_LIMIT])
+        ''', [request.user.tenant_id, like, like, like, like, like, like, PROFILE_LIMIT])
         profiles = [
             {
                 'user_id':         r[0],
@@ -1086,6 +1131,7 @@ def universal_search(request):
         venue_clause = f' AND ({" OR ".join(venue_parts)}) ' if venue_parts else ''
 
         paper_filter = f'''
+            AND rp."TenantID" = %s
             AND EXISTS (
                 SELECT 1 FROM "Authors" a
                 WHERE a."PaperID" = rp."PaperID"
@@ -1141,7 +1187,7 @@ def universal_search(request):
             -- instead of the newest two years monopolising a LIMIT-ed result.
             ORDER BY citations DESC NULLS LAST, rp."PubYear" DESC NULLS LAST
             LIMIT %s
-        ''', [like, like, like, PAPER_LIMIT + 1])
+        ''', [like, like, like, request.user.tenant_id, PAPER_LIMIT + 1])
         # Fetch one extra row to know whether a "Load More" would return anything,
         # then trim back to the requested page size.
         rows = cur.fetchall()

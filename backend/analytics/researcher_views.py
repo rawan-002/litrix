@@ -3,6 +3,7 @@ import re
 
 from rest_framework import viewsets, filters, decorators, response
 from django_filters.rest_framework import DjangoFilterBackend
+from django.db.models.expressions import RawSQL
 
 from .models import ResearcherStats
 from .serializers import ResearcherStatsSerializer
@@ -61,7 +62,6 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
     GET /api/researchers/{user_id}/   → single researcher detail
     GET /api/researchers/{user_id}/papers/ → researcher's papers
     """
-    queryset = ResearcherStats.objects.all()
     serializer_class = ResearcherStatsSerializer
     filter_backends = [
         DjangoFilterBackend,
@@ -75,6 +75,14 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
         'q1_papers', 'last_pub_year',
     ]
     ordering = ['-h_index', '-total_papers']
+
+    def get_queryset(self):
+        return ResearcherStats.objects.filter(
+            user_id__in=RawSQL(
+                'SELECT "UserID" FROM "Users" WHERE "TenantID" = %s',
+                (self.request.user.tenant_id,),
+            )
+        )
 
     @decorators.action(detail=False, methods=['get'])
     def all(self, request):
@@ -98,8 +106,9 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                 LEFT JOIN "Works_In" w ON w."UserID" = u."UserID" AND w."IsCurrentPosition" = TRUE
                 LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
                 WHERE u."UserType" = 'Researcher'
+                  AND u."TenantID" = %s
                 ORDER BY papers DESC NULLS LAST, u."FullName_Ar"
-            ''')
+            ''', [request.user.tenant_id])
             results = [
                 {
                     'user_id': r[0],
@@ -140,6 +149,7 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                 LEFT JOIN "Works_In" w ON w."UserID" = u."UserID" AND w."IsCurrentPosition" = TRUE
                 LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
                 WHERE u."UserType" = 'Researcher'
+                  AND u."TenantID" = %s
                   AND (
                        u."FullName_Ar" ILIKE %s
                     OR u."FirstName" ILIKE %s
@@ -147,7 +157,7 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                   )
                 ORDER BY u."FullName_Ar"
                 LIMIT 15
-            ''', [like, like, like])
+            ''', [request.user.tenant_id, like, like, like])
             results = [
                 {
                     'user_id': r[0],
@@ -192,9 +202,10 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                     WHERE "Litrix_ID" IS NOT NULL
                       AND "Litrix_ID" ~* '^lit-[0-9]+$'
                       AND CAST(SUBSTRING("Litrix_ID" FROM 5) AS INTEGER) = %s
+                      AND "TenantID" = %s
                     LIMIT 1
                     ''',
-                    [seq],
+                    [seq, request.user.tenant_id],
                 )
                 row = cur.fetchone()
                 if not row:
@@ -227,7 +238,8 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                                        AND w."IsCurrentPosition" = TRUE
                 LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
                 WHERE u."UserID" = %s
-            ''', [resolved_user_id])
+                  AND u."TenantID" = %s
+            ''', [resolved_user_id, request.user.tenant_id])
             row = cur.fetchone()
             if not row:
                 return response.Response(
@@ -457,9 +469,9 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
         })
 
     @staticmethod
-    def _resolve_user_id(pk):
-        """Litrix-ID or numeric UserID -> integer UserID. Returns
-        (user_id, None) or (None, error_response)."""
+    def _resolve_user_id(pk, tenant_id):
+        """Litrix-ID or numeric UserID -> integer UserID, scoped to tenant_id.
+        Returns (user_id, None) or (None, error_response)."""
         from django.db import connection
 
         canonical = normalize_litrix_id(pk)
@@ -472,9 +484,10 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                     WHERE "Litrix_ID" IS NOT NULL
                       AND "Litrix_ID" ~* '^lit-[0-9]+$'
                       AND CAST(SUBSTRING("Litrix_ID" FROM 5) AS INTEGER) = %s
+                      AND "TenantID" = %s
                     LIMIT 1
                     ''',
-                    [seq],
+                    [seq, tenant_id],
                 )
                 row = cur.fetchone()
                 if not row:
@@ -482,9 +495,19 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                         {'error': f'Researcher {canonical} not found'}, status=404)
                 return row[0], None
         try:
-            return int(pk), None
+            candidate_id = int(pk)
         except (TypeError, ValueError):
             return None, response.Response({'error': 'Invalid researcher ID'}, status=400)
+
+        with connection.cursor() as cur:
+            cur.execute(
+                'SELECT 1 FROM "Users" WHERE "UserID" = %s AND "TenantID" = %s',
+                [candidate_id, tenant_id],
+            )
+            if not cur.fetchone():
+                return None, response.Response(
+                    {'error': 'Researcher not found'}, status=404)
+        return candidate_id, None
 
     @decorators.action(detail=True, methods=['get'], url_path='openalex-live-affiliation-check')
     def openalex_live_affiliation_check(self, request, pk=None):
@@ -508,7 +531,7 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
         sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # backend/
         from affiliation_verifier import verify_via_openalex, OPENALEX_DELAY
 
-        resolved_user_id, err = self._resolve_user_id(pk)
+        resolved_user_id, err = self._resolve_user_id(pk, request.user.tenant_id)
         if err is not None:
             return err
 
@@ -552,8 +575,9 @@ class ResearcherViewSet(viewsets.ReadOnlyModelViewSet):
                 FROM "ResearchPaper" rp
                 JOIN "Authors" a ON a."PaperID" = rp."PaperID"
                 WHERE a."UserID" = %s
+                  AND rp."TenantID" = %s
                 ORDER BY rp."PubYear" DESC NULLS LAST, rp."PaperID" DESC
-            ''', [pk])
+            ''', [pk, request.user.tenant_id])
             rows = cur.fetchall()
             cols = [c[0].lower() for c in cur.description]
 
