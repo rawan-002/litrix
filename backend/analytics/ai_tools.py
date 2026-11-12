@@ -80,7 +80,7 @@ def _dept_author_exists_clause(alias, department_id, params):
     )
 
 
-def get_overview_stats(years=None, department_id=None):
+def get_overview_stats(years=None, department_id=None, *, tenant_id):
     """Institution-wide totals: papers, citations, Q1-4, Scopus/ISI, venue
     split. `years` defaults to the full institutional window (2011-current).
 
@@ -95,7 +95,7 @@ def get_overview_stats(years=None, department_id=None):
     """
     years = years or _default_focus_years()
     with connection.cursor() as cur:
-        params1 = [years]
+        params1 = [years, tenant_id]
         dept_clause1 = _dept_author_exists_clause('rp', department_id, params1)
         cur.execute(f'''
             SELECT
@@ -116,17 +116,19 @@ def get_overview_stats(years=None, department_id=None):
                 WHERE "JournalID" = rp."JournalID"
                 ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1) jr ON TRUE
             WHERE rp."PubYear" = ANY(%s)
+              AND rp."TenantID" = %s
               AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"){AAV}{dept_clause1}
         ''', params1)
         r = cur.fetchone()
 
         cites_expr = _cites_expr('rp', years)
-        params2 = [str(y) for y in years]
+        params2 = [str(y) for y in years] + [tenant_id]
         dept_clause2 = _dept_author_exists_clause('rp', department_id, params2)
         cur.execute(f'''
             SELECT COALESCE(SUM({cites_expr}), 0)
             FROM "ResearchPaper" rp
-            WHERE EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"){AAV}{dept_clause2}
+            WHERE rp."TenantID" = %s
+              AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"){AAV}{dept_clause2}
         ''', params2)
         citations = cur.fetchone()[0]
 
@@ -141,7 +143,7 @@ def get_overview_stats(years=None, department_id=None):
     }
 
 
-def get_top_researchers(department=None, limit=10, department_id=None):
+def get_top_researchers(department=None, limit=10, department_id=None, *, tenant_id):
     """Top researchers by lifetime citations (Researcher.CitationsByYear sum),
     optionally filtered to one department (case-insensitive substring).
 
@@ -152,7 +154,7 @@ def get_top_researchers(department=None, limit=10, department_id=None):
     """
     limit = max(1, min(int(limit or 10), 25))
     dept_clause = ''
-    params = []
+    params = [tenant_id]
     if department_id:
         dept_clause = ' AND w."DepartmentID" = %s'
         params.append(department_id)
@@ -183,7 +185,7 @@ def get_top_researchers(department=None, limit=10, department_id=None):
                 ORDER BY w."StartDate" ASC NULLS LAST LIMIT 1
             ) w ON TRUE
             LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
-            WHERE u."UserType" = 'Researcher'{dept_clause}
+            WHERE u."UserType" = 'Researcher' AND u."TenantID" = %s{dept_clause}
             ORDER BY citations DESC NULLS LAST
             LIMIT %s
         ''', params + [limit])
@@ -233,7 +235,7 @@ def _match_researchers_sql(name):
     return where, [phrase, phrase, phrase]
 
 
-def find_researcher(name):
+def find_researcher(name, *, tenant_id):
     """Look up a specific researcher by (partial) name - department, papers,
     citations, litrix_id. See _match_researchers_sql for the matching policy
     (exact contiguous phrase, no fuzzy matching - a wrong person is worse
@@ -269,10 +271,10 @@ def find_researcher(name):
                 ORDER BY w."StartDate" ASC NULLS LAST LIMIT 1
             ) w ON TRUE
             LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
-            WHERE u."UserType" = 'Researcher' AND ({where})
+            WHERE u."UserType" = 'Researcher' AND u."TenantID" = %s AND ({where})
             ORDER BY citations DESC NULLS LAST
             LIMIT 5
-        ''', params)
+        ''', [tenant_id] + params)
         rows = cur.fetchall()
     return {
         'query': name,
@@ -374,7 +376,7 @@ def _title_topics(titles):
     return topics
 
 
-def get_researcher_topics(name):
+def get_researcher_topics(name, *, tenant_id):
     """Distinguishes SELF-REPORTED listed_research_interests
     (Researcher.ResearchInterests - free text the researcher or an admin
     typed in, same field find_researcher exposes) from
@@ -401,8 +403,8 @@ def get_researcher_topics(name):
                 r."ResearchInterests"
             FROM "Users" u
             JOIN "Researcher" r ON r."UserID" = u."UserID"
-            WHERE u."UserType" = 'Researcher' AND ({where})
-        ''', params)
+            WHERE u."UserType" = 'Researcher' AND u."TenantID" = %s AND ({where})
+        ''', [tenant_id] + params)
         rows = cur.fetchall()
 
     if not rows:
@@ -425,8 +427,8 @@ def get_researcher_topics(name):
             SELECT rp."PaperID", COALESCE(NULLIF(rp."Title", ''), rp."Title_En"), rp."PubYear"
             FROM "ResearchPaper" rp
             JOIN "Authors" a ON a."PaperID" = rp."PaperID"
-            WHERE a."UserID" = %s AND rp."AffiliationVerified" = TRUE
-        ''', [user_id])
+            WHERE a."UserID" = %s AND rp."AffiliationVerified" = TRUE AND rp."TenantID" = %s
+        ''', [user_id, tenant_id])
         papers = cur.fetchall()
 
     meta = {pid: (title, year) for pid, title, year in papers}
@@ -473,14 +475,18 @@ def get_researcher_topics(name):
     }
 
 
-def get_department_stats(department_id=None):
+def get_department_stats(department_id=None, *, tenant_id):
     """Per-department totals: researchers, papers, citations, Scopus papers.
 
     `department_id` is a backend-only scope fence (never in the tool's
     model-facing schema) - restricts the result to that one department, for
     a HoD-scoped caller."""
-    where = ' WHERE d."DepartmentID" = %s' if department_id else ''
-    params = [department_id] if department_id else []
+    if department_id:
+        where = ' WHERE d."DepartmentID" = %s AND d."TenantID" = %s'
+        params = [department_id, tenant_id]
+    else:
+        where = ' WHERE d."TenantID" = %s'
+        params = [tenant_id]
     with connection.cursor() as cur:
         cur.execute(f'''
             SELECT
@@ -512,7 +518,7 @@ def get_department_stats(department_id=None):
     }
 
 
-def get_publication_trend(num_years=5, department_id=None):
+def get_publication_trend(num_years=5, department_id=None, *, tenant_id):
     """Papers published per year for the last `num_years` years (incl. current).
 
     `department_id` is a backend-only scope fence (never in the tool's
@@ -522,12 +528,13 @@ def get_publication_trend(num_years=5, department_id=None):
     current = datetime.now().year
     years = list(range(current - num_years + 1, current + 1))
     with connection.cursor() as cur:
-        params = [years]
+        params = [years, tenant_id]
         dept_clause = _dept_author_exists_clause('rp', department_id, params)
         cur.execute(f'''
             SELECT rp."PubYear", COUNT(DISTINCT rp."PaperID")
             FROM "ResearchPaper" rp
             WHERE rp."PubYear" = ANY(%s)
+              AND rp."TenantID" = %s
               AND EXISTS (SELECT 1 FROM "Authors" a WHERE a."PaperID" = rp."PaperID"){AAV}{dept_clause}
             GROUP BY rp."PubYear"
             ORDER BY rp."PubYear"
@@ -558,7 +565,7 @@ _COMPARISON_METRICS = {
 }
 
 
-def compare_departments():
+def compare_departments(*, tenant_id):
     """Ranks every department across several metrics - ALL computed here in
     Python, never by the model combining numbers from separate tool calls
     or from get_department_stats' raw rows itself. Live testing showed the
@@ -599,8 +606,9 @@ def compare_departments():
             LEFT JOIN LATERAL (SELECT "Quartile" FROM "JournalRankings"
                 WHERE "JournalID" = rp."JournalID"
                 ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1) jr ON TRUE
+            WHERE d."TenantID" = %s
             GROUP BY d."DepartmentID", d."DepartmentName"
-        ''')
+        ''', [tenant_id])
         rows = cur.fetchall()
 
     depts = []

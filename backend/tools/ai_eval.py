@@ -44,10 +44,15 @@ from analytics.ai_views import answer_question      # noqa: E402
 _DEPTS = {'Computer Science': 3, 'Software Engineering': 4,
           'Information Technology': 1, 'Networks and Systems': 2}
 
+# This suite calls ai_tools functions directly (bypassing ai_views.py's
+# request.user.tenant_id resolution), so it needs its own tenant_id - 1 is
+# the only tenant that exists today (Users.tenant_id's own DB default).
+_EVAL_TENANT_ID = 1
+
 
 def _truth():
     """Ground truth pulled live from the same tools the chat uses."""
-    cmp = ai_tools.compare_departments()
+    cmp = ai_tools.compare_departments(tenant_id=_EVAL_TENANT_ID)
     by_dept = {d['department']: d for d in cmp['departments']}
     return {
         'compare': cmp,
@@ -57,7 +62,7 @@ def _truth():
         'best_scopus_rate': cmp['rankings']['scopus_rate']['entries'][0]['department'],
         'best_papers_per_researcher': cmp['rankings']['papers_per_researcher']['entries'][0]['department'],
         'most_q1': cmp['rankings']['q1_papers']['entries'][0]['department'],
-        'overview_q1_university': ai_tools.get_overview_stats()['q1_papers'],
+        'overview_q1_university': ai_tools.get_overview_stats(tenant_id=_EVAL_TENANT_ID)['q1_papers'],
     }
 
 
@@ -70,7 +75,7 @@ _TOPICS_RESEARCHER = 'Ahlem Nabli'
 
 
 def _topics_truth():
-    return ai_tools.get_researcher_topics(_TOPICS_RESEARCHER)
+    return ai_tools.get_researcher_topics(_TOPICS_RESEARCHER, tenant_id=_EVAL_TENANT_ID)
 
 
 def _mentions(reply, *needles):
@@ -370,7 +375,8 @@ def main():
             time.sleep(2)  # be gentle with Groq's shared per-minute limit
         scope_level, department_id = sc['scope']
         try:
-            r = answer_question(sc['question'], sc.get('history', []), (scope_level, department_id))
+            r = answer_question(sc['question'], sc.get('history', []),
+                                 (scope_level, department_id, _EVAL_TENANT_ID))
             reply = r['reply']
         except Exception as e:  # pragma: no cover - network/Groq issues
             reply = f'<error: {e}>'

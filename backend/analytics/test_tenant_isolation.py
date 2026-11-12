@@ -118,6 +118,138 @@ def _nth_placeholder_param(sql, params, needle, occurrence=0):
 # post-fetch filter.
 # ---------------------------------------------------------------------------
 
+class AiToolsTenantFenceTests(unittest.TestCase):
+    def _run(self, fn, scripted_results, **kwargs):
+        cur = _FakeCursor(scripted_results)
+        with patch.object(ai_tools, 'connection', _FakeConnection(cur)):
+            fn(**kwargs)
+        return cur.calls
+
+    def test_get_overview_stats_binds_caller_tenant_in_both_queries(self):
+        for tenant in (TENANT_A, TENANT_B):
+            calls = self._run(
+                ai_tools.get_overview_stats,
+                scripted_results=[tuple(0 for _ in range(12)), (0,)],
+                tenant_id=tenant,
+            )
+            self.assertEqual(len(calls), 2)
+            sql1, params1 = calls[0]
+            self.assertIn('rp."TenantID" = %s', sql1)
+            self.assertEqual(_nth_placeholder_param(sql1, params1, 'rp."TenantID" = %s'), tenant)
+            sql2, params2 = calls[1]
+            self.assertIn('rp."TenantID" = %s', sql2)
+            self.assertEqual(_nth_placeholder_param(sql2, params2, 'rp."TenantID" = %s'), tenant)
+
+    def test_get_top_researchers_binds_caller_tenant(self):
+        for tenant in (TENANT_A, TENANT_B):
+            calls = self._run(ai_tools.get_top_researchers, scripted_results=[[]], tenant_id=tenant)
+            sql, params = calls[0]
+            self.assertIn('u."TenantID" = %s', sql)
+            self.assertEqual(_nth_placeholder_param(sql, params, 'u."TenantID" = %s'), tenant)
+
+    def test_find_researcher_binds_caller_tenant(self):
+        for tenant in (TENANT_A, TENANT_B):
+            calls = self._run(ai_tools.find_researcher, scripted_results=[[]], name='Nizar', tenant_id=tenant)
+            sql, params = calls[0]
+            self.assertIn('u."TenantID" = %s', sql)
+            self.assertEqual(_nth_placeholder_param(sql, params, 'u."TenantID" = %s'), tenant)
+
+    def test_get_researcher_topics_binds_caller_tenant(self):
+        for tenant in (TENANT_A, TENANT_B):
+            calls = self._run(ai_tools.get_researcher_topics, scripted_results=[[]], name='Nizar', tenant_id=tenant)
+            sql, params = calls[0]
+            self.assertIn('u."TenantID" = %s', sql)
+            self.assertEqual(_nth_placeholder_param(sql, params, 'u."TenantID" = %s'), tenant)
+
+    def test_get_department_stats_binds_caller_tenant_with_and_without_dept_filter(self):
+        for tenant in (TENANT_A, TENANT_B):
+            calls = self._run(ai_tools.get_department_stats, scripted_results=[[]], tenant_id=tenant)
+            sql, params = calls[0]
+            self.assertIn('d."TenantID" = %s', sql)
+            self.assertEqual(_nth_placeholder_param(sql, params, 'd."TenantID" = %s'), tenant)
+
+            calls = self._run(ai_tools.get_department_stats, scripted_results=[[]],
+                               department_id=7, tenant_id=tenant)
+            sql, params = calls[0]
+            self.assertIn('d."TenantID" = %s', sql)
+            self.assertEqual(_nth_placeholder_param(sql, params, 'd."TenantID" = %s'), tenant)
+
+    def test_get_publication_trend_binds_caller_tenant(self):
+        for tenant in (TENANT_A, TENANT_B):
+            calls = self._run(ai_tools.get_publication_trend, scripted_results=[[]], tenant_id=tenant)
+            sql, params = calls[0]
+            self.assertIn('rp."TenantID" = %s', sql)
+            self.assertEqual(_nth_placeholder_param(sql, params, 'rp."TenantID" = %s'), tenant)
+
+    def test_compare_departments_binds_caller_tenant(self):
+        for tenant in (TENANT_A, TENANT_B):
+            calls = self._run(ai_tools.compare_departments, scripted_results=[[]], tenant_id=tenant)
+            sql, params = calls[0]
+            self.assertIn('d."TenantID" = %s', sql)
+            self.assertEqual(_nth_placeholder_param(sql, params, 'd."TenantID" = %s'), tenant)
+
+    def test_every_tool_requires_tenant_id_explicitly(self):
+        """No default value anywhere -- calling without it must raise
+        TypeError (caught by ai_views._run_tool_call as a safe error, never
+        silently querying with no tenant filter bound at all)."""
+        for name, spec in ai_tools.TOOLS.items():
+            with self.assertRaises(TypeError, msg=f'{name} must require tenant_id'):
+                # Every tool's required positional args are also missing here,
+                # but tenant_id being keyword-only-with-no-default must be
+                # what's enforced regardless of what else is omitted.
+                spec['fn']()
+
+    def test_tenant_id_never_in_any_tool_schema_sent_to_the_model(self):
+        for name, spec in ai_tools.TOOLS.items():
+            props = spec['parameters'].get('properties', {})
+            self.assertNotIn('tenant_id', props, f'{name} leaks tenant_id to the LLM-facing schema')
+
+
+# ---------------------------------------------------------------------------
+# ai_views.py dispatch layer -- the model must never be able to supply or
+# override tenant_id, and an unauthenticated caller must never resolve to
+# a real tenant (NULL binds to nothing in SQL, never silently to tenant 1).
+# ---------------------------------------------------------------------------
+
+class AiViewsDispatchFenceTests(unittest.TestCase):
+    def test_run_tool_call_ignores_model_supplied_tenant_id_and_injects_real_one(self):
+        call = {
+            'function': {
+                'name': 'get_top_researchers',
+                # The model tries to smuggle a foreign tenant_id as an arg.
+                'arguments': '{"tenant_id": %d, "limit": 3}' % TENANT_B,
+            }
+        }
+        cur = _FakeCursor(scripted_results=[[]])
+        with patch.object(ai_tools, 'connection', _FakeConnection(cur)):
+            ai_views._run_tool_call(call, department_id=None, tenant_id=TENANT_A)
+        sql, params = cur.calls[0]
+        self.assertEqual(
+            _nth_placeholder_param(sql, params, 'u."TenantID" = %s'),
+            TENANT_A,
+            'model-supplied tenant_id must never win over the authenticated caller\'s own tenant',
+        )
+
+    def test_resolve_scope_unauthenticated_never_yields_a_tenant(self):
+        anon_request = SimpleNamespace(user=make_user(authenticated=False))
+        scope_level, department_id, tenant_id = ai_views._resolve_scope(anon_request)
+        self.assertEqual(scope_level, 'none')
+        self.assertIsNone(tenant_id)
+
+    def test_resolve_scope_uses_the_real_authenticated_users_own_tenant(self):
+        request = SimpleNamespace(user=make_user(
+            tenant_id=TENANT_B, perms=('view_all_researchers',)))
+        scope_level, department_id, tenant_id = ai_views._resolve_scope(request)
+        self.assertEqual(scope_level, 'all')
+        self.assertEqual(tenant_id, TENANT_B)
+
+
+# ---------------------------------------------------------------------------
+# reconciliation_views.review_queue_decide -- write path. An admin from
+# tenant A must never be able to decide a review item belonging to tenant B,
+# even by guessing/incrementing review_id.
+# ---------------------------------------------------------------------------
+
 class ReconciliationTenantFenceTests(unittest.TestCase):
     """review_queue_decide is a DRF @api_view, so it needs a real
     django.http.HttpRequest (DRF asserts the type) -- RequestFactory builds

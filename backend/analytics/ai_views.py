@@ -87,32 +87,41 @@ _ALL_ONLY_TOOLS = {'compare_departments'}
 
 
 def _resolve_scope(request):
-    """('all', None) for institution-wide roles (view_all_researchers),
-    ('dept', department_id) for a HoD scoped to their own department
-    (view_dept_researchers only - department_id resolved via the exact same
-    helper views.py's overview()/yearly_breakdown() use, so it can never
-    drift from the dashboard's own scoping), or ('none', None) for anyone
+    """('all', None, tenant_id) for institution-wide roles
+    (view_all_researchers), ('dept', department_id, tenant_id) for a HoD
+    scoped to their own department (view_dept_researchers only -
+    department_id resolved via the exact same helper
+    views.py's overview()/yearly_breakdown() use, so it can never drift from
+    the dashboard's own scoping), or ('none', None, tenant_id) for anyone
     else - a plain Researcher gets NO aggregate/institution tool access,
     mirroring the 403 they'd get hitting those dashboard endpoints directly.
 
-    find_researcher is deliberately NOT gated by this: it returns the same
-    tier of info (department, paper count, citations, research interests)
-    already exposed with NO permission requirement via the public profile
-    endpoint (/api/public/researchers/<litrix_id>/profile/) and universal
-    search - restricting it here would be security theater, not a real
-    boundary, since the same data is one click away regardless.
+    tenant_id is ALWAYS the authenticated request.user's own tenant_id -
+    this is the actual multi-tenancy fence for every tool in ai_tools.py
+    (none of them accept a tenant_id from the model; see _run_tool_call).
+    It's None only when there's no authenticated user at all, which the
+    chat() view's IsAuthenticated permission already prevents in practice.
+
+    find_researcher is deliberately NOT gated by scope_level/department_id:
+    it returns the same tier of info (department, paper count, citations,
+    research interests) already exposed with NO permission requirement via
+    the public profile endpoint (/api/public/researchers/<litrix_id>/profile/)
+    and universal search - restricting it here would be security theater,
+    not a real boundary, since the same data is one click away regardless.
+    It IS still tenant-fenced like every other tool.
     """
     u = getattr(request, 'user', None)
     if not (u and u.is_authenticated):
-        return 'none', None
+        return 'none', None, None
+    tenant_id = u.tenant_id
     if u.has_litrix_perm('view_all_researchers'):
-        return 'all', None
+        return 'all', None, tenant_id
     if u.has_litrix_perm('view_dept_researchers'):
         dept_id = _hod_scope_department_id(request)
         if dept_id in (None, -1):
-            return 'none', None
-        return 'dept', dept_id
-    return 'none', None
+            return 'none', None, tenant_id
+        return 'dept', dept_id, tenant_id
+    return 'none', None, tenant_id
 
 
 def _system_prompt(scope_level='all'):
@@ -386,7 +395,7 @@ def _call_groq_with_retry(messages, attempts=2, force_final=False, scope_level='
     raise last_exc
 
 
-def _run_tool_call(call, department_id=None):
+def _run_tool_call(call, department_id=None, tenant_id=None):
     name = call['function']['name']
     try:
         args = json.loads(call['function'].get('arguments') or '{}')
@@ -400,6 +409,15 @@ def _run_tool_call(call, department_id=None):
     spec = TOOLS.get(name)
     if not spec:
         return {'error': f'unknown tool: {name}'}
+    # The model never sees tenant_id in any tool's schema, but strip it from
+    # args anyway before setting our own - defense in depth against a model
+    # that hallucinates a parameter name it wasn't given. This is the actual
+    # multi-tenancy fence: it wins no matter what (if anything) the model
+    # tried to pass, for EVERY tool, not just the aggregate ones - a plain
+    # find_researcher("some name") call must never search another tenant's
+    # Users just because department_id-style scoping doesn't apply to it.
+    args.pop('tenant_id', None)
+    args['tenant_id'] = tenant_id
     if name in _SCOPED_TOOLS and department_id:
         # The model never sees department_id in its tool schema, but strip
         # it from args anyway before setting our own - defense in depth
@@ -513,7 +531,7 @@ def answer_question(question, history, scope):
             'sources': [],
         }
 
-    scope_level, department_id = scope
+    scope_level, department_id, tenant_id = scope
     messages = [{'role': 'system', 'content': _system_prompt(scope_level)}]
     for turn in (history or [])[-HISTORY_TURNS:]:
         role = 'assistant' if turn.get('role') == 'assistant' else 'user'
@@ -529,7 +547,7 @@ def answer_question(question, history, scope):
                 messages.append({
                     'role': 'tool',
                     'tool_call_id': call['id'],
-                    'content': json.dumps(_run_tool_call(call, department_id=department_id)),
+                    'content': json.dumps(_run_tool_call(call, department_id=department_id, tenant_id=tenant_id)),
                 })
             rounds += 1
             choice = _call_groq_with_retry(
