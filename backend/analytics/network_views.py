@@ -129,6 +129,7 @@ from_openalex AS (
     ) elem
     WHERE a."UserID" = ANY(%s)
       {year_sql}
+      AND rp."TenantID" = %s
       AND jsonb_typeof(elem) = 'object'
       AND a."UserID" NOT IN (SELECT "UserID" FROM from_scholar)
 ),
@@ -149,7 +150,7 @@ GROUP BY "UserID", canonicalize_interest(name)
 '''
 
 
-def _fetch_interests(cur, user_ids, year_sql, year_params):
+def _fetch_interests(cur, user_ids, year_sql, year_params, tenant_id):
     """
     Returns {UserID: {'top': [...], 'set': {...}}}, or {} on failure.
 
@@ -162,7 +163,7 @@ def _fetch_interests(cur, user_ids, year_sql, year_params):
     try:
         cur.execute(
             INTERESTS_SQL.format(year_sql=year_sql),
-            [uid_list, uid_list] + year_params + [CONCEPT_MIN_SCORE],
+            [uid_list, uid_list] + year_params + [tenant_id, CONCEPT_MIN_SCORE],
         )
         rows_raw = cur.fetchall()
     except Exception as e:
@@ -222,6 +223,7 @@ WITH centre_concepts AS (
     ) elem
     WHERE a."UserID" = %s
       {year_sql_centre}
+      AND rp."TenantID" = %s
       AND TRIM(elem->>'display_name') IS NOT NULL
       AND LENGTH(TRIM(elem->>'display_name')) BETWEEN 3 AND 80
       AND ((elem->>'score')::float IS NULL OR (elem->>'score')::float >= %s)
@@ -237,6 +239,8 @@ coauthor_ids AS (
     FROM "Authors" a1
     JOIN "Authors" a2 ON a2."PaperID" = a1."PaperID"
                       AND a2."UserID" <> a1."UserID"
+    JOIN "ResearchPaper" rp1 ON rp1."PaperID" = a1."PaperID"
+                             AND rp1."TenantID" = %s
     WHERE a1."UserID" = %s
 ),
 candidate_concepts AS (
@@ -272,6 +276,7 @@ candidate_concepts AS (
     ) elem
     WHERE a."UserID" <> %s
       {year_sql_cand}
+      AND rp."TenantID" = %s
       AND TRIM(elem->>'display_name') IS NOT NULL
       AND LENGTH(TRIM(elem->>'display_name')) BETWEEN 3 AND 80
       AND ((elem->>'score')::float IS NULL OR (elem->>'score')::float >= %s)
@@ -291,7 +296,7 @@ SELECT cc."UserID",
        (SELECT COUNT(*) FROM "Authors" ax WHERE ax."UserID" = cc."UserID") AS papers
 FROM candidate_concepts cc
 JOIN centre_concepts c ON c.lname = cc.lname
-JOIN "Users" u ON u."UserID" = cc."UserID"
+JOIN "Users" u ON u."UserID" = cc."UserID" AND u."TenantID" = %s
 LEFT JOIN LATERAL (
     SELECT wx."DepartmentID"
     FROM "Works_In" wx
@@ -445,8 +450,8 @@ def researcher_network(request, pk):
             '    LIMIT 1'
             ') w ON TRUE '
             'LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID" '
-            'WHERE u."UserID" = %s',
-            [user_id],
+            'WHERE u."UserID" = %s AND u."TenantID" = %s',
+            [user_id, request.user.tenant_id],
         )
         crow = cur.fetchone()
         if not crow:
@@ -473,6 +478,7 @@ def researcher_network(request, pk):
                 JOIN "ResearchPaper" rp ON rp."PaperID" = a1."PaperID"
                 WHERE a1."UserID" = %s
                   {year_sql}
+                  AND rp."TenantID" = %s
                 GROUP BY a2."UserID"
                 HAVING COUNT(DISTINCT rp."PaperID") >= %s
             )
@@ -482,7 +488,7 @@ def researcher_network(request, pk):
                    cp.shared,
                    (SELECT COUNT(*) FROM "Authors" a WHERE a."UserID" = u."UserID") AS total_papers
             FROM coauthor_papers cp
-            JOIN "Users" u ON u."UserID" = cp.coauthor_id
+            JOIN "Users" u ON u."UserID" = cp.coauthor_id AND u."TenantID" = %s
             LEFT JOIN LATERAL (
                 SELECT wx."DepartmentID"
                 FROM "Works_In" wx
@@ -496,7 +502,8 @@ def researcher_network(request, pk):
             ORDER BY cp.shared DESC
             LIMIT %s
             ''',
-            [user_id] + year_params + [min_papers, MAX_INTERNAL],
+            [user_id] + year_params + [request.user.tenant_id, min_papers,
+                                        request.user.tenant_id, MAX_INTERNAL],
         )
         internal_rows = cur.fetchall()
 
@@ -565,6 +572,7 @@ def researcher_network(request, pk):
                     ) AS ship
                     WHERE a."UserID" = %s
                       {year_sql}
+                      AND rp."TenantID" = %s
                       AND ship->'author'->>'display_name' IS NOT NULL
                       AND TRIM(ship->'author'->>'display_name') <> ''
                 ),
@@ -610,28 +618,36 @@ def researcher_network(request, pk):
                 ORDER BY shared DESC
                 LIMIT %s
                 ''',
-                [user_id] + year_params + [min_papers, MAX_EXTERNAL],
+                [user_id] + year_params + [request.user.tenant_id, min_papers, MAX_EXTERNAL],
             )
             ext_rows = cur.fetchall()
 
         # Interests for the centre + internal co-authors.
         interests_ids = [user_id] + [r[0] for r in internal_rows]
-        interests_map = _fetch_interests(cur, interests_ids, year_sql, year_params)
+        interests_map = _fetch_interests(
+            cur, interests_ids, year_sql, year_params, request.user.tenant_id)
 
         # Interest neighbours. Wrapped in try/except so a SQL hiccup just
         # gives an empty list — the co-authors graph still returns.
         interest_rows = []
         if mode in ('interests', 'both'):
             # Param order follows the CTEs in INTEREST_NEIGHBOURS_SQL:
-            # centre scholar, centre openalex (+year, score), coauthor_ids,
-            # candidate scholar, candidate openalex (+year, score),
-            # then HAVING/LIMIT.
+            # centre scholar, centre openalex (+year, tenant, score),
+            # coauthor_ids (tenant, centre uid), candidate scholar (exclude),
+            # candidate openalex (exclude, +year, tenant, score), final
+            # Users join (tenant), then HAVING/LIMIT. Every "tenant" slot is
+            # request.user.tenant_id — the acting user's own tenant, never
+            # model/client-supplied.
+            tenant_id = request.user.tenant_id
             params = (
                 [user_id, user_id]
                 + year_params
-                + [CONCEPT_MIN_SCORE, user_id, user_id, user_id]
+                + [tenant_id, CONCEPT_MIN_SCORE]
+                + [tenant_id, user_id]
+                + [user_id, user_id]
                 + year_params
-                + [CONCEPT_MIN_SCORE, INTEREST_OVERLAP_MIN, MAX_INTEREST_NEIGHBOURS]
+                + [tenant_id, CONCEPT_MIN_SCORE]
+                + [tenant_id, INTEREST_OVERLAP_MIN, MAX_INTEREST_NEIGHBOURS]
             )
             try:
                 cur.execute(
@@ -656,7 +672,8 @@ def researcher_network(request, pk):
             if interest_rows:
                 new_ids = [r[0] for r in interest_rows if r[0] not in interests_map]
                 if new_ids:
-                    extra = _fetch_interests(cur, new_ids, year_sql, year_params)
+                    extra = _fetch_interests(
+                        cur, new_ids, year_sql, year_params, request.user.tenant_id)
                     interests_map.update(extra)
 
     # Build payload.
