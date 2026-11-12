@@ -22,6 +22,26 @@ from rest_framework.permissions import AllowAny
 from .researcher_views import _normalize_interests
 
 
+def _resolve_tenant_or_404(tenant_slug):
+    """Resolve a public URL's <tenant_slug> to a real, active Tenant's
+    TenantID. Returns (tenant_id, None) on success or (None, 404 Response)
+    on failure — missing, unknown, or inactive slugs ALWAYS 404; there is
+    no default tenant and no fallback to TenantID 1. Every public_views
+    query must be scoped by the tenant_id this returns, never by anything
+    else (there is no request.user on these AllowAny endpoints)."""
+    if not tenant_slug:
+        return None, response.Response({'error': 'Not found'}, status=404)
+    with connection.cursor() as cur:
+        cur.execute(
+            'SELECT "TenantID" FROM "Tenant" WHERE "Slug" = %s AND "Status" = \'active\'',
+            [tenant_slug],
+        )
+        row = cur.fetchone()
+    if not row:
+        return None, response.Response({'error': 'Not found'}, status=404)
+    return row[0], None
+
+
 # Dashboard scope: the current biennium. Every PubYear aggregation is
 # constrained to these so the supervisor sees current output, not the
 # lifetime archive. To add a year later, append here and redeploy.
@@ -80,10 +100,14 @@ H_INDEX_PER_USER_SQL = f'''
         FROM "Authors" a
         JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
         WHERE {NOT_RETRACTED_SQL}
+          AND rp."TenantID" = %s
     ) ranked
     WHERE cites >= rnk
     GROUP BY "UserID"
 '''
+# Every embedding of H_INDEX_PER_USER_SQL adds exactly ONE new %s to its
+# parent query (the TenantID above) -- insert tenant_id into the parent's
+# param list at the matching textual position.
 
 
 # Decorator stack shared by every public endpoint. No throttle here so the
@@ -116,12 +140,15 @@ def _resolve_years(request) -> list[int]:
 
 
 @_apply_decorators(public_endpoint)
-def overview(request):
+def overview(request, tenant_slug=None):
     """
-    GET /api/public/overview/[?year=2025|2026|all]
+    GET /u/<tenant_slug>/overview/[?year=2025|2026|all]
     College-wide aggregated KPIs for the dashboard header, scoped by the
-    global year filter.
+    global year filter AND by the tenant resolved from tenant_slug.
     """
+    tenant_id, err = _resolve_tenant_or_404(tenant_slug)
+    if err is not None:
+        return err
     years = _resolve_years(request)
     with connection.cursor() as cur:
         # Join every paper-derived metric with Authors so orphan papers (no
@@ -141,6 +168,7 @@ def overview(request):
                 FROM "ResearchPaper" rp
                 JOIN "Authors" a ON a."PaperID" = rp."PaperID"
                 WHERE rp."PubYear" = ANY(%s)
+                  AND rp."TenantID" = %s
                   AND {NOT_RETRACTED_SQL}
               AND {AFFILIATION_VERIFIED_SQL}
             )
@@ -148,7 +176,8 @@ def overview(request):
                 (SELECT COUNT(DISTINCT "PaperID") FROM attributed_papers)      AS total_papers,
                 (SELECT COUNT(DISTINCT u."UserID")
                    FROM "Users" u
-                   WHERE u."UserType" = 'Researcher')                          AS total_researchers,
+                   WHERE u."UserType" = 'Researcher'
+                     AND u."TenantID" = %s)                                    AS total_researchers,
                 (SELECT COALESCE(SUM(cites), 0) FROM attributed_papers)        AS total_citations,
                 -- Q1 is a JOURNAL ranking: exclude Conference/Book venues.
                 (SELECT COUNT(DISTINCT ap."PaperID")
@@ -168,9 +197,10 @@ def overview(request):
                    FROM "ResearchPaper" rp
                    JOIN "Authors" a ON a."PaperID" = rp."PaperID"
                    WHERE rp."PubYear" = ANY(%s)
+                     AND rp."TenantID" = %s
                      AND {NOT_RETRACTED_SQL}
                      AND rp."AffiliationVerified" IS NULL)                     AS pending_review
-        ''', [years, years])
+        ''', [years, tenant_id, tenant_id, tenant_id, years, tenant_id])
         row = cur.fetchone()
     return response.Response({
         'total_papers':       row[0] or 0,
@@ -183,12 +213,15 @@ def overview(request):
 
 
 @_apply_decorators(public_endpoint)
-def departments_list(request):
+def departments_list(request, tenant_slug=None):
     """
-    GET /api/public/departments/[?year=2025|2026|all]
+    GET /u/<tenant_slug>/departments/[?year=2025|2026|all]
     Per-department summary stats — drives the department-card row. Scoped by
-    the global year filter.
+    the global year filter and by the tenant resolved from tenant_slug.
     """
+    tenant_id, err = _resolve_tenant_or_404(tenant_slug)
+    if err is not None:
+        return err
     years = _resolve_years(request)
     with connection.cursor() as cur:
         # Paper counters are year-scoped; researchers_count stays current
@@ -217,6 +250,8 @@ def departments_list(request):
                 JOIN "ResearchPaper" rp
                     ON rp."PaperID" = a."PaperID"
                 WHERE rp."PubYear" = ANY(%s)
+                  AND d."TenantID" = %s
+                  AND rp."TenantID" = %s
                   AND {NOT_RETRACTED_SQL}
               AND {AFFILIATION_VERIFIED_SQL}
             )
@@ -252,9 +287,10 @@ def departments_list(request):
                 ORDER BY "RankingYear" DESC NULLS LAST, "Source"
                 LIMIT 1
             ) jr ON TRUE
+            WHERE d."TenantID" = %s
             GROUP BY d."DepartmentID", d."DepartmentName"
             ORDER BY papers_count DESC, d."DepartmentName"
-        ''', [years, years, years])
+        ''', [years, tenant_id, tenant_id, years, years, tenant_id])
         rows = cur.fetchall()
     return response.Response({
         'results': [
@@ -272,19 +308,22 @@ def departments_list(request):
 
 
 @_apply_decorators(public_endpoint)
-def researchers_list(request):
+def researchers_list(request, tenant_slug=None):
     """
-    GET /api/public/researchers/[?department_id=N][&year=2025|2026|all]
+    GET /u/<tenant_slug>/researchers/[?department_id=N][&year=2025|2026|all]
     Researcher list (academic fields only). Paper/citation counts reflect
-    the selected year (or both if 'all').
+    the selected year (or both if 'all'), scoped to the resolved tenant.
     """
+    tenant_id, err = _resolve_tenant_or_404(tenant_slug)
+    if err is not None:
+        return err
     years = _resolve_years(request)
     dept_id = request.query_params.get('department_id')
-    params: list[Any] = []
-    where = "WHERE u.\"UserType\" = 'Researcher'"
+    where_params: list[Any] = [tenant_id]
+    where = "WHERE u.\"UserType\" = 'Researcher' AND u.\"TenantID\" = %s"
     if dept_id and dept_id.isdigit():
         where += " AND w.\"DepartmentID\" = %s"
-        params.append(int(dept_id))
+        where_params.append(int(dept_id))
 
     with connection.cursor() as cur:
         cur.execute(f'''
@@ -305,6 +344,7 @@ def researchers_list(request):
                    JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
                    WHERE a."UserID" = u."UserID"
                      AND rp."PubYear" = ANY(%s)
+                     AND rp."TenantID" = %s
                      AND {NOT_RETRACTED_SQL}
                      AND {AFFILIATION_VERIFIED_SQL})                AS total_papers,
                 COALESCE((
@@ -316,6 +356,7 @@ def researchers_list(request):
                     JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
                     WHERE a."UserID" = u."UserID"
                       AND rp."PubYear" = ANY(%s)
+                      AND rp."TenantID" = %s
                       AND {NOT_RETRACTED_SQL}
                       AND {AFFILIATION_VERIFIED_SQL}
                 ), 0)                                           AS total_citations,
@@ -328,7 +369,7 @@ def researchers_list(request):
             LEFT JOIN ({H_INDEX_PER_USER_SQL}) hi ON hi."UserID" = u."UserID"
             {where}
             ORDER BY total_papers DESC NULLS LAST, u."FullName_Ar"
-        ''', [years, years, *params])
+        ''', [years, tenant_id, years, tenant_id, tenant_id] + where_params)
         rows = cur.fetchall()
     return response.Response({
         'results': [
@@ -352,16 +393,21 @@ def researchers_list(request):
 
 
 @_apply_decorators(public_endpoint)
-def researcher_profile(request, litrix_id: str):
+def researcher_profile(request, litrix_id: str, tenant_slug=None):
     """
-    GET /api/public/researchers/{litrix_id}/profile/
+    GET /u/<tenant_slug>/researchers/{litrix_id}/profile/
     Researcher metadata + papers + per-year citation series. Resolves
-    Litrix_ID (e.g. "Lit-000042") to UserID internally.
+    Litrix_ID (e.g. "Lit-000042") to UserID internally, scoped to the
+    resolved tenant — a litrix_id from another tenant 404s exactly like an
+    unknown one, never leaks that it exists elsewhere.
     """
+    tenant_id, err = _resolve_tenant_or_404(tenant_slug)
+    if err is not None:
+        return err
     with connection.cursor() as cur:
         cur.execute(
-            'SELECT "UserID" FROM "Users" WHERE "Litrix_ID" = %s LIMIT 1',
-            [litrix_id],
+            'SELECT "UserID" FROM "Users" WHERE "Litrix_ID" = %s AND "TenantID" = %s LIMIT 1',
+            [litrix_id, tenant_id],
         )
         row = cur.fetchone()
         if not row:
@@ -392,8 +438,8 @@ def researcher_profile(request, litrix_id: str):
                 ON w."UserID" = u."UserID" AND w."IsCurrentPosition" = TRUE
             LEFT JOIN "Department" d       ON d."DepartmentID" = w."DepartmentID"
             LEFT JOIN ({H_INDEX_PER_USER_SQL}) hi ON hi."UserID" = u."UserID"
-            WHERE u."UserID" = %s
-        ''', [user_id])
+            WHERE u."UserID" = %s AND u."TenantID" = %s
+        ''', [tenant_id, user_id, tenant_id])
         bio = cur.fetchone()
 
         # Lifetime stats here, not biennium — a profile page should show the
@@ -419,8 +465,8 @@ def researcher_profile(request, litrix_id: str):
                 WHERE "JournalID" = rp."JournalID"
                 ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1
             ) jr ON TRUE
-            WHERE a."UserID" = %s
-        ''', [user_id])
+            WHERE a."UserID" = %s AND rp."TenantID" = %s
+        ''', [user_id, tenant_id])
         stats_row = cur.fetchone()
 
         # Papers list — lifetime, no year filter, so the whole record shows.
@@ -447,9 +493,9 @@ def researcher_profile(request, litrix_id: str):
                 WHERE "JournalID" = rp."JournalID"
                 ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1
             ) jr ON TRUE
-            WHERE a."UserID" = %s
+            WHERE a."UserID" = %s AND rp."TenantID" = %s
             ORDER BY rp."PubYear" DESC NULLS LAST, rp."PaperID" DESC
-        ''', [user_id])
+        ''', [user_id, tenant_id])
         papers = cur.fetchall()
 
         # Co-authors: everyone sharing a paper with this researcher. Platform
@@ -471,6 +517,8 @@ def researcher_profile(request, litrix_id: str):
                     )              AS name,
                     co."PaperID"   AS paper_id
                 FROM "Authors" me
+                JOIN "ResearchPaper" mp ON mp."PaperID" = me."PaperID"
+                                        AND mp."TenantID" = %s
                 JOIN "Authors" co ON co."PaperID" = me."PaperID"
                                   AND co."UserID" IS DISTINCT FROM me."UserID"
                 LEFT JOIN "Users" cu ON cu."UserID" = co."UserID"
@@ -482,7 +530,7 @@ def researcher_profile(request, litrix_id: str):
             GROUP BY user_id, litrix_id, name, photo_url
             ORDER BY (user_id IS NOT NULL) DESC, shared_papers DESC, name
             LIMIT 200
-        ''', [user_id])
+        ''', [tenant_id, user_id])
         coauthors = [
             {
                 'user_id':       r[0],
@@ -554,11 +602,15 @@ def researcher_profile(request, litrix_id: str):
 
 
 @_apply_decorators(public_endpoint)
-def papers_list(request):
+def papers_list(request, tenant_slug=None):
     """
-    GET /api/public/papers/?department_id=N&year=Y&quartile=Q1&page=1
-    Paginated paper list for the dashboard's papers tab.
+    GET /u/<tenant_slug>/papers/?department_id=N&year=Y&quartile=Q1&page=1
+    Paginated paper list for the dashboard's papers tab, scoped to the
+    resolved tenant.
     """
+    tenant_id, err = _resolve_tenant_or_404(tenant_slug)
+    if err is not None:
+        return err
     dept_id  = request.query_params.get('department_id')
     year     = request.query_params.get('year')
     quartile = request.query_params.get('quartile')
@@ -566,8 +618,8 @@ def papers_list(request):
     page_size = min(int(request.query_params.get('page_size', 50)), 200)
     offset = (page - 1) * page_size
 
-    params: list[Any] = []
-    filters_sql: list[str] = []
+    params: list[Any] = [tenant_id]
+    filters_sql: list[str] = ['rp."TenantID" = %s']
     if dept_id and dept_id.isdigit():
         filters_sql.append('w."DepartmentID" = %s')
         params.append(int(dept_id))
@@ -649,12 +701,16 @@ def papers_list(request):
 
 
 @_apply_decorators(public_endpoint)
-def paper_detail(request, paper_id: int):
+def paper_detail(request, paper_id: int, tenant_slug=None):
     """
-    GET /api/public/papers/{paper_id}/detail/
+    GET /u/<tenant_slug>/papers/{paper_id}/detail/
     Rich metadata for one paper — drives the detail modal opened from a
-    researcher profile.
+    researcher profile. A paper_id from another tenant 404s exactly like an
+    unknown one.
     """
+    tenant_id, err = _resolve_tenant_or_404(tenant_slug)
+    if err is not None:
+        return err
     with connection.cursor() as cur:
         cur.execute('''
             SELECT
@@ -687,8 +743,8 @@ def paper_detail(request, paper_id: int):
                 WHERE "JournalID" = rp."JournalID"
                 ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1
             ) jr ON TRUE
-            WHERE rp."PaperID" = %s
-        ''', [paper_id])
+            WHERE rp."PaperID" = %s AND rp."TenantID" = %s
+        ''', [paper_id, tenant_id])
         row = cur.fetchone()
         if not row:
             return response.Response({'error': 'paper not found'}, status=404)
@@ -700,10 +756,10 @@ def paper_detail(request, paper_id: int):
                             NULLIF(TRIM(CONCAT_WS(' ', u."FirstName", u."LastName")), '')),
                    a."AuthorOrder", a."IsCorrespondingAuthor"
             FROM "Authors" a
-            JOIN "Users" u ON u."UserID" = a."UserID"
+            JOIN "Users" u ON u."UserID" = a."UserID" AND u."TenantID" = %s
             WHERE a."PaperID" = %s
             ORDER BY a."AuthorOrder" NULLS LAST
-        ''', [paper_id])
+        ''', [tenant_id, paper_id])
         internal_authors = [
             {
                 'user_id': r[0],
@@ -855,14 +911,17 @@ def paper_detail(request, paper_id: int):
 
 
 @_apply_decorators(public_endpoint)
-def kpis(request):
+def kpis(request, tenant_slug=None):
     """
-    GET /api/public/kpis/?year=2026[&department_id=N]
+    GET /u/<tenant_slug>/kpis/?year=2026[&department_id=N]
     Three NCAAA-style KPIs:
         KPI-I-13: % faculty published (in year)
         KPI-I-14: avg publications per faculty (in year)
         KPI-I-15: avg citations per publication (all-time)
     """
+    tenant_id, err = _resolve_tenant_or_404(tenant_slug)
+    if err is not None:
+        return err
     from datetime import datetime
     year_param = request.query_params.get('year')
     try:
@@ -884,8 +943,8 @@ def kpis(request):
             FROM "Users" u
             LEFT JOIN "Works_In" w
                 ON w."UserID" = u."UserID" AND w."IsCurrentPosition" = TRUE
-            WHERE u."UserType" = 'Researcher'{dept_filter}
-        ''', dept_params)
+            WHERE u."UserType" = 'Researcher' AND u."TenantID" = %s{dept_filter}
+        ''', [tenant_id] + dept_params)
         total_faculty = cur.fetchone()[0] or 0
 
         # Faculty who published in the target year
@@ -897,10 +956,11 @@ def kpis(request):
             LEFT JOIN "Works_In" w
                 ON w."UserID" = u."UserID" AND w."IsCurrentPosition" = TRUE
             WHERE rp."PubYear" = %s
+              AND rp."TenantID" = %s
               AND u."UserType" = 'Researcher'{dept_filter}
               AND {NOT_RETRACTED_SQL}
               AND {AFFILIATION_VERIFIED_SQL}
-        ''', [year, *dept_params])
+        ''', [year, tenant_id, *dept_params])
         published_count = cur.fetchone()[0] or 0
 
         # Publications in the target year
@@ -910,10 +970,11 @@ def kpis(request):
             JOIN "Authors" a ON a."PaperID" = rp."PaperID"
             LEFT JOIN "Works_In" w
                 ON w."UserID" = a."UserID" AND w."IsCurrentPosition" = TRUE
-            WHERE rp."PubYear" = %s{dept_filter}
+            WHERE rp."PubYear" = %s
+              AND rp."TenantID" = %s{dept_filter}
               AND {NOT_RETRACTED_SQL}
               AND {AFFILIATION_VERIFIED_SQL}
-        ''', [year, *dept_params])
+        ''', [year, tenant_id, *dept_params])
         pubs_in_year = cur.fetchone()[0] or 0
 
         # All-time citations + publications for KPI-15. The CTE collapses
@@ -932,13 +993,13 @@ def kpis(request):
                 JOIN "Authors" a ON a."PaperID" = rp."PaperID"
                 LEFT JOIN "Works_In" w
                     ON w."UserID" = a."UserID" AND w."IsCurrentPosition" = TRUE
-                WHERE 1=1{dept_filter}
+                WHERE rp."TenantID" = %s{dept_filter}
             )
             SELECT
                 COUNT(*)                            AS total_pubs,
                 COALESCE(SUM(cites), 0)             AS total_cites
             FROM unique_papers
-        ''', dept_params)
+        ''', [tenant_id] + dept_params)
         row = cur.fetchone()
         total_pubs_all = row[0] or 0
         total_cites_all = row[1] or 0
@@ -972,17 +1033,21 @@ def kpis(request):
 
 
 @_apply_decorators(public_endpoint)
-def export_excel(request):
+def export_excel(request, tenant_slug=None):
     """
-    GET /api/public/export/excel/?years=2025,2026&sheets=overview,summary,departments,researchers,journals,conferences
+    GET /u/<tenant_slug>/export/excel/?years=2025,2026&sheets=overview,summary,departments,researchers,journals,conferences
 
-    Workbook mirroring the admin export layout:
+    Workbook mirroring the admin export layout, scoped to the resolved
+    tenant:
         Overview      — once
         Summary YYYY  — one per picked year
         Departments YYYY — one per year (journal/conference split + Q1-Q4)
         Researchers   — once (window + all-time + h-index)
         Journals YYYY / Conferences YYYY — one per picked year
     """
+    tenant_id, err = _resolve_tenant_or_404(tenant_slug)
+    if err is not None:
+        return err
     from openpyxl import Workbook
     from openpyxl.styles import Font, Alignment, PatternFill
     from django.http import HttpResponse
@@ -1080,18 +1145,21 @@ def export_excel(request):
                     FROM "ResearchPaper" rp
                     JOIN "Authors" a ON a."PaperID" = rp."PaperID"
                     WHERE rp."PubYear" = ANY(%s)
+                      AND rp."TenantID" = %s
                       AND {NOT_RETRACTED_SQL}
                       AND {AFFILIATION_VERIFIED_SQL}
                 )
                 SELECT
                     (SELECT COUNT(DISTINCT u."UserID")
-                       FROM "Users" u WHERE u."UserType" = 'Researcher'),
+                       FROM "Users" u WHERE u."UserType" = 'Researcher'
+                         AND u."TenantID" = %s),
                     (SELECT COUNT(DISTINCT a."UserID")
                        FROM "Authors" a
                        JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
                        JOIN "Users" u ON u."UserID" = a."UserID"
                        WHERE u."UserType" = 'Researcher'
                          AND rp."PubYear" = ANY(%s)
+                         AND rp."TenantID" = %s
                          AND {NOT_RETRACTED_SQL}
                          AND {AFFILIATION_VERIFIED_SQL}),
                     (SELECT COUNT(DISTINCT "PaperID") FROM attributed_papers),
@@ -1105,7 +1173,7 @@ def export_excel(request):
                     (SELECT COALESCE(SUM(cites), 0) FROM attributed_papers),
                     (SELECT COALESCE(ROUND(AVG(h_index)::numeric, 1), 0)
                        FROM ({H_INDEX_PER_USER_SQL}) hi WHERE h_index > 0)
-            ''', [years, years])
+            ''', [years, tenant_id, tenant_id, years, tenant_id, tenant_id])
             (total_researchers, active_researchers, total_papers,
              q1_papers, total_citations, avg_h) = cur.fetchone()
 
@@ -1146,6 +1214,7 @@ def export_excel(request):
                         FROM "ResearchPaper" rp
                         JOIN "Authors" a ON a."PaperID" = rp."PaperID"
                         WHERE rp."PubYear" = %s
+                          AND rp."TenantID" = %s
                           AND {NOT_RETRACTED_SQL}
                           AND {AFFILIATION_VERIFIED_SQL}
                     )
@@ -1167,7 +1236,7 @@ def export_excel(request):
                         WHERE "JournalID" = ap."JournalID"
                         ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1
                     ) jr ON TRUE
-                ''', [year])
+                ''', [year, tenant_id])
                 row = cur.fetchone()
             (total, citations, journals_c, confs_c, q1, q2, q3, q4) = row
             rows = [
@@ -1216,6 +1285,8 @@ def export_excel(request):
                             ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1
                         ) jr ON TRUE
                         WHERE rp."PubYear" = %s
+                          AND d."TenantID" = %s
+                          AND rp."TenantID" = %s
                           AND {NOT_RETRACTED_SQL}
                           AND {AFFILIATION_VERIFIED_SQL}
                     )
@@ -1234,9 +1305,10 @@ def export_excel(request):
                         COUNT(DISTINCT dp."PaperID") FILTER (WHERE dp.quartile = 'Q4')
                     FROM "Department" d
                     LEFT JOIN dept_papers dp ON dp."DepartmentID" = d."DepartmentID"
+                    WHERE d."TenantID" = %s
                     GROUP BY d."DepartmentID", d."DepartmentName"
                     ORDER BY 5 DESC NULLS LAST
-                ''', [year])
+                ''', [year, tenant_id, tenant_id, tenant_id])
                 for ri, row in enumerate(cur.fetchall(), 2):
                     for ci, v in enumerate(row, 1):
                         ws.cell(row=ri, column=ci, value=v or 0)
@@ -1263,6 +1335,7 @@ def export_excel(request):
                        JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
                        WHERE a."UserID" = u."UserID"
                          AND rp."PubYear" = ANY(%s)
+                         AND rp."TenantID" = %s
                          AND {NOT_RETRACTED_SQL}
                          AND {AFFILIATION_VERIFIED_SQL}), 0),
                     COALESCE((SELECT SUM(COALESCE(
@@ -1271,11 +1344,13 @@ def export_excel(request):
                         FROM "Authors" a JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
                         WHERE a."UserID" = u."UserID"
                           AND rp."PubYear" = ANY(%s)
+                          AND rp."TenantID" = %s
                           AND {NOT_RETRACTED_SQL}
                           AND {AFFILIATION_VERIFIED_SQL}), 0),
                     COALESCE((SELECT COUNT(*) FROM "Authors" a
                        JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
                        WHERE a."UserID" = u."UserID"
+                         AND rp."TenantID" = %s
                          AND {NOT_RETRACTED_SQL}
                          AND {AFFILIATION_VERIFIED_SQL}), 0),
                     COALESCE((SELECT SUM(COALESCE(
@@ -1283,6 +1358,7 @@ def export_excel(request):
                         (rp."RawData_Log"->>'cited_by_count')::int, 0))
                         FROM "Authors" a JOIN "ResearchPaper" rp ON rp."PaperID" = a."PaperID"
                         WHERE a."UserID" = u."UserID"
+                          AND rp."TenantID" = %s
                           AND {NOT_RETRACTED_SQL}
                           AND {AFFILIATION_VERIFIED_SQL}), 0),
                     COALESCE(hi.h_index, 0),
@@ -1296,8 +1372,9 @@ def export_excel(request):
                 LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
                 LEFT JOIN ({H_INDEX_PER_USER_SQL}) hi ON hi."UserID" = u."UserID"
                 WHERE u."UserType" = 'Researcher'
+                  AND u."TenantID" = %s
                 ORDER BY 4 DESC NULLS LAST, u."FullName_Ar"
-            ''', [years, years])
+            ''', [years, tenant_id, years, tenant_id, tenant_id, tenant_id, tenant_id, tenant_id])
             for ri, row in enumerate(cur.fetchall(), 2):
                 for ci, v in enumerate(row, 1):
                     ws.cell(row=ri, column=ci, value=v if v is not None else '')
@@ -1342,6 +1419,7 @@ def export_excel(request):
                         ORDER BY "RankingYear" DESC NULLS LAST, "Source" LIMIT 1
                     ) jr ON TRUE
                     WHERE rp."PubYear" = %s
+                      AND rp."TenantID" = %s
                       AND {venue_case_rp} = 'journal'
                       AND {NOT_RETRACTED_SQL}
                       AND {AFFILIATION_VERIFIED_SQL}
@@ -1349,7 +1427,7 @@ def export_excel(request):
                              rp."RawData_Log", j."JournalName", jr."Quartile",
                              jr."ImpactFactor", rp."Indexing", rp."DOI"
                     ORDER BY 9 DESC
-                ''', [year])
+                ''', [year, tenant_id])
                 for ri, row in enumerate(cur.fetchall(), 2):
                     for ci, v in enumerate(row, 1):
                         ws.cell(row=ri, column=ci, value=v if v is not None else '')
@@ -1387,13 +1465,14 @@ def export_excel(request):
                     LEFT JOIN "Department" d ON d."DepartmentID" = w."DepartmentID"
                     LEFT JOIN "Journals" j ON j."JournalID" = rp."JournalID"
                     WHERE rp."PubYear" = %s
+                      AND rp."TenantID" = %s
                       AND {venue_case_rp} = 'conference'
                       AND {NOT_RETRACTED_SQL}
                       AND {AFFILIATION_VERIFIED_SQL}
                     GROUP BY rp."PaperID", rp."Title",
                              rp."RawData_Log", j."JournalName", rp."Indexing", rp."DOI"
                     ORDER BY 7 DESC
-                ''', [year])
+                ''', [year, tenant_id])
                 for ri, row in enumerate(cur.fetchall(), 2):
                     for ci, v in enumerate(row, 1):
                         ws.cell(row=ri, column=ci, value=v if v is not None else '')
@@ -1413,12 +1492,16 @@ def export_excel(request):
 
 
 @_apply_decorators(public_endpoint)
-def trends(request):
+def trends(request, tenant_slug=None):
     """
-    GET /api/public/trends/
-    Yearly papers + citations across the dashboard window. Retracted papers
-    excluded so the chart lines up with the other KPIs.
+    GET /u/<tenant_slug>/trends/
+    Yearly papers + citations across the dashboard window, scoped to the
+    resolved tenant. Retracted papers excluded so the chart lines up with
+    the other KPIs.
     """
+    tenant_id, err = _resolve_tenant_or_404(tenant_slug)
+    if err is not None:
+        return err
     years = list(DASHBOARD_YEARS)
     with connection.cursor() as cur:
         cur.execute(f'''
@@ -1433,6 +1516,7 @@ def trends(request):
                 FROM "ResearchPaper" rp
                 JOIN "Authors" a ON a."PaperID" = rp."PaperID"
                 WHERE rp."PubYear" = ANY(%s)
+                  AND rp."TenantID" = %s
                   AND {NOT_RETRACTED_SQL}
                   AND {AFFILIATION_VERIFIED_SQL}
             )
@@ -1443,7 +1527,7 @@ def trends(request):
             FROM attributed_papers
             GROUP BY "PubYear"
             ORDER BY "PubYear"
-        ''', [years])
+        ''', [years, tenant_id])
         rows = cur.fetchall()
     return response.Response({
         'results': [

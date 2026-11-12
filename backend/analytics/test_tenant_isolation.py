@@ -443,5 +443,99 @@ class NetworkViewsTenantFenceTests(unittest.TestCase):
 # not "whatever's in the DB").
 # ---------------------------------------------------------------------------
 
+class PublicViewsTenantFenceTests(unittest.TestCase):
+    def test_missing_slug_404s_without_even_querying_the_db(self):
+        cur = _FakeCursor(scripted_results=[])
+        with patch.object(public_views, 'connection', _FakeConnection(cur)):
+            tenant_id, err = public_views._resolve_tenant_or_404(None)
+        self.assertIsNone(tenant_id)
+        self.assertIsNotNone(err)
+        self.assertEqual(err.status_code, 404)
+        self.assertEqual(cur.calls, [], 'a missing slug must never even reach the DB')
+
+        cur2 = _FakeCursor(scripted_results=[])
+        with patch.object(public_views, 'connection', _FakeConnection(cur2)):
+            tenant_id, err = public_views._resolve_tenant_or_404('')
+        self.assertIsNone(tenant_id)
+        self.assertEqual(err.status_code, 404)
+        self.assertEqual(cur2.calls, [])
+
+    def test_unknown_slug_404s_never_defaults_to_any_tenant(self):
+        cur = _FakeCursor(scripted_results=[None])  # no matching row
+        with patch.object(public_views, 'connection', _FakeConnection(cur)):
+            tenant_id, err = public_views._resolve_tenant_or_404('no-such-university')
+        self.assertIsNone(tenant_id)
+        self.assertEqual(err.status_code, 404)
+        sql, params = cur.calls[0]
+        self.assertEqual(params, ['no-such-university'])
+
+    def test_resolver_query_requires_active_status_literally_in_the_sql(self):
+        """Pins the actual query text, not just behavior -- an inactive
+        tenant row existing in the DB must be excluded by the SQL itself
+        (Status = 'active'), not by incidental non-matching test data."""
+        cur = _FakeCursor(scripted_results=[None])
+        with patch.object(public_views, 'connection', _FakeConnection(cur)):
+            public_views._resolve_tenant_or_404('some-inactive-or-unknown-slug')
+        sql, _ = cur.calls[0]
+        self.assertIn('"Slug" = %s', sql)
+        self.assertIn('"Status" = \'active\'', sql)
+
+    def test_valid_active_slug_resolves_to_its_own_tenant_id(self):
+        for tenant in (TENANT_A, TENANT_B):
+            cur = _FakeCursor(scripted_results=[(tenant,)])
+            with patch.object(public_views, 'connection', _FakeConnection(cur)):
+                tenant_id, err = public_views._resolve_tenant_or_404('some-slug')
+            self.assertIsNone(err)
+            self.assertEqual(tenant_id, tenant)
+
+    def test_endpoints_are_allowany_by_design_resolver_is_the_whole_fence(self):
+        """public_views endpoints are AllowAny by design -- there is no
+        request.user to misuse, so _resolve_tenant_or_404 is the WHOLE
+        fence (unlike the authenticated views, which also check
+        request.user.tenant_id). Pins that design choice structurally
+        rather than asserting on a request.user these views never read."""
+        from rest_framework.permissions import AllowAny
+        self.assertIn(AllowAny, public_views.overview.cls.permission_classes)
+        self.assertIn(AllowAny, public_views.trends.cls.permission_classes)
+
+    def test_swapping_only_the_slug_binds_a_different_tenant_in_the_real_query(self):
+        """End-to-end through one real endpoint (trends): resolving tenant A
+        vs tenant B from two different slugs must bind that SAME, correctly
+        different tenant_id into the endpoint's own data query -- changing
+        the slug alone must be the only thing that can change which
+        tenant's rows come back, and it must actually take effect downstream
+        of the resolver, not get dropped."""
+        for tenant, slug in ((TENANT_A, 'uni-a'), (TENANT_B, 'uni-b')):
+            cur = _FakeCursor(scripted_results=[
+                (tenant,),  # _resolve_tenant_or_404's lookup
+                [],         # trends' own attributed_papers query
+            ])
+            req = RequestFactory().get(f'/api/public/{slug}/trends/')
+            with patch.object(public_views, 'connection', _FakeConnection(cur)):
+                resp = public_views.trends(req, tenant_slug=slug)
+            self.assertEqual(resp.status_code, 200)
+            self.assertEqual(len(cur.calls), 2)
+            resolve_sql, resolve_params = cur.calls[0]
+            self.assertEqual(resolve_params, [slug])
+            data_sql, data_params = cur.calls[1]
+            self.assertIn('rp."TenantID" = %s', data_sql)
+            self.assertEqual(
+                _nth_placeholder_param(data_sql, data_params, 'rp."TenantID" = %s'),
+                tenant,
+                'the tenant resolved from THIS slug must be exactly what the data query binds',
+            )
+
+    def test_unknown_slug_never_reaches_the_data_query_at_all(self):
+        """The inverse of the swap test: when the slug doesn't resolve,
+        trends() must return 404 immediately and never run its data query
+        with no tenant filter (or a stale one)."""
+        cur = _FakeCursor(scripted_results=[None])  # resolver finds nothing
+        req = RequestFactory().get('/api/public/does-not-exist/trends/')
+        with patch.object(public_views, 'connection', _FakeConnection(cur)):
+            resp = public_views.trends(req, tenant_slug='does-not-exist')
+        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(len(cur.calls), 1, 'must stop at the resolver, never run the data query')
+
+
 if __name__ == '__main__':
     unittest.main()
