@@ -3,7 +3,7 @@
 // kept separate from the authenticated LitrixApiService on purpose.
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 
 // --- response shapes ---------------------------------------------------
@@ -112,7 +112,34 @@ export interface KpisResponse {
 @Injectable({ providedIn: 'root' })
 export class PublicApiService {
   private readonly http = inject(HttpClient);
-  private readonly base = `${environment.apiBaseUrl}/public`;
+
+  // Every public endpoint is tenant-scoped server-side (analytics/
+  // public_views.py's _resolve_tenant_or_404). This is the one place that
+  // threads the slug into every call this service makes - there is NO
+  // default tenant here. It starts null and is set only from the route's
+  // :tenantSlug param (see PublicDashboardComponent / PublicProfileComponent
+  // ngOnInit). Until it's set, every method below refuses to call the
+  // backend at all rather than guessing which university to ask for.
+  private tenantSlug: string | null = null;
+
+  setTenantSlug(slug: string | null): void {
+    this.tenantSlug = slug && slug.trim() ? slug : null;
+  }
+
+  private get base(): string | null {
+    return this.tenantSlug
+      ? `${environment.apiBaseUrl}/public/${encodeURIComponent(this.tenantSlug)}`
+      : null;
+  }
+
+  /** No slug set -> refuse the call. No HTTP request is ever made for a
+   *  missing/default tenant; the caller gets an Observable error instead. */
+  private missingTenant<T>(): Observable<T> {
+    return throwError(() => new Error(
+      'PublicApiService: no tenant slug set - refusing to call a /public/* ' +
+      'endpoint without one (there is no default tenant).',
+    ));
+  }
 
   /** Year filter accepts 2025, 2026, or 'all'/undefined for both. */
   private yearQuery(year?: number | 'all'): string {
@@ -121,12 +148,14 @@ export class PublicApiService {
   }
 
   overview(year?: number | 'all'): Observable<OverviewResponse> {
+    if (!this.base) return this.missingTenant();
     return this.http.get<OverviewResponse>(
       `${this.base}/overview/${this.yearQuery(year)}`,
     );
   }
 
   departments(year?: number | 'all'): Observable<{ results: DepartmentSummary[] }> {
+    if (!this.base) return this.missingTenant();
     return this.http.get<{ results: DepartmentSummary[] }>(
       `${this.base}/departments/${this.yearQuery(year)}`,
     );
@@ -136,6 +165,7 @@ export class PublicApiService {
     departmentId?: number,
     year?: number | 'all',
   ): Observable<{ results: ResearcherSummary[] }> {
+    if (!this.base) return this.missingTenant();
     const params = new URLSearchParams();
     if (departmentId)            params.set('department_id', String(departmentId));
     if (year && year !== 'all')  params.set('year', String(year));
@@ -146,6 +176,7 @@ export class PublicApiService {
   }
 
   researcherProfile(litrixId: string): Observable<ResearcherProfile> {
+    if (!this.base) return this.missingTenant();
     return this.http.get<ResearcherProfile>(
       `${this.base}/researchers/${encodeURIComponent(litrixId)}/profile/`,
     );
@@ -163,6 +194,7 @@ export class PublicApiService {
     page_size: number;
     results: PaperSummary[];
   }> {
+    if (!this.base) return this.missingTenant();
     const params = new URLSearchParams();
     if (opts.departmentId) params.set('department_id', String(opts.departmentId));
     if (opts.year)         params.set('year', String(opts.year));
@@ -174,10 +206,12 @@ export class PublicApiService {
   }
 
   trends(): Observable<{ results: TrendPoint[] }> {
+    if (!this.base) return this.missingTenant();
     return this.http.get<{ results: TrendPoint[] }>(`${this.base}/trends/`);
   }
 
   kpis(year?: number, departmentId?: number): Observable<KpisResponse> {
+    if (!this.base) return this.missingTenant();
     const params = new URLSearchParams();
     if (year)         params.set('year', String(year));
     if (departmentId) params.set('department_id', String(departmentId));
@@ -186,14 +220,18 @@ export class PublicApiService {
   }
 
   paperDetail(paperId: number): Observable<PaperDetailResponse> {
+    if (!this.base) return this.missingTenant();
     return this.http.get<PaperDetailResponse>(
       `${this.base}/papers/${paperId}/detail/`,
     );
   }
 
   // Builds the export URL. Empty arrays send no filter so the backend
-  // default takes over.
-  exportExcelUrl(years?: number[], sheets?: string[]): string {
+  // default takes over. Returns null when no tenant is set - there is no
+  // default tenant to export, and the caller must not build a request URL
+  // in that case (see PublicDashboardComponent.downloadExport).
+  exportExcelUrl(years?: number[], sheets?: string[]): string | null {
+    if (!this.base) return null;
     const qs = new URLSearchParams();
     if (years && years.length)   qs.set('years', years.join(','));
     if (sheets && sheets.length) qs.set('sheets', sheets.join(','));

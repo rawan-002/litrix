@@ -3,8 +3,9 @@
 // the detail modal.
 import {
   Component, OnInit, signal, computed, inject, ViewChild,
-  ElementRef, AfterViewInit,
+  ElementRef, AfterViewInit, DestroyRef,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Chart, registerables } from 'chart.js';
@@ -27,7 +28,7 @@ const CHART_MIN_YEAR = 2021;
     <div class="min-h-screen bg-white">
       <!-- Back link -->
       <div class="max-w-5xl mx-auto px-6 pt-8">
-        <a routerLink="/public/dashboard"
+        <a [routerLink]="['/public', tenantSlug(), 'dashboard']"
            class="inline-flex items-center text-sm text-gray-500 hover:text-indigo-600 transition-colors">
           <span class="mr-2">←</span> Back to dashboard
         </a>
@@ -181,7 +182,7 @@ const CHART_MIN_YEAR = 2021;
               <div class="flex flex-wrap gap-2">
                 <ng-container *ngFor="let c of visibleCoauthors()">
                   <a *ngIf="c.is_albaha && c.litrix_id"
-                     [routerLink]="['/public/researcher', c.litrix_id]"
+                     [routerLink]="['/public', tenantSlug(), 'researcher', c.litrix_id]"
                      class="inline-flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-full text-sm
                             bg-indigo-50 text-indigo-700 ring-1 ring-indigo-300
                             hover:ring-indigo-500 hover:bg-indigo-100 transition">
@@ -221,7 +222,7 @@ const CHART_MIN_YEAR = 2021;
       <!-- Error state -->
       <div *ngIf="errorMsg() as err" class="max-w-5xl mx-auto px-6 py-32 text-center">
         <p class="text-gray-500">{{ err }}</p>
-        <a routerLink="/public/dashboard"
+        <a [routerLink]="['/public', tenantSlug(), 'dashboard']"
            class="mt-4 inline-block text-indigo-600 hover:underline">
           ← Back to dashboard
         </a>
@@ -315,7 +316,7 @@ const CHART_MIN_YEAR = 2021;
               <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Authors</h3>
               <div class="flex flex-wrap gap-2">
                 <a *ngFor="let a of detail.internal_authors"
-                   [routerLink]="['/public/researcher', a.litrix_id]"
+                   [routerLink]="['/public', tenantSlug(), 'researcher', a.litrix_id]"
                    class="inline-flex items-center px-3 py-1.5 rounded-full bg-indigo-50 text-sm text-indigo-700 hover:bg-indigo-100 transition-colors">
                   {{ a.name }}
                   <span *ngIf="a.is_corresponding" class="ml-1 text-xs text-indigo-500">✉</span>
@@ -361,12 +362,16 @@ const CHART_MIN_YEAR = 2021;
 export class PublicProfileComponent implements OnInit, AfterViewInit {
   private readonly api = inject(PublicApiService);
   private readonly route = inject(ActivatedRoute);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly CHART_MIN_YEAR = CHART_MIN_YEAR;
 
   readonly profile = signal<ResearcherProfile | null>(null);
   readonly errorMsg = signal<string | null>(null);
   readonly selectedPaper = signal<PaperDetailResponse | null>(null);
+  // No default - an empty slug means "no tenant resolved yet / none given",
+  // never a particular university.
+  readonly tenantSlug = signal<string>('');
 
   // Web-of-Science-style derived metrics (the public profile is lifetime by
   // design, so these run off the per-paper lifetime citation counts).
@@ -414,26 +419,60 @@ export class PublicProfileComponent implements OnInit, AfterViewInit {
   @ViewChild('citationsCanvas') citationsCanvas!: ElementRef<HTMLCanvasElement>;
   private citationsChart: Chart | null = null;
 
+  // Subscribed, not a one-shot snapshot read: Angular's default
+  // RouteReuseStrategy reuses this component when navigating between two
+  // URLs that match the SAME route config
+  // (public/:tenantSlug/researcher/:litrixId) with only :tenantSlug and/or
+  // :litrixId differing - e.g. clicking a co-author chip to go to a
+  // different researcher. ngOnInit does NOT run again in that case, only
+  // route.paramMap emits. Reading params once via route.snapshot (as this
+  // used to) would leave the previous researcher's (and previous tenant's)
+  // profile on screen under the new URL. Subscribing here instead
+  // re-resolves everything - and wipes the previous profile first - on
+  // every param change.
   ngOnInit(): void {
-    const litrixId = this.route.snapshot.paramMap.get('litrixId') || '';
-    if (!litrixId) {
-      this.errorMsg.set('Missing researcher ID in URL.');
-      return;
-    }
-    this.api.researcherProfile(litrixId).subscribe({
-      next: (p) => {
-        this.profile.set(p);
+    this.route.paramMap
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((params) => {
+        // Always clear whatever a PREVIOUS researcher/tenant loaded into
+        // this same component instance before deciding what to do next.
+        this.profile.set(null);
+        this.errorMsg.set(null);
         this.avatarError.set(false);
-        setTimeout(() => this.renderCitationsChart(), 0);
-      },
-      error: (err) => {
-        this.errorMsg.set(
-          err?.status === 404
-            ? `Researcher "${litrixId}" not found.`
-            : 'Could not load profile. Please try again.',
-        );
-      },
-    });
+        this.coauthorsShown.set(this.COAUTHOR_BATCH);
+
+        const tenantSlug = params.get('tenantSlug');
+        if (!tenantSlug) {
+          // No :tenantSlug segment in the URL - there is no default
+          // university to fall back to. Don't call the API at all.
+          this.api.setTenantSlug(null);
+          this.tenantSlug.set('');
+          this.errorMsg.set('Missing tenant in URL.');
+          return;
+        }
+        this.api.setTenantSlug(tenantSlug);
+        this.tenantSlug.set(tenantSlug);
+
+        const litrixId = params.get('litrixId') || '';
+        if (!litrixId) {
+          this.errorMsg.set('Missing researcher ID in URL.');
+          return;
+        }
+        this.api.researcherProfile(litrixId).subscribe({
+          next: (p) => {
+            this.profile.set(p);
+            this.avatarError.set(false);
+            setTimeout(() => this.renderCitationsChart(), 0);
+          },
+          error: (err) => {
+            this.errorMsg.set(
+              err?.status === 404
+                ? `Researcher "${litrixId}" not found.`
+                : 'Could not load profile. Please try again.',
+            );
+          },
+        });
+      });
   }
 
   ngAfterViewInit(): void {

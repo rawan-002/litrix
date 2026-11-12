@@ -43,13 +43,13 @@ export const routes: Routes = [
   // outside LayoutComponent so they skip the authenticated shell/sidebar.
   // Backed by the AllowAny /api/public/* endpoints.
   {
-    path: 'public/dashboard',
+    path: 'public/:tenantSlug/dashboard',
     loadComponent: () =>
       import('./public/dashboard/public-dashboard.component')
         .then((m) => m.PublicDashboardComponent),
   },
   {
-    path: 'public/researcher/:litrixId',
+    path: 'public/:tenantSlug/researcher/:litrixId',
     loadComponent: () =>
       import('./public/profile/public-profile.component')
         .then((m) => m.PublicProfileComponent),

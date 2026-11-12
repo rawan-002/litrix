@@ -3,10 +3,11 @@
 // researcher list. No login chrome, no admin actions.
 import {
   Component, OnInit, signal, computed, inject, ViewChild,
-  ElementRef, AfterViewInit,
+  ElementRef, AfterViewInit, DestroyRef,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { Chart, registerables } from 'chart.js';
 import {
@@ -270,7 +271,7 @@ Chart.register(...registerables);
             </thead>
             <tbody class="divide-y divide-gray-100">
               <tr *ngFor="let r of filteredResearchers()"
-                  [routerLink]="['/public/researcher', r.litrix_id]"
+                  [routerLink]="['/public', tenantSlug(), 'researcher', r.litrix_id]"
                   class="hover:bg-indigo-50/30 cursor-pointer transition-colors group">
                 <td class="px-6 py-4">
                   <div class="flex items-center gap-3">
@@ -394,6 +395,8 @@ Chart.register(...registerables);
 })
 export class PublicDashboardComponent implements OnInit, AfterViewInit {
   private readonly api = inject(PublicApiService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly destroyRef = inject(DestroyRef);
 
   // --- state (signals) -----------------------------------------------
   readonly overview = signal<OverviewResponse | null>(null);
@@ -401,6 +404,9 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
   readonly researchers = signal<ResearcherSummary[]>([]);
   readonly trendData = signal<TrendPoint[]>([]);
   readonly selectedDepartmentId = signal<number | null>(null);
+  // No default - an empty slug means "no tenant resolved yet / none given",
+  // never a particular university.
+  readonly tenantSlug = signal<string>('');
 
   // Year filter driving Overview/Departments/Researchers/KPIs.
   // Mirrors DASHBOARD_YEARS in public_views.py.
@@ -498,13 +504,46 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
   }
 
   // --- lifecycle ------------------------------------------------------
+  // Subscribed, not a one-shot snapshot read: Angular's default
+  // RouteReuseStrategy reuses this component when navigating between two
+  // URLs that match the SAME route config (public/:tenantSlug/dashboard)
+  // with only :tenantSlug differing - ngOnInit does NOT run again in that
+  // case, only route.paramMap emits. Reading the slug once via
+  // route.snapshot (as this used to) would leave the service pinned to the
+  // first tenant forever, silently serving its cached data under a second
+  // university's URL. Subscribing here instead re-resolves the tenant (and
+  // wipes any previously-loaded data first) on every param change, whether
+  // that's the initial load or a later in-place navigation.
   ngOnInit(): void {
-    this.refreshScopedData();
-    // The trend chart always shows both years - it's a comparison.
-    this.api.trends().subscribe({
-      next: (d) => { this.trendData.set(d.results); this.renderTrendChart(); },
-      error: () => this.loadFailed.set(true),
-    });
+    this.route.paramMap
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((params) => {
+        const tenantSlug = params.get('tenantSlug');
+        // Always clear out whatever a PREVIOUS tenant may have loaded into
+        // this same component instance before deciding what to do next -
+        // never let it linger under a changed/invalid URL.
+        this.trendData.set([]);
+        if (!tenantSlug) {
+          // No :tenantSlug segment in the URL - there is no default
+          // university to fall back to. Don't call the API at all.
+          this.api.setTenantSlug(null);
+          this.tenantSlug.set('');
+          this.overview.set(null);
+          this.departments.set([]);
+          this.researchers.set([]);
+          this.kpis.set(null);
+          this.loadFailed.set(true);
+          return;
+        }
+        this.api.setTenantSlug(tenantSlug);
+        this.tenantSlug.set(tenantSlug);
+        this.refreshScopedData();
+        // The trend chart always shows both years - it's a comparison.
+        this.api.trends().subscribe({
+          next: (d) => { this.trendData.set(d.results); this.renderTrendChart(); },
+          error: () => this.loadFailed.set(true),
+        });
+      });
   }
 
   // Reloads Overview/Departments/Researchers/KPIs for the current
@@ -569,6 +608,7 @@ export class PublicDashboardComponent implements OnInit, AfterViewInit {
   downloadExport(): void {
     if (!this.exportIsValid()) return;
     const url = this.api.exportExcelUrl(this.exportYears(), this.exportSheets());
+    if (!url) return; // no tenant slug set - nothing to export
     // Programmatic <a> click so the download fires without navigating away.
     const a = document.createElement('a');
     a.href = url;
